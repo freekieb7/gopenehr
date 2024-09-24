@@ -1,0 +1,7 @@
+CREATE TABLE composition(
+    id INT GENERATED ALWAYS AS IDENTITY,
+    ehr_id INT NOT NULL,
+    data JSONB NOT NULL,
+    PRIMARY KEY(id),
+    CONSTRAINT fk_ehr FOREIGN KEY(ehr_id) REFERENCES ehr(id)
+);

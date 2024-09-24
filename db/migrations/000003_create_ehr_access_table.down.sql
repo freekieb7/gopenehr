@@ -1,0 +1,1 @@
+DROP TABLE ehr_access;

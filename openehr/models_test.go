@@ -20,7 +20,7 @@ func TestUnmarshal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	decoded, err := json.Marshal(ehrStatus)
+	decoded, err := Marshal(ehrStatus)
 	if err != nil {
 		t.Fatal(err)
 	}

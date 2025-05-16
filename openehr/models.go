@@ -41,12 +41,20 @@ func (o *Option[T]) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (o Option[T]) MarshalJSON() ([]byte, error) {
+func (o *Option[T]) MarshalJSON() ([]byte, error) {
 	if o.Some {
 		return json.Marshal(o.Unwrap())
 	}
 
 	return []byte("null"), nil
+}
+
+func (o Option[T]) Marshal() ([]byte, error) {
+	if o.Some {
+		return Marshal(o.Unwrap())
+	}
+
+	return []byte{}, nil
 }
 
 // -----------------------------------
@@ -227,6 +235,10 @@ func (c *CONTENT_ITEM) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
 }
 
+func (c CONTENT_ITEM) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
+}
+
 type SECTION struct {
 	Type_            Option[string]         `json:"_type"`
 	Name             DV_TEXT                `json:"name"`
@@ -322,6 +334,10 @@ func (c *ENTRY) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
 }
 
+func (c ENTRY) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
+}
+
 type ADMIN_ENTRY struct {
 	Type_               Option[string]          `json:"_type"`
 	Name                DV_TEXT                 `json:"name"`
@@ -415,6 +431,10 @@ func (c *CARE_ENTRY) UnmarshalJSON(data []byte) error {
 
 func (c *CARE_ENTRY) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
+}
+
+func (c CARE_ENTRY) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
 }
 
 type OBSERVATION struct {
@@ -632,6 +652,10 @@ func (c *PARTY_PROXY) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
 }
 
+func (c PARTY_PROXY) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
+}
+
 type PARTY_SELF struct {
 	Type_       Option[string]    `json:"_type"`
 	ExternalRef Option[PARTY_REF] `json:"external_ref"`
@@ -752,6 +776,10 @@ func (c *ITEM_STRUCTURE) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
 }
 
+func (c ITEM_STRUCTURE) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
+}
+
 type ITEM_SINGLE struct {
 	Type_            Option[string]       `json:"_type"`
 	Name             DV_TEXT              `json:"name"`
@@ -853,6 +881,10 @@ func (c *ITEM) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
 }
 
+func (c ITEM) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
+}
+
 type CLUSTER struct {
 	Type_            Option[string]       `json:"_type"`
 	Name             DV_TEXT              `json:"name"`
@@ -950,6 +982,10 @@ func (c *EVENT[T]) UnmarshalJSON(data []byte) error {
 
 func (c *EVENT[T]) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
+}
+
+func (c EVENT[T]) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
 }
 
 type POINT_EVENT[T any] struct {
@@ -1165,6 +1201,10 @@ func (c *DATA_VALUE) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
 }
 
+func (c DATA_VALUE) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
+}
+
 type DV_BOOLEAN struct {
 	Type_ Option[string] `json:"_type"`
 	Value bool           `json:"value"`
@@ -1324,6 +1364,10 @@ func (c *DV_ORDERED) UnmarshalJSON(data []byte) error {
 
 func (c *DV_ORDERED) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
+}
+
+func (c DV_ORDERED) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
 }
 
 type DV_INTERVAL struct {
@@ -1514,6 +1558,10 @@ func (c *DV_ENCAPSULATED) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
 }
 
+func (c DV_ENCAPSULATED) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
+}
+
 type DV_MULTIMEDIA struct {
 	Type_                   Option[string]        `json:"_type"`
 	Charset                 Option[CODE_PHRASE]   `json:"charset"`
@@ -1618,6 +1666,10 @@ func (c *UID) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
 }
 
+func (c UID) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
+}
+
 type ISO_OID struct {
 	Type_ Option[string] `json:"_type"`
 	Value string         `json:"value"`
@@ -1711,6 +1763,10 @@ func (c *OBJECT_ID) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
 }
 
+func (c OBJECT_ID) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
+}
+
 type UidBasedIdType string
 
 const (
@@ -1772,6 +1828,10 @@ func (c *UID_BASED_ID) MarshalJSON() ([]byte, error) {
 	return json.Marshal(c.Value)
 }
 
+func (c UID_BASED_ID) Marshal() ([]byte, error) {
+	return Marshal(c.Value)
+}
+
 type HIER_OBJECT_ID struct {
 	Type_ Option[string] `json:"_type"`
 	Value string         `json:"value"`
@@ -1800,7 +1860,7 @@ type TERMINOLOGY_ID struct {
 type GENERIC_ID struct {
 	Type_  Option[string] `json:"_type"`
 	Value  string         `json:"value"`
-	Schema string         `json:"schema"`
+	Scheme string         `json:"scheme"`
 }
 
 type OBJECT_REF struct {

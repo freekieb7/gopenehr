@@ -2,8 +2,9 @@ package openehr
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
-	"reflect"
+	"slices"
 	"testing"
 )
 
@@ -13,16 +14,20 @@ func TestUnmarshal(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var data map[string]any
-	err = json.Unmarshal(content, &data)
+	var ehrStatus EHR_STATUS
+	err = json.Unmarshal(content, &ehrStatus)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var ehrStatus EHR_STATUS
-	if err := PocUnmarshal(reflect.ValueOf(ehrStatus), data); err != nil {
+	decoded, err := json.Marshal(ehrStatus)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	t.Log("\nName: " + ehrStatus.Name.Value + "\n")
+	os.WriteFile("../result/ehr_status.json", decoded, 0644)
+
+	if slices.Compare(content, decoded) != 0 {
+		t.Fatal(errors.New("ehr_status is corrupted"))
+	}
 }

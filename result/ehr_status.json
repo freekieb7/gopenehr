@@ -1,0 +1,36 @@
+{
+    "_type": "EHR_STATUS",
+    "name": {
+        "_type": null,
+        "value": "EHR Status",
+        "hyperlink": null,
+        "formatting": null,
+        "mappings": null,
+        "language": null,
+        "encoding": null
+    },
+    "archetype_node_id": "openEHR-EHR-EHR_STATUS.generic.v1",
+    "uid": null,
+    "links": null,
+    "archetype_details": null,
+    "feeder_audit": null,
+    "subject": {
+        "_type": null,
+        "external_ref": {
+            "_type": null,
+            "namespace": "patients",
+            "type": "PERSON",
+            "id": {
+                "Type": "GENERIC_ID",
+                "Value": {
+                    "_type": "GENERIC_ID",
+                    "value": "__AUTO-GENRATED-BY-TEST__",
+                    "schema": ""
+                }
+            }
+        }
+    },
+    "is_queryable": true,
+    "is_modifiable": true,
+    "other_details": null
+}

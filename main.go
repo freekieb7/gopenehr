@@ -4,15 +4,15 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/acontrolfreak/openehr/aql"
-	"github.com/acontrolfreak/openehr/aql/gen"
-	"github.com/acontrolfreak/openehr/openehr"
-	"github.com/antlr4-go/antlr/v4"
 	"log"
 	"net/http"
 	"os"
 	"reflect"
 	"strings"
+
+	"github.com/acontrolfreak/openehr/aql"
+	"github.com/acontrolfreak/openehr/aql/gen"
+	"github.com/antlr4-go/antlr/v4"
 
 	_ "github.com/lib/pq" // add this
 )
@@ -144,33 +144,7 @@ func main() {
 		}
 
 		if r.Method == "POST" {
-			var etc map[string]interface{}
-
-			decoder := json.NewDecoder(r.Body)
-			err := decoder.Decode(&etc)
-
-			ehrFactory := openehr.EhrFactory{}
-
-			ehr, err := ehrFactory.Produce(etc)
-
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(err.Error()))
-				return
-			}
-
-			mj, _ := json.Marshal(ehr.Json)
-			w.Header().Set("Content-Type", "application/json")
-			w.Write(mj)
 			return
-
-			//mj, _ := json.Marshal(ehr.Json)
-			//
-			//if _, err := db.Exec("INSERT INTO ehr(data) VALUES ($1) ", mj); err != nil {
-			//	w.WriteHeader(http.StatusInternalServerError)
-			//	w.Write([]byte(err.Error()))
-			//	return
-			//}
 		}
 
 		w.WriteHeader(http.StatusOK)

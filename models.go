@@ -1,57 +1,53 @@
-package openehr
+package gopenehr
 
 import (
-	"encoding/json"
+	"bytes"
 	"errors"
 	"fmt"
+
+	"github.com/freekieb7/gopenehr/encoding/json"
 )
 
 var ErrNotFound = errors.New("value not found")
 var ErrBadType = errors.New("parse error")
 
 type Option[T any] struct {
-	Value *T
+	Value T
 	Some  bool
 }
 
 func Some[T any](v T) Option[T] {
-	return Option[T]{Value: &v, Some: true}
+	return Option[T]{Value: v, Some: true}
 }
 
 func None[T any]() Option[T] {
-	return Option[T]{Value: nil, Some: false}
+	var zero T
+	return Option[T]{Value: zero, Some: false}
 }
 
 func (o Option[T]) IsSome() bool { return o.Some }
-func (o Option[T]) Unwrap() T    { return *o.Value }
+func (o Option[T]) Unwrap() T    { return o.Value }
 
-func (o *Option[T]) UnmarshalJSON(data []byte) error {
-	if len(data) == 0 || string(data) == "null" {
+func (o *Option[T]) Unmarshal(data []byte) error {
+	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
+		var zero T
 		o.Some = false
-		o.Value = nil
+		o.Value = zero
 	} else {
 		var v T
 		if err := json.Unmarshal(data, &v); err != nil {
 			return err
 		}
-		o.Value = &v
+		o.Value = v
 		o.Some = true
 	}
 
 	return nil
 }
 
-func (o *Option[T]) MarshalJSON() ([]byte, error) {
-	if o.Some {
-		return json.Marshal(o.Unwrap())
-	}
-
-	return []byte("null"), nil
-}
-
 func (o Option[T]) Marshal() ([]byte, error) {
 	if o.Some {
-		return Marshal(o.Unwrap())
+		return json.Marshal(o.Unwrap())
 	}
 
 	return []byte{}, nil
@@ -121,6 +117,7 @@ type VERSIONED_COMPOSITION struct {
 
 type COMPOSITION struct {
 	Type_            Option[string]         `json:"_type"`
+	Name             DV_TEXT                `json:"name"`
 	ArchetypeNodeId  string                 `json:"archetype_node_id"`
 	Uid              Option[UID_BASED_ID]   `json:"uid"`
 	Links            Option[[]LINK]         `json:"links"`
@@ -137,7 +134,7 @@ type COMPOSITION struct {
 type EVENT_CONTEXT struct {
 	Type_              Option[string]           `json:"_type"`
 	StartTime          DV_DATE_TIME             `json:"start_time"`
-	EndTime            DV_DATE_TIME             `json:"end_time"`
+	EndTime            Option[DV_DATE_TIME]     `json:"end_time"`
 	Location           Option[string]           `json:"location"`
 	Setting            DV_CODED_TEXT            `json:"setting"`
 	OtherContext       Option[ITEM_STRUCTURE]   `json:"other_context"`
@@ -162,81 +159,55 @@ type CONTENT_ITEM struct {
 	Value any
 }
 
-func (c *CONTENT_ITEM) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (c *CONTENT_ITEM) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t ContentItemType
-	switch ContentItemType(typStr) {
+	t := ContentItemType(typeData)
+	switch t {
 	case CONTENT_ITEM_TYPE_SECTION:
 		{
-			v = new(SECTION)
-			t = CONTENT_ITEM_TYPE_SECTION
+			c.Value = new(SECTION)
 		}
 	case CONTENT_ITEM_TYPE_ADMIN_ENTRY:
 		{
-			v = new(ADMIN_ENTRY)
-			t = CONTENT_ITEM_TYPE_ADMIN_ENTRY
+			c.Value = new(ADMIN_ENTRY)
 		}
 	case CONTENT_ITEM_TYPE_OBSERVATION:
 		{
-			v = new(OBSERVATION)
-			t = CONTENT_ITEM_TYPE_OBSERVATION
+			c.Value = new(OBSERVATION)
 		}
 	case CONTENT_ITEM_TYPE_EVALUATION:
 		{
-			v = new(EVALUATION)
-			t = CONTENT_ITEM_TYPE_EVALUATION
+			c.Value = new(EVALUATION)
 		}
 	case CONTENT_ITEM_TYPE_INSTRUCTION:
 		{
-			v = new(INSTRUCTION)
-			t = CONTENT_ITEM_TYPE_INSTRUCTION
+			c.Value = new(INSTRUCTION)
 		}
 	case CONTENT_ITEM_TYPE_ACTIVITY:
 		{
-			v = new(ACTIVITY)
-			t = CONTENT_ITEM_TYPE_ACTIVITY
+			c.Value = new(ACTIVITY)
 		}
 	case CONTENT_ITEM_TYPE_ACTION:
 		{
-			v = new(ACTION)
-			t = CONTENT_ITEM_TYPE_ACTION
+			c.Value = new(ACTION)
 		}
 	default:
 		{
-			return fmt.Errorf("CONTENT_ITEM unexpected _type %s", typStr)
+			return fmt.Errorf("CONTENT_ITEM unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
 	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *CONTENT_ITEM) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	return json.Unmarshal(data, c.Value)
 }
 
 func (c CONTENT_ITEM) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type SECTION struct {
@@ -266,76 +237,51 @@ type ENTRY struct {
 	Value any
 }
 
-func (c *ENTRY) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (c *ENTRY) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t EntryType
-	switch EntryType(typStr) {
+	t := EntryType(typeData)
+	switch t {
 	case ENTRY_TYPE_ADMIN_ENTRY:
 		{
-			v = new(ADMIN_ENTRY)
-			t = ENTRY_TYPE_ADMIN_ENTRY
+			c.Value = new(ADMIN_ENTRY)
 		}
 	case ENTRY_TYPE_OBSERVATION:
 		{
-			v = new(OBSERVATION)
-			t = ENTRY_TYPE_OBSERVATION
+			c.Value = new(OBSERVATION)
 		}
 	case ENTRY_TYPE_EVALUATION:
 		{
-			v = new(EVALUATION)
-			t = ENTRY_TYPE_EVALUATION
+			c.Value = new(EVALUATION)
 		}
 	case ENTRY_TYPE_INSTRUCTION:
 		{
-			v = new(INSTRUCTION)
-			t = ENTRY_TYPE_INSTRUCTION
+			c.Value = new(INSTRUCTION)
 		}
 	case ENTRY_TYPE_ACTIVITY:
 		{
-			v = new(ACTIVITY)
-			t = ENTRY_TYPE_ACTIVITY
+			c.Value = new(ACTIVITY)
 		}
 	case ENTRY_TYPE_ACTION:
 		{
-			v = new(ACTION)
-			t = ENTRY_TYPE_ACTION
+			c.Value = new(ACTION)
 		}
 	default:
 		{
-			return fmt.Errorf("ENTRY unexpected _type %s", typStr)
+			return fmt.Errorf("ENTRY unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
 	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *ENTRY) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	return json.Unmarshal(data, c.Value)
 }
 
 func (c ENTRY) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type ADMIN_ENTRY struct {
@@ -370,71 +316,47 @@ type CARE_ENTRY struct {
 	Value any
 }
 
-func (c *CARE_ENTRY) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (c *CARE_ENTRY) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t CareEntryType
-	switch CareEntryType(typStr) {
+	t := CareEntryType(typeData)
+	switch t {
 	case CARE_ENTRY_TYPE_OBSERVATION:
 		{
-			v = new(OBSERVATION)
-			t = CARE_ENTRY_TYPE_OBSERVATION
+			c.Value = new(OBSERVATION)
 		}
 	case CARE_ENTRY_TYPE_EVALUATION:
 		{
-			v = new(EVALUATION)
-			t = CARE_ENTRY_TYPE_EVALUATION
+			c.Value = new(EVALUATION)
 		}
 	case CARE_ENTRY_TYPE_INSTRUCTION:
 		{
-			v = new(INSTRUCTION)
-			t = CARE_ENTRY_TYPE_INSTRUCTION
+			c.Value = new(INSTRUCTION)
 		}
 	case CARE_ENTRY_TYPE_ACTIVITY:
 		{
-			v = new(ACTIVITY)
-			t = CARE_ENTRY_TYPE_ACTIVITY
+			c.Value = new(ACTIVITY)
 		}
 	case CARE_ENTRY_TYPE_ACTION:
 		{
-			v = new(ACTION)
-			t = CARE_ENTRY_TYPE_ACTION
+			c.Value = new(ACTION)
 		}
 	default:
 		{
-			return fmt.Errorf("CARE_ENTRY unexpected _type %s", typStr)
+			return fmt.Errorf("CARE_ENTRY unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
 	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *CARE_ENTRY) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	return json.Unmarshal(data, c.Value)
 }
 
 func (c CARE_ENTRY) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type OBSERVATION struct {
@@ -492,7 +414,7 @@ type INSTRUCTION struct {
 	Provider            Option[PARTY_PROXY]     `json:"provider"`
 	Protocol            Option[ITEM_STRUCTURE]  `json:"protocol"`
 	GuidelineId         Option[OBJECT_REF]      `json:"guideline_id"`
-	Narative            DV_TEXT                 `json:"narative"`
+	Narrative           DV_TEXT                 `json:"narrative"`
 	ExpiryTime          Option[DV_DATE_TIME]    `json:"expiry_time"`
 	WfDefinition        Option[DV_PARSABLE]     `json:"wf_definition"`
 	Activities          Option[[]ACTIVITY]      `json:"activities"`
@@ -567,7 +489,7 @@ type LINK struct {
 }
 
 type FEEDER_AUDIT struct {
-	Type_                    Option[FEEDER_AUDIT]         `json:"_type"`
+	Type_                    Option[string]               `json:"_type"`
 	OriginatingSystemItemIds Option[[]DV_IDENTIFIER]      `json:"originating_system_item_ids"`
 	FeederSystemItemIds      Option[[]DV_IDENTIFIER]      `json:"feeder_system_item_ids"`
 	OriginalContent          Option[DV_ENCAPSULATED]      `json:"original_content"`
@@ -599,61 +521,39 @@ type PARTY_PROXY struct {
 	Value any
 }
 
-func (c *PARTY_PROXY) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (p *PARTY_PROXY) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t PartyProxyType
-	switch PartyProxyType(typStr) {
+	t := PartyProxyType(typeData)
+	switch t {
 	case PARTY_PROXY_TYPE_PARTY_SELF:
 		{
-			v = new(PARTY_SELF)
-			t = PARTY_PROXY_TYPE_PARTY_SELF
+			p.Value = new(PARTY_SELF)
 		}
 	case PARTY_PROXY_TYPE_PARTY_IDENTIFIED:
 		{
-			v = new(PARTY_IDENTIFIED)
-			t = PARTY_PROXY_TYPE_PARTY_IDENTIFIED
+			p.Value = new(PARTY_IDENTIFIED)
 		}
 	case PARTY_PROXY_TYPE_PARTY_RELATED:
 		{
-			v = new(PARTY_RELATED)
-			t = PARTY_PROXY_TYPE_PARTY_RELATED
+			p.Value = new(PARTY_RELATED)
 		}
 	default:
 		{
-			return fmt.Errorf("PARTY_PROXY unexpected _type %s", typStr)
+			return fmt.Errorf("PARTY_PROXY unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
-	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *PARTY_PROXY) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	p.Type = t
+	return json.Unmarshal(data, p.Value)
 }
 
 func (c PARTY_PROXY) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type PARTY_SELF struct {
@@ -718,66 +618,43 @@ type ITEM_STRUCTURE struct {
 	Value any
 }
 
-func (c *ITEM_STRUCTURE) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (i *ITEM_STRUCTURE) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t ItemStructureType
-	switch ItemStructureType(typStr) {
+	t := ItemStructureType(typeData)
+	switch t {
 	case ITEM_STRUCTURE_TYPE_ITEM_SINGLE:
 		{
-			v = new(ITEM_SINGLE)
-			t = ITEM_STRUCTURE_TYPE_ITEM_SINGLE
+			i.Value = new(ITEM_SINGLE)
 		}
 	case ITEM_STRUCTURE_TYPE_ITEM_LIST:
 		{
-			v = new(ITEM_LIST)
-			t = ITEM_STRUCTURE_TYPE_ITEM_LIST
+			i.Value = new(ITEM_LIST)
 		}
 	case ITEM_STRUCTURE_TYPE_ITEM_TABLE:
 		{
-			v = new(ITEM_TABLE)
-			t = ITEM_STRUCTURE_TYPE_ITEM_TABLE
+			i.Value = new(ITEM_TABLE)
 		}
 	case ITEM_STRUCTURE_TYPE_ITEM_TREE:
 		{
-			v = new(ITEM_TREE)
-			t = ITEM_STRUCTURE_TYPE_ITEM_TREE
+			i.Value = new(ITEM_TREE)
 		}
 	default:
 		{
-			return fmt.Errorf("ITEM_STRUCTURE unexpected _type %s", typStr)
+			return fmt.Errorf("ITEM_STRUCTURE unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
-	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *ITEM_STRUCTURE) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	i.Type = t
+	return json.Unmarshal(data, i.Value)
 }
 
 func (c ITEM_STRUCTURE) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type ITEM_SINGLE struct {
@@ -792,7 +669,8 @@ type ITEM_SINGLE struct {
 }
 
 type ITEM_LIST struct {
-	Type_            Option[DV_TEXT]      `json:"_type"`
+	Type_            Option[string]       `json:"_type"`
+	Name             DV_TEXT              `json:"name"`
 	ArchetypeNodeId  string               `json:"archetype_node_id"`
 	Uid              Option[UID_BASED_ID] `json:"uid"`
 	Links            Option[[]LINK]       `json:"links"`
@@ -802,7 +680,8 @@ type ITEM_LIST struct {
 }
 
 type ITEM_TABLE struct {
-	Type_            Option[DV_TEXT]      `json:"_type"`
+	Type_            Option[string]       `json:"_type"`
+	Name             DV_TEXT              `json:"name"`
 	ArchetypeNodeId  string               `json:"archetype_node_id"`
 	Uid              Option[UID_BASED_ID] `json:"uid"`
 	Links            Option[[]LINK]       `json:"links"`
@@ -812,7 +691,8 @@ type ITEM_TABLE struct {
 }
 
 type ITEM_TREE struct {
-	Type_            Option[DV_TEXT]      `json:"_type"`
+	Type_            Option[string]       `json:"_type"`
+	Name             DV_TEXT              `json:"name"`
 	ArchetypeNodeId  string               `json:"archetype_node_id"`
 	Uid              Option[UID_BASED_ID] `json:"uid"`
 	Links            Option[[]LINK]       `json:"links"`
@@ -833,56 +713,35 @@ type ITEM struct {
 	Value any
 }
 
-func (c *ITEM) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (i *ITEM) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t ItemType
-	switch ItemType(typStr) {
+	t := ItemType(typeData)
+	switch t {
 	case ITEM_TYPE_CLUSTER:
 		{
-			v = new(CLUSTER)
-			t = ITEM_TYPE_CLUSTER
+			i.Value = new(CLUSTER)
 		}
 	case ITEM_TYPE_ELEMENT:
 		{
-			v = new(ELEMENT)
-			t = ITEM_TYPE_ELEMENT
+			i.Value = new(ELEMENT)
 		}
 	default:
 		{
-			return fmt.Errorf("ITEM unexpected _type %s", typStr)
+			return fmt.Errorf("ITEM unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
-	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *ITEM) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	i.Type = t
+	return json.Unmarshal(data, i.Value)
 }
 
 func (c ITEM) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type CLUSTER struct {
@@ -936,56 +795,35 @@ type EVENT[T any] struct {
 	Value any
 }
 
-func (c *EVENT[T]) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (e *EVENT[T]) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t EventType
-	switch EventType(typStr) {
+	t := EventType(typeData)
+	switch t {
 	case EVENT_TYPE_POINT_EVENT:
 		{
-			v = new(POINT_EVENT[T])
-			t = EVENT_TYPE_POINT_EVENT
+			e.Value = new(POINT_EVENT[T])
 		}
 	case EVENT_TYPE_INTERVAL_EVENT:
 		{
-			v = new(INTERVAL_EVENT[T])
-			t = EVENT_TYPE_INTERVAL_EVENT
+			e.Value = new(INTERVAL_EVENT[T])
 		}
 	default:
 		{
-			return fmt.Errorf("EVENT unexpected _type %s", typStr)
+			return fmt.Errorf("EVENT unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
-	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *EVENT[T]) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	e.Type = t
+	return json.Unmarshal(data, e.Value)
 }
 
 func (c EVENT[T]) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type POINT_EVENT[T any] struct {
@@ -1053,156 +891,115 @@ type DATA_VALUE struct {
 	Value any
 }
 
-func (c *DATA_VALUE) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (d *DATA_VALUE) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t DataValueType
-	switch DataValueType(typStr) {
+	t := DataValueType(typeData)
+	switch t {
 	case DATA_VALUE_TYPE_DV_BOOLEAN:
 		{
-			v = new(DV_BOOLEAN)
-			t = DATA_VALUE_TYPE_DV_BOOLEAN
+			d.Value = new(DV_BOOLEAN)
 		}
 	case DATA_VALUE_TYPE_DV_STATE:
 		{
-			v = new(DV_STATE)
-			t = DATA_VALUE_TYPE_DV_STATE
+			d.Value = new(DV_STATE)
 		}
 	case DATA_VALUE_TYPE_DV_IDENTIFIER:
 		{
-			v = new(DV_IDENTIFIER)
-			t = DATA_VALUE_TYPE_DV_IDENTIFIER
+			d.Value = new(DV_IDENTIFIER)
 		}
 	case DATA_VALUE_TYPE_DV_TEXT:
 		{
-			v = new(DV_TEXT)
-			t = DATA_VALUE_TYPE_DV_TEXT
+			d.Value = new(DV_TEXT)
 		}
 	case DATA_VALUE_TYPE_DV_CODED_TEXT:
 		{
-			v = new(DV_CODED_TEXT)
-			t = DATA_VALUE_TYPE_DV_CODED_TEXT
+			d.Value = new(DV_CODED_TEXT)
 		}
 	case DATA_VALUE_TYPE_DV_PARAGRAPH:
 		{
-			v = new(DV_PARAGRAPH)
-			t = DATA_VALUE_TYPE_DV_PARAGRAPH
+			d.Value = new(DV_PARAGRAPH)
 		}
 	case DATA_VALUE_TYPE_DV_INTERVAL:
 		{
-			v = new(DV_INTERVAL)
-			t = DATA_VALUE_TYPE_DV_INTERVAL
+			d.Value = new(DV_INTERVAL)
 		}
 	case DATA_VALUE_TYPE_DV_ORDINAL:
 		{
-			v = new(DV_ORDINAL)
-			t = DATA_VALUE_TYPE_DV_ORDINAL
+			d.Value = new(DV_ORDINAL)
 		}
 	case DATA_VALUE_TYPE_DV_SCALE:
 		{
-			v = new(DV_SCALE)
-			t = DATA_VALUE_TYPE_DV_SCALE
+			d.Value = new(DV_SCALE)
 		}
 	case DATA_VALUE_TYPE_DV_QUANTITY:
 		{
-			v = new(DV_QUANTITY)
-			t = DATA_VALUE_TYPE_DV_QUANTITY
+			d.Value = new(DV_QUANTITY)
 		}
 	case DATA_VALUE_TYPE_DV_COUNT:
 		{
-			v = new(DV_COUNT)
-			t = DATA_VALUE_TYPE_DV_COUNT
+			d.Value = new(DV_COUNT)
 		}
 	case DATA_VALUE_TYPE_DV_PROPORTION:
 		{
-			v = new(DV_PROPORTION)
-			t = DATA_VALUE_TYPE_DV_PROPORTION
+			d.Value = new(DV_PROPORTION)
 		}
 	case DATA_VALUE_TYPE_DV_DATE:
 		{
-			v = new(DV_DATE)
-			t = DATA_VALUE_TYPE_DV_DATE
+			d.Value = new(DV_DATE)
 		}
 	case DATA_VALUE_TYPE_DV_TIME:
 		{
-			v = new(DV_TIME)
-			t = DATA_VALUE_TYPE_DV_TIME
+			d.Value = new(DV_TIME)
 		}
 	case DATA_VALUE_TYPE_DV_DATE_TIME:
 		{
-			v = new(DV_DATE_TIME)
-			t = DATA_VALUE_TYPE_DV_DATE_TIME
+			d.Value = new(DV_DATE_TIME)
 		}
 	case DATA_VALUE_TYPE_DV_DURATION:
 		{
-			v = new(DV_DURATION)
-			t = DATA_VALUE_TYPE_DV_DURATION
+			d.Value = new(DV_DURATION)
 		}
 	case DATA_VALUE_TYPE_DV_PERIODIC_TIME_SPECIFICATION:
 		{
-			v = new(DV_PERIODIC_TIME_SPECIFICATION)
-			t = DATA_VALUE_TYPE_DV_PERIODIC_TIME_SPECIFICATION
+			d.Value = new(DV_PERIODIC_TIME_SPECIFICATION)
 		}
 	case DATA_VALUE_TYPE_DV_GENERAL_TIME_SPECIFICATION:
 		{
-			v = new(DV_GENERAL_TIME_SPECIFICATION)
-			t = DATA_VALUE_TYPE_DV_GENERAL_TIME_SPECIFICATION
+			d.Value = new(DV_GENERAL_TIME_SPECIFICATION)
 		}
 	case DATA_VALUE_TYPE_DV_MULTIMEDIA:
 		{
-			v = new(DV_MULTIMEDIA)
-			t = DATA_VALUE_TYPE_DV_MULTIMEDIA
+			d.Value = new(DV_MULTIMEDIA)
 		}
 	case DATA_VALUE_TYPE_DV_PARSABLE:
 		{
-			v = new(DV_PARSABLE)
-			t = DATA_VALUE_TYPE_DV_PARSABLE
+			d.Value = new(DV_PARSABLE)
 		}
 	case DATA_VALUE_TYPE_DV_URI:
 		{
-			v = new(DV_URI)
-			t = DATA_VALUE_TYPE_DV_URI
+			d.Value = new(DV_URI)
 		}
 	case DATA_VALUE_TYPE_DV_EHR_URI:
 		{
-			v = new(DV_EHR_URI)
-			t = DATA_VALUE_TYPE_DV_EHR_URI
+			d.Value = new(DV_EHR_URI)
 		}
 	default:
 		{
-			return fmt.Errorf("DATA_VALUE unexpected _type %s", typStr)
+			return fmt.Errorf("DATA_VALUE unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
-	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *DATA_VALUE) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	d.Type = t
+	return json.Unmarshal(data, d.Value)
 }
 
 func (c DATA_VALUE) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type DV_BOOLEAN struct {
@@ -1283,91 +1080,63 @@ type DV_ORDERED struct {
 	Value any
 }
 
-func (c *DV_ORDERED) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (d *DV_ORDERED) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t DvOrderedType
-	switch DvOrderedType(typStr) {
+	t := DvOrderedType(typeData)
+	switch t {
 	case DV_ORDERED_TYPE_DV_ORDINAL:
 		{
-			v = new(DV_ORDINAL)
-			t = DV_ORDERED_TYPE_DV_ORDINAL
+			d.Value = new(DV_ORDINAL)
 		}
 	case DV_ORDERED_TYPE_DV_SCALE:
 		{
-			v = new(DV_SCALE)
-			t = DV_ORDERED_TYPE_DV_SCALE
+			d.Value = new(DV_SCALE)
 		}
 	case DV_ORDERED_TYPE_DV_QUANTITY:
 		{
-			v = new(DV_QUANTITY)
-			t = DV_ORDERED_TYPE_DV_QUANTITY
+			d.Value = new(DV_QUANTITY)
 		}
 	case DV_ORDERED_TYPE_DV_COUNT:
 		{
-			v = new(DV_COUNT)
-			t = DV_ORDERED_TYPE_DV_COUNT
+			d.Value = new(DV_COUNT)
 		}
 	case DV_ORDERED_TYPE_DV_PROPORTION:
 		{
-			v = new(DV_PROPORTION)
-			t = DV_ORDERED_TYPE_DV_PROPORTION
+			d.Value = new(DV_PROPORTION)
 		}
 	case DV_ORDERED_TYPE_DV_DATE:
 		{
-			v = new(DV_DATE)
-			t = DV_ORDERED_TYPE_DV_DATE
+			d.Value = new(DV_DATE)
 		}
 	case DV_ORDERED_TYPE_DV_TIME:
 		{
-			v = new(DV_TIME)
-			t = DV_ORDERED_TYPE_DV_TIME
+			d.Value = new(DV_TIME)
 		}
 	case DV_ORDERED_TYPE_DV_DATE_TIME:
 		{
-			v = new(DV_DATE_TIME)
-			t = DV_ORDERED_TYPE_DV_DATE_TIME
+			d.Value = new(DV_DATE_TIME)
 		}
 	case DV_ORDERED_TYPE_DV_DURATION:
 		{
-			v = new(DV_DURATION)
-			t = DV_ORDERED_TYPE_DV_DURATION
+			d.Value = new(DV_DURATION)
 		}
 	default:
 		{
-			return fmt.Errorf("DV_ORDERED unexpected _type %s", typStr)
+			return fmt.Errorf("DV_ORDERED unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
-	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *DV_ORDERED) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	d.Type = t
+	return json.Unmarshal(data, d.Value)
 }
 
 func (c DV_ORDERED) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type DV_INTERVAL struct {
@@ -1485,7 +1254,7 @@ type DV_DURATION struct {
 	MagnitudeStatus      Option[string]            `json:"magnitude_status"`
 	AccuracyIsPercent    Option[bool]              `json:"accuracy_is_percent"`
 	Accuracy             Option[bool]              `json:"accuracy"`
-	Value                float64                   `json:"value"`
+	Value                string                    `json:"value"`
 }
 
 type DV_PERIODIC_TIME_SPECIFICATION struct {
@@ -1510,71 +1279,50 @@ type DV_ENCAPSULATED struct {
 	Value any
 }
 
-func (c *DV_ENCAPSULATED) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (d *DV_ENCAPSULATED) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t DvEncapsulatedType
-	switch DvEncapsulatedType(typStr) {
+	t := DvEncapsulatedType(typeData)
+	switch t {
 	case DV_ENCAPSULATED_TYPE_DV_MULTIMEDIA:
 		{
-			v = new(DV_MULTIMEDIA)
-			t = DV_ENCAPSULATED_TYPE_DV_MULTIMEDIA
+			d.Value = new(DV_MULTIMEDIA)
 		}
 	case DV_ENCAPSULATED_TYPE_DV_PARSABLE:
 		{
-			v = new(DV_PARSABLE)
-			t = DV_ENCAPSULATED_TYPE_DV_PARSABLE
+			d.Value = new(DV_PARSABLE)
 		}
 	default:
 		{
-			return fmt.Errorf("DV_ENCAPSULATED unexpected _type %s", typStr)
+			return fmt.Errorf("DV_ENCAPSULATED unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
-	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *DV_ENCAPSULATED) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	d.Type = t
+	return json.Unmarshal(data, d.Value)
 }
 
 func (c DV_ENCAPSULATED) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type DV_MULTIMEDIA struct {
-	Type_                   Option[string]        `json:"_type"`
-	Charset                 Option[CODE_PHRASE]   `json:"charset"`
-	Language                Option[CODE_PHRASE]   `json:"language"`
-	AlternateText           Option[string]        `json:"alternate_text"`
-	Uri                     Option[DV_URI]        `json:"uri"`
-	Data                    Option[string]        `json:"data"`
-	MediaType               CODE_PHRASE           `json:"media_type"`
-	CompressionAlgorithm    Option[CODE_PHRASE]   `json:"compression_algorithm"`
-	IntegrityCheck          Option[string]        `json:"integrity_check"`
-	IntegrityCheckAlgorithm Option[DV_MULTIMEDIA] `json:"integrity_check_algorithm"`
-	Thumbnail               Option[DV_MULTIMEDIA] `json:"thumbnail"`
-	Size                    int64                 `json:"size"`
+	Type_                   Option[string]         `json:"_type"`
+	Charset                 Option[CODE_PHRASE]    `json:"charset"`
+	Language                Option[CODE_PHRASE]    `json:"language"`
+	AlternateText           Option[string]         `json:"alternate_text"`
+	Uri                     Option[DV_URI]         `json:"uri"`
+	Data                    Option[string]         `json:"data"`
+	MediaType               CODE_PHRASE            `json:"media_type"`
+	CompressionAlgorithm    Option[CODE_PHRASE]    `json:"compression_algorithm"`
+	IntegrityCheck          Option[string]         `json:"integrity_check"`
+	IntegrityCheckAlgorithm Option[CODE_PHRASE]    `json:"integrity_check_algorithm"`
+	Thumbnail               Option[*DV_MULTIMEDIA] `json:"thumbnail"`
+	Size                    int64                  `json:"size"`
 }
 
 type DV_PARSABLE struct {
@@ -1613,61 +1361,39 @@ type UID struct {
 	Value any
 }
 
-func (c *UID) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (u *UID) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t UidType
-	switch UidType(typStr) {
+	t := UidType(typeData)
+	switch t {
 	case UID_TYPE_ISO_OID:
 		{
-			v = new(ISO_OID)
-			t = UID_TYPE_ISO_OID
+			u.Value = new(ISO_OID)
 		}
 	case UID_TYPE_UUID:
 		{
-			v = new(UUID)
-			t = UID_TYPE_UUID
+			u.Value = new(UUID)
 		}
 	case UID_TYPE_INTERNET_ID:
 		{
-			v = new(INTERNET_ID)
-			t = UID_TYPE_INTERNET_ID
+			u.Value = new(INTERNET_ID)
 		}
 	default:
 		{
-			return fmt.Errorf("UID unexpected _type %s", typStr)
+			return fmt.Errorf("UID unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
-	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *UID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	u.Type = t
+	return json.Unmarshal(data, u.Value)
 }
 
 func (c UID) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type ISO_OID struct {
@@ -1700,71 +1426,47 @@ type OBJECT_ID struct {
 	Value any
 }
 
-func (c *OBJECT_ID) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (o *OBJECT_ID) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t ObjectIdType
-	switch ObjectIdType(typStr) {
+	t := ObjectIdType(typeData)
+	switch t {
 	case OBJECT_ID_TYPE_HIER_OBJECT_ID:
 		{
-			v = new(HIER_OBJECT_ID)
-			t = OBJECT_ID_TYPE_HIER_OBJECT_ID
+			o.Value = new(HIER_OBJECT_ID)
 		}
 	case OBJECT_ID_TYPE_OBJECT_VERSION_ID:
 		{
-			v = new(OBJECT_VERSION_ID)
-			t = OBJECT_ID_TYPE_OBJECT_VERSION_ID
+			o.Value = new(OBJECT_VERSION_ID)
 		}
 	case OBJECT_ID_TYPE_ARCHETYPE_ID:
 		{
-			v = new(ARCHETYPE_ID)
-			t = OBJECT_ID_TYPE_ARCHETYPE_ID
+			o.Value = new(ARCHETYPE_ID)
 		}
 	case OBJECT_ID_TYPE_TEMPLATE_ID:
 		{
-			v = new(TEMPLATE_ID)
-			t = OBJECT_ID_TYPE_TEMPLATE_ID
+			o.Value = new(TEMPLATE_ID)
 		}
 	case OBJECT_ID_TYPE_GENERIC_ID:
 		{
-			v = new(GENERIC_ID)
-			t = OBJECT_ID_TYPE_GENERIC_ID
+			o.Value = new(GENERIC_ID)
 		}
 	default:
 		{
-			return fmt.Errorf("OBJECT_ID unexpected _type %s", typStr)
+			return fmt.Errorf("OBJECT_ID unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
-	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *OBJECT_ID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	o.Type = t
+	return json.Unmarshal(data, o.Value)
 }
 
 func (c OBJECT_ID) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type UidBasedIdType string
@@ -1779,57 +1481,36 @@ type UID_BASED_ID struct {
 	Value any
 }
 
-func (c *UID_BASED_ID) UnmarshalJSON(data []byte) error {
-	var value map[string]any
-	if err := json.Unmarshal(data, &value); err != nil {
+func (u *UID_BASED_ID) Unmarshal(data []byte) error {
+	typeData, err := json.Search(data, "_type")
+	if err != nil {
 		return err
 	}
+	typeData = typeData[1 : len(typeData)-1]
 
-	typ, found := value["_type"]
-	if !found {
-		return errors.New("required _type for abstract")
-	}
-
-	typStr, ok := typ.(string)
-	if !ok {
-		return errors.New("expected _type to be a string")
-	}
-
-	var v any
-	var t UidBasedIdType
-	switch UidBasedIdType(typStr) {
+	t := UidBasedIdType(typeData)
+	switch t {
 	case UID_BASED_ID_TYPE_HIER_OBJECT_ID:
 		{
-			v = new(HIER_OBJECT_ID)
-			t = UID_BASED_ID_TYPE_HIER_OBJECT_ID
+			u.Value = new(HIER_OBJECT_ID)
 		}
 	case UID_BASED_ID_TYPE_OBJECT_VERSION_ID:
 		{
-			v = new(OBJECT_VERSION_ID)
-			t = UID_BASED_ID_TYPE_OBJECT_VERSION_ID
+			u.Value = new(OBJECT_VERSION_ID)
 		}
 
 	default:
 		{
-			return fmt.Errorf("UID_BASED_ID unexpected _type %s", typStr)
+			return fmt.Errorf("UID_BASED_ID unexpected _type %s", t)
 		}
 	}
 
-	if err := json.Unmarshal(data, v); err != nil {
-		return err
-	}
-
-	c.Type = t
-	c.Value = v
-	return nil
-}
-
-func (c *UID_BASED_ID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Value)
+	u.Type = t
+	return json.Unmarshal(data, u.Value)
 }
 
 func (c UID_BASED_ID) Marshal() ([]byte, error) {
-	return Marshal(c.Value)
+	return json.Marshal(c.Value)
 }
 
 type HIER_OBJECT_ID struct {

@@ -1,6 +1,6 @@
-module github.com/acontrolfreak/openehr
+module github.com/freekieb7/gopenehr
 
-go 1.22.3
+go 1.24.1
 
 require (
 	github.com/antlr4-go/antlr/v4 v4.13.1

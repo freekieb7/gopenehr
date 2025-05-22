@@ -1,0 +1,54 @@
+{
+    "_type": "INSTRUCTION",
+    "name": {
+        "_type": "DV_TEXT",
+        "value": "Test all types"
+    },
+    "archetype_details": {
+        "archetype_id": {
+            "value": "openEHR-EHR-INSTRUCTION.test_all_types.v1"
+        },
+        "template_id": {
+            "value": "Test_all_types_v2"
+        },
+        "rm_version": "1.0.2"
+    },
+    "archetype_node_id": "openEHR-EHR-INSTRUCTION.test_all_types.v1",
+    "language": {
+        "terminology_id": {
+            "value": "ISO_639-1"
+        },
+        "code_string": "en"
+    },
+    "encoding": {
+        "terminology_id": {
+            "value": "IANA_character-sets"
+        },
+        "code_string": "UTF-8"
+    },
+    "subject": {
+        "_type": "PARTY_SELF"
+    },
+    "narrative": {
+        "value": "L Epv,uh.AyTQHHvYKaGuEeNqhagrAcBWDiVoKuyRHHtoMDg.RrrxyffbeImWpwek.WM.cmLNWvZHOUfkjnQURALgTQmnVMLotf.UhkzYlaXh,yEKfWRTfK kShtQw FVvQMqdsToQdgSvxVkE, KdgcoMpuED lEhsCePmoDXncUtqqgrmeCmYhpRmggTJyfwxRL.NPFowYULMc,mJRP njnIImQUNuYVSqLFmTBiXOCvXpuCYswhxSzCpQMBM"
+    },
+    "activities": [
+        {
+            "_type": "ACTIVITY",
+            "name": {
+                "_type": "DV_TEXT",
+                "value": "Current Activity"
+            },
+            "archetype_node_id": "at0001",
+            "description": {
+                "_type": "ITEM_LIST",
+                "name": {
+                    "_type": "DV_TEXT",
+                    "value": "Lista"
+                },
+                "archetype_node_id": "at0002"
+            },
+            "action_archetype_id": "openEHR-EHR-ACTION\\.test_all_types\\.v1"
+        }
+    ]
+}

@@ -1,0 +1,22 @@
+{
+    "_type": "CLUSTER",
+    "name": {
+        "_type": "DV_TEXT",
+        "value": "cluster 3"
+    },
+    "archetype_node_id": "at0008",
+    "items": [
+        {
+            "_type": "ELEMENT",
+            "name": {
+                "_type": "DV_TEXT",
+                "value": "text 2"
+            },
+            "archetype_node_id": "at0010",
+            "value": {
+                "_type": "DV_TEXT",
+                "value": "HHBiFCzdBbxYPilQCfjgCJGqGIWtxPraDNn.skvWuq,tzOsKz,ZQT.DX, nQTYf gV,IHduRij.l rOBSrfVGxLbepCuUFSfzHUFEWXscPqYCenaRXBejhHUxZwKja,qlGKWB BtHPWTFMUymjxs.fmGPBDsuPCfaYqBZLhwVSdLOGXKvzrLxiQ,DsNtFmiAibtmThBJrwQkp.IGxPyqRThviiSvFilA.wELpkBjnlSw.mgbLqsNteJGJSHkXOgxPsbImFJFYUlhDtp,yV.RDCBUwYCLMSEVRgLUvCIYjnph"
+            }
+        }
+    ]
+}

@@ -1,1 +1,0 @@
-DROP TABLE ehr_status;

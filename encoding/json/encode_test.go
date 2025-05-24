@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/freekieb7/gopenehr"
 	"github.com/freekieb7/gopenehr/encoding/json"
+	"github.com/freekieb7/gopenehr/model"
 )
 
 func TestEncode(t *testing.T) {
@@ -15,7 +15,7 @@ func TestEncode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var ehrStatus gopenehr.EHR_STATUS
+	var ehrStatus model.EHR_STATUS
 	err = json.Unmarshal(content, &ehrStatus)
 	if err != nil {
 		t.Fatal(err)

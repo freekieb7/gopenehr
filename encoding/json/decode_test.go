@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/freekieb7/gopenehr"
 	"github.com/freekieb7/gopenehr/encoding/json"
+	"github.com/freekieb7/gopenehr/model"
 )
 
 func BenchmarkUnmarshalEhrStatus(b *testing.B) {
@@ -15,7 +15,7 @@ func BenchmarkUnmarshalEhrStatus(b *testing.B) {
 	}
 
 	for b.Loop() {
-		var ehrStatus gopenehr.EHR_STATUS
+		var ehrStatus model.EHR_STATUS
 		if err := json.Unmarshal(content, &ehrStatus); err != nil {
 			b.Fatal(err)
 		}
@@ -29,7 +29,7 @@ func TestUnmarshalEhrStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var ehrStatus gopenehr.EHR_STATUS
+	var ehrStatus model.EHR_STATUS
 	if err := json.Unmarshal(content, &ehrStatus); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestUnmarshalInstruction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var instruction gopenehr.INSTRUCTION
+	var instruction model.INSTRUCTION
 	if err := json.Unmarshal(content, &instruction); err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestUnmarshalComposition(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var composition gopenehr.COMPOSITION
+	var composition model.COMPOSITION
 	err = json.Unmarshal(content, &composition)
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +86,7 @@ func TestUnmarshalItemTree(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var itemTree gopenehr.ITEM_TREE
+	var itemTree model.ITEM_TREE
 	err = json.Unmarshal(content, &itemTree)
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +103,7 @@ func TestUnmarshalCluster(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var cluster gopenehr.CLUSTER
+	var cluster model.CLUSTER
 	err = json.Unmarshal(content, &cluster)
 	if err != nil {
 		t.Fatal(err)

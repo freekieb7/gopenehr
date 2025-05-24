@@ -1,4 +1,4 @@
-package gopenehr
+package model
 
 import (
 	"bytes"

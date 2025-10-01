@@ -2,32 +2,37 @@ package rest
 
 import "net/http"
 
-func HandleCreateTemplate() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleCreateTemplate() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleListTemplates() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleListTemplates() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleGetTemplateById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGetTemplateById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleUpdateTemplateById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleUpdateTemplateById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleDeleteTemplateById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleDeleteTemplateById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }

@@ -5,8 +5,8 @@ import (
 	"net/http"
 )
 
-func HandleServerInfo() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleServerInfo() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		payload := map[string]any{
 			"solution":              "openEHRSys",
 			"solution_version":      "v1.0",
@@ -23,6 +23,6 @@ func HandleServerInfo() HandleFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(payload)
+		return json.NewEncoder(w).Encode(payload)
 	}
 }

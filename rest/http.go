@@ -1,165 +1,168 @@
 package rest
 
 import (
-	"log"
+	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
+	"time"
 )
 
-type HandleFunc func(w http.ResponseWriter, r *http.Request)
+type HandlerFunc func(w http.ResponseWriter, r *http.Request) error
 type GroupFunc func(group *Router)
-type MiddlewareFunc func(next http.Handler) HandleFunc
-
-func RecoverMiddleware() MiddlewareFunc {
-	return func(next http.Handler) HandleFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			defer func() {
-				if recover := recover(); recover != nil {
-					log.Println(recover)
-					return
-				}
-			}()
-
-			next.ServeHTTP(w, r)
-		}
-	}
-}
+type MiddlewareFunc func(next HandlerFunc) HandlerFunc
 
 type Route struct {
-	Path        string
-	Method      string
-	Handler     HandleFunc
-	Middlewares []MiddlewareFunc
+	Path    string
+	Method  string
+	Handler HandlerFunc
 }
 
 type Router struct {
 	Path        string
-	Routes      []Route
-	Middlewares []MiddlewareFunc
-	Routers     []Router
+	Routes      map[string]map[string]Route
+	StaticPaths map[string]string
 }
 
 func NewRouter() Router {
 	return Router{
-		Path:    "",
-		Routes:  make([]Route, 0),
-		Routers: make([]Router, 0),
+		Path:        "",
+		Routes:      make(map[string]map[string]Route),
+		StaticPaths: make(map[string]string),
 	}
 }
 
-func (r *Router) Any(path, method string, handler HandleFunc, middlewares ...MiddlewareFunc) {
-	r.Routes = append(r.Routes, Route{
-		Path:        path,
-		Method:      method,
-		Handler:     handler,
-		Middlewares: middlewares,
-	})
+func (r *Router) Any(path, method string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	path = r.Path + path
+
+	if _, exists := r.Routes[path]; !exists {
+		r.Routes[path] = make(map[string]Route)
+	}
+
+	// Add each handle as a separate route for the same path and method
+	if _, exists := r.Routes[path][method]; exists {
+		panic(fmt.Sprintf("route already exists: %s %s", method, path))
+	}
+
+	// Wrap handler with middlewares
+	for i := len(middlewares) - 1; i >= 0; i-- {
+		handler = middlewares[i](handler)
+	}
+
+	r.Routes[path][method] = Route{
+		Path:    path,
+		Method:  method,
+		Handler: handler,
+	}
 }
 
-func (r *Router) OPTIONS(path string, handler HandleFunc, middlewares ...MiddlewareFunc) {
-	r.Any(path, http.MethodOptions, handler)
+func (r *Router) OPTIONS(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	r.Any(path, http.MethodOptions, handler, middlewares...)
 }
 
-func (r *Router) GET(path string, handler HandleFunc, middlewares ...MiddlewareFunc) {
-	r.Any(path, http.MethodGet, handler)
+func (r *Router) GET(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	r.Any(path, http.MethodGet, handler, middlewares...)
 }
 
-func (r *Router) POST(path string, handler HandleFunc, middlewares ...MiddlewareFunc) {
-	r.Any(path, http.MethodPost, handler)
+func (r *Router) POST(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	r.Any(path, http.MethodPost, handler, middlewares...)
 }
 
-func (r *Router) PUT(path string, handler HandleFunc, middlewares ...MiddlewareFunc) {
-	r.Any(path, http.MethodPut, handler)
+func (r *Router) PATCH(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	r.Any(path, http.MethodPatch, handler, middlewares...)
 }
 
-func (r *Router) DELETE(path string, handler HandleFunc, middlewares ...MiddlewareFunc) {
-	r.Any(path, http.MethodDelete, handler)
+func (r *Router) PUT(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	r.Any(path, http.MethodPut, handler, middlewares...)
+}
+
+func (r *Router) DELETE(path string, handler HandlerFunc, middlewares ...MiddlewareFunc) {
+	r.Any(path, http.MethodDelete, handler, middlewares...)
+}
+
+func (r *Router) Static(path, dir string, middlewares ...MiddlewareFunc) {
+	// Ensure path ends with / for proper prefix matching
+	if path[len(path)-1] != '/' {
+		path += "/"
+	}
+
+	// Store the static path mapping
+	r.StaticPaths[path] = dir
+
+	// Note: Actual file serving is handled in the Server.ListenAndServe method
+	// using http.FileServer and http.StripPrefix for proper static file handling
 }
 
 func (r *Router) Group(path string, grouper GroupFunc, middlewares ...MiddlewareFunc) {
-	subRouter := NewRouter()
-	subRouter.Path = path
+	subRouter := Router{
+		Path:   path,
+		Routes: make(map[string]map[string]Route),
+	}
 
 	// Adds routes to group
 	grouper(&subRouter)
 
 	// Add routes to parent router
-	for _, route := range subRouter.Routes {
-		subRouter.Any(route.Path, route.Method, route.Handler, middlewares...)
+	for path, routePerMethod := range subRouter.Routes {
+		for method, route := range routePerMethod {
+			r.Any(path, method, route.Handler, middlewares...)
+		}
 	}
-
-	r.Routers = append(r.Routers, subRouter)
 }
 
 type Server struct {
-	Name   string
+	logger *slog.Logger
 	Router Router
+	server http.Server
 }
 
-func NewServer(name string) Server {
+func NewServer(logger *slog.Logger, router Router) Server {
 	return Server{
-		Name:   name,
-		Router: NewRouter(),
+		logger: logger,
+		Router: router,
+		server: http.Server{
+			ReadTimeout:  10 * time.Second, // max time to read request (headers + body)
+			WriteTimeout: 10 * time.Second, // max time to write response
+			IdleTimeout:  60 * time.Second, // keep-alive connections
+		},
 	}
 }
 
 func (s *Server) ListenAndServe(addr string) error {
-	routeTable := mergeRoutes(s.Router)
+	// Register routes
+	mux := http.NewServeMux()
 
-	for path, routes := range routeTable {
+	// Handle static files first (higher priority)
+	for path, dir := range s.Router.StaticPaths {
+		fileServer := http.FileServer(http.Dir(dir))
+		mux.Handle(path, http.StripPrefix(path, fileServer))
+	}
+
+	// Register dynamic routes
+	for path, routePerMethod := range s.Router.Routes {
 		// Method aware request handler
-		http.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
-			for _, route := range routes {
-				if r.Method != route.Method {
-					continue
-				}
-
-				route.Handler(w, r)
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			route, exists := routePerMethod[r.Method]
+			if !exists {
+				http.Error(w, "Not Found", http.StatusNotFound)
 				return
 			}
 
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			// Call the route handler
+			if err := route.Handler(w, r); err != nil {
+				s.logger.Error("failed to handle request", "error", err, "path", path, "method", r.Method)
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			}
 		})
 	}
 
-	return http.ListenAndServe(addr, nil)
+	s.server.Addr = addr
+	s.server.Handler = mux
+
+	return s.server.ListenAndServe()
 }
 
-func mergeRoutes(router Router) map[string][]Route {
-	routeTable := make(map[string][]Route, 0)
-
-	// Add direct routes to table
-	for _, route := range router.Routes {
-		// Create new route with combined router and route configs
-		path := router.Path + route.Path
-		middlewares := append(router.Middlewares, route.Middlewares...)
-
-		routeTable[path] = append(routeTable[path], Route{
-			Path:        path,
-			Method:      route.Method,
-			Handler:     route.Handler,
-			Middlewares: middlewares,
-		})
-	}
-
-	// Add indirect (sub router) routes to table
-	for _, subRouter := range router.Routers {
-		subRouterRouteTable := mergeRoutes(subRouter)
-
-		for _, routes := range subRouterRouteTable {
-			for _, route := range routes {
-				// Create new route with combined router and route configs
-				path := router.Path + route.Path
-				middlewares := append(router.Middlewares, route.Middlewares...)
-
-				routeTable[path] = append(routeTable[path], Route{
-					Path:        path,
-					Method:      route.Method,
-					Handler:     route.Handler,
-					Middlewares: middlewares,
-				})
-			}
-		}
-	}
-
-	return routeTable
+func JSON(w http.ResponseWriter, v any) error {
+	w.Header().Set("Content-Type", "application/json")
+	return json.NewEncoder(w).Encode(v)
 }

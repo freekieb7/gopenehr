@@ -2,110 +2,128 @@ package rest
 
 import "net/http"
 
-func HandleListEhr() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleListEhr() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleCreateEhr() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleCreateEhr() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleGetEhrById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGetEhrById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleDeleteEhrById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleDeleteEhrById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleGetEhrStatusById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGetEhrStatusById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleUpdateEhrStatusById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleUpdateEhrStatusById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleListComposition() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleListComposition() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleCreateComposition() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleCreateComposition() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleGetCompositionById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGetCompositionById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleUpdateCompositionById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleUpdateCompositionById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleDeleteCompositionById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleDeleteCompositionById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleListFolder() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleListFolder() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleCreateFolder() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleCreateFolder() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleGetFolderById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGetFolderById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleUpdateFolderById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleUpdateFolderById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleDeleteFolderById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleDeleteFolderById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleCreateContribution() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleCreateContribution() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleGetContributionById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGetContributionById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }

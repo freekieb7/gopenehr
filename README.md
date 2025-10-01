@@ -1,51 +1,283 @@
-gopenEHR
-===================
+openEHR REST API - Getting Started Guide
+==================
+Practical primer for developers integrating with the openEHR REST APIs (EHR, Definition, Query) plus SMART on openEHR authentication.
 
-A custom / idealistic version of what an openEHR service should be.
+# Overview
+The openEHR REST APIs expose a clinical data platform built on a versioned Reference Model (RM). Core domains:
+- EHR API: create and manage EHR containers, compositions, directory (folder), contributions.
+- Definition API: upload and retrieve operational templates (ADL 1.4 / ADL2) and store/retrieve AQL stored queries.
+- Query API: execute AQL (Archetype Query Language) ad-hoc or stored queries and receive RESULT_SET payloads.
+- SMART on openEHR (development spec): OAuth2/OIDC based authentication, launch context, scopes mapping to openEHR resources.
 
-### The goal ...
-- Fast
-- Simple
-- Lightweight
-- Open Source
+Spec references (Release 1.0.3 unless stated):
+- Overview: https://specifications.openehr.org/releases/ITS-REST/Release-1.0.3/overview.html
+- EHR API: https://specifications.openehr.org/releases/ITS-REST/Release-1.0.3/ehr.html
+- Query API: https://specifications.openehr.org/releases/ITS-REST/Release-1.0.3/query.html
+- Definition API: https://specifications.openehr.org/releases/ITS-REST/Release-1.0.3/definition.html
+- SMART on openEHR (auth): https://specifications.openehr.org/releases/ITS-REST/development/smart_app_launch.html
 
-### At the cost of ...
-- Being out of compliance with the official openEHR specs
-    - Removing, improving and adding features to create a better product
-- Using the minimal amount of libraries we can get away with
-    - Just write the damn code, not all problems have to be solved by relying on packages.
+# Base URL and Versioning
+Implementations usually mount APIs under a versioned prefix, e.g.:
+```
+https://platform.example.com/openehr/rest/v1
+```
+All examples assume base = `https://openEHRSys.example.com/v1` (spec examples) or similar.
 
-### What are the deviations?
-- Deviation: Adding more 'List XXX' endpoints
-- Reason: 'Get XXX by ID' works if you always know what's in the system, but what do you do if you don't know, or want to get multiple ?
+# Authentication (SMART on openEHR)
+1. Discover configuration:
+```
+GET {platform-base}/.well-known/smart-configuration
+```
+2. Use Authorization Code + PKCE (public) or Authorization Code / JWT Bearer / Client Credentials (confidential) as advertised in `grant_types_supported`.
+3. Request scopes combining:
+	 - Launch/context: `launch`, `launch/patient` (patient+EHR context), optionally experimental `launch/episode`.
+	 - Resource scopes (see Scopes section): e.g. `patient/composition-MyTemplate.v1.crud`.
+	 - Identity (OIDC) scopes if required: `openid profile`.
+4. After user auth + consent, exchange `code` at `token_endpoint` for `access_token` (+ optional `refresh_token`, `id_token`).
+5. Extract openEHR context claims (if present) from token response: `ehrId`, optional `episodeId`.
+6. Call openEHR REST endpoints with `Authorization: Bearer <token>`.
 
-## Roadmap
-- Implement EHR endpoints
-- Implement Query endpoints
-    - Only allow execution, no storage 
-- Full support for HTTP application/json
-- JAQL (JSON path oriented AQL)
+Embedded (iframe) launch: App receives `iss` and `launch` URL params, fetches smart configuration at `{iss}/.well-known/smart-configuration`, then initiates auth including the received `launch` value.
 
-## Graveyard
-- 
+# Scopes (Resource Access Model)
+Pattern: `<compartment>/<resource>.<permissions>`
+- Compartments: `patient` (scoped to current EHR), `user` (user-wide), `system` (backend).
+- Resources (examples):
+	- `composition-<templateId>` (COMPOSITION instances of a template)
+	- `template-<templateId>` (operational templates)
+	- `aql-<queryName>` (stored queries or `*` for ad-hoc when allowed)
+- Permissions letters:
+	- `c` create, `r` read, `u` update, `d` delete, `s` search/execute
+- Combine letters: `crud`, `cruds` etc.
+Examples:
+```
+patient/composition-Vital_Signs.v1.crud
+user/aql-org.openehr::compositions.rs
+system/template-*.crud
+```
+Use wildcards judiciously; broad access should be minimized.
 
-## JAQL
-Tables:
-- SELECT * FROM EHR
-- SELECT * FROM EHR_STATUS
-- SELECT * FROM EHR_ACCESS
-- SELECT * FROM COMPOSITION
-- SELECT * FROM FOLDER
-- SELECT * FROM CONTRIBUTION
-- SELECT * FROM EHR LEFT JOIN COMPOSITION
+# Content Negotiation & Formats
+Headers:
+- Request body format: `Content-Type: application/json` or `application/xml` (must match server support). For simplified formats use media types: e.g. `application/openehr.wt.flat+json`.
+- Response preference: `Prefer: return=representation` for full payload, otherwise minimal (default `return=minimal`).
+- Accept header to request representation: `Accept: application/json` or `application/xml`.
+Simplified (SDT / web template) JSON requires `openEHR-TEMPLATE_ID` header if COMPOSITION JSON does not carry template details.
 
-SELECT c.content.name::DV_TEXT FROM COMPOSITION c
+# Core HTTP Headers (selected)
+- `Authorization: Bearer <token>` (SMART)
+- `ETag` (entity tag of versioned resource)
+- `If-Match` (optimistic concurrency when updating/deleting versions)
+- `Location` (URI of newly created or updated resource)
+- `openEHR-VERSION.*` / `openEHR-AUDIT_DETAILS.*` (optional commit metadata)
+- `openEHR-TEMPLATE_ID` (template id when simplified body omits it)
+- `Prefer` (representation negotiation; can combine `resolve_refs`)
 
-SELECT c.**.name FROM COMPOSITION c
+# Status Codes (typical subset)
+`200 OK`, `201 Created`, `204 No Content`, `400 Bad Request`, `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `409 Conflict`, `412 Precondition Failed`, `415 Unsupported Media Type`, `422 Unprocessable Entity`, `500 Internal Server Error`.
 
-SELECT c.content[*] ? (@.name = "test") .value FROM COMPOSITION c
+# Fundamental Resource Identification
+- `ehr_id` (UUID, EHR.ehr_id.value)
+- `versioned_object_uid` (container UID)
+- `version_uid` (OBJECT_VERSION_ID: object::system::version)
+- `uid_based_id` (either version_uid or versioned_object_uid depending context)
 
-SELECT c FROM COMPOSITION c WHERE c.content[*] ANY SECTION
+# Typical Workflow
+## 1. Create or Locate an EHR
+Auto-generated EHR id:
+```
+POST /ehr
+Prefer: return=representation
+Authorization: Bearer <token>
+```
+Optional JSON EHR_STATUS body; else defaults applied.
+Find by subject:
+```
+GET /ehr?subject_id={value}&subject_namespace={ns}
+```
 
-SELECT c FROM COM
+## 2. Upload Templates (Definition API)
+ADL 1.4 XML:
+```
+POST /definition/template/adl1.4
+Content-Type: application/xml
+Prefer: return=minimal
+```
+ADL2 text:
+```
+POST /definition/template/adl2?version=1.0.1
+Content-Type: text/plain
+```
+List templates:
+```
+GET /definition/template/adl2
+```
+Retrieve template (web template JSON):
+```
+GET /definition/template/adl1.4/{template_id}
+Accept: application/openehr.wt+json
+```
+
+## 3. Commit a COMPOSITION
+```
+POST /ehr/{ehr_id}/composition
+Content-Type: application/json
+Prefer: return=representation
+Authorization: Bearer <token>
+```
+Body includes COMPOSITION with language, territory, category, context, composer, content[]. For simplified formats supply `openEHR-TEMPLATE_ID` if template metadata absent.
+Response: 201 with Location and possibly full representation.
+
+## 4. Retrieve or Update a COMPOSITION
+Latest version (implicit):
+```
+GET /ehr/{ehr_id}/composition/{versioned_object_uid}
+```
+Specific version:
+```
+GET /ehr/{ehr_id}/composition/{version_uid}
+```
+Update (optimistic locking):
+```
+PUT /ehr/{ehr_id}/composition/{versioned_object_uid}
+If-Match: "<latest_version_uid>"
+```
+Delete (logical):
+```
+DELETE /ehr/{ehr_id}/composition/{version_uid}
+```
+
+## 5. Directory (FOLDER)
+Create:
+```
+POST /ehr/{ehr_id}/directory
+```
+Update with concurrency:
+```
+PUT /ehr/{ehr_id}/directory
+If-Match: "<latest_version_uid>"
+```
+Fetch path inside directory at time:
+```
+GET /ehr/{ehr_id}/directory?path=episodes/a/b&version_at_time=YYYY-MM-DDThh:mm:ss.sss±hh:mm
+```
+
+## 6. Contribution (Batch commit)
+```
+POST /ehr/{ehr_id}/contribution
+Content-Type: application/json
+```
+Supply versions array referencing operations and audit metadata.
+
+## 7. Query Data (AQL)
+Ad-hoc GET (short queries):
+```
+GET /query/aql?q=SELECT ...&ehr_id={ehr_id}&fetch=20&offset=0
+```
+Ad-hoc POST (recommended for length + params):
+```
+POST /query/aql
+{
+	"q": "SELECT ... WHERE o/data[...] > $temperature",
+	"offset": 0,
+	"fetch": 10,
+	"query_parameters": { "temperature": 38.5 }
+}
+```
+Stored query execution:
+```
+GET /query/{qualified_query_name}?ehr_id={ehr_id}&systolic_bp=140
+```
+Store or update query definition:
+```
+PUT /definition/query/{qualified_query_name}
+Content-Type: text/plain
+```
+Retrieve stored query version:
+```
+GET /definition/query/{qualified_query_name}/{version}
+```
+Result shape: RESULT_SET with meta, name, q, columns[], rows[].
+
+# Optimistic Concurrency & Versioning
+- Always capture `ETag` (mirrors version_uid) from read responses of versioned resources.
+- Supply that in `If-Match` for updates/deletes to prevent overwriting new versions.
+- On 412 Precondition Failed, re-fetch to get latest `ETag`.
+
+# Audit & Commit Metadata
+Optional custom headers can enrich audit trail when committing:
+```
+openEHR-AUDIT_DETAILS.change_type: code_string="249"  # creation
+openEHR-AUDIT_DETAILS.description: value="Initial vitals capture"
+openEHR-VERSION.lifecycle_state: code_string="532"    # complete
+```
+Server merges provided values with defaults.
+
+# DateTime Handling
+- Use extended ISO 8601 (e.g. `2015-01-20T19:30:22.765+01:00`)
+- Query params like `version_at_time` must be extended ISO 8601.
+
+# Error Handling Strategy
+Check status codes; on 4xx parse optional JSON error body (when `Prefer: return=representation` supplied). Typical structure:
+```
+{
+	"message": "Error message",
+	"code": 90000,
+	"errors": [ { "_type": "DV_CODED_TEXT", "value": "Error message", ... } ]
+}
+```
+
+# Security & Best Practices
+- Use least privilege scopes; prefer template-specific over wildcard.
+- Enforce PKCE for public clients.
+- Rotate client secrets / keys (confidential clients) and support asymmetric JWT auth where possible.
+- Validate `issuer` and `aud` claims in tokens (if `id_token` present) and match against configuration.
+- Cache `.well-known/smart-configuration` with reasonable TTL; refresh on auth failures.
+
+# Quick Reference (Cheat Sheet)
+| Action | Endpoint | Method | Notes |
+| --- | --- | --- | --- |
+| Create EHR | /ehr | POST | Optional EHR_STATUS body |
+| Get EHR | /ehr/{ehr_id} | GET | 404 if missing |
+| Create COMPOSITION | /ehr/{ehr_id}/composition | POST | 201 + Location |
+| Get COMPOSITION (latest) | /ehr/{ehr_id}/composition/{versioned_object_uid} | GET | Uses container id |
+| Get COMPOSITION (by version) | /ehr/{ehr_id}/composition/{version_uid} | GET | Specific version |
+| Update COMPOSITION | /ehr/{ehr_id}/composition/{versioned_object_uid} | PUT | If-Match required |
+| Delete COMPOSITION | /ehr/{ehr_id}/composition/{version_uid} | DELETE | Logical delete |
+| Upload template ADL2 | /definition/template/adl2 | POST | text/plain body |
+| List templates ADL2 | /definition/template/adl2 | GET | Returns metadata list |
+| Get template (web template) | /definition/template/adl1.4/{id} | GET | Accept web template mime |
+| Store query | /definition/query/{name} | PUT | text/plain AQL |
+| Execute ad-hoc AQL | /query/aql | POST | JSON body |
+| Execute stored query | /query/{qualified_query_name} | GET | Query params for variables |
+
+# Minimal Client Flow Outline
+1. Discover SMART: fetch `/.well-known/smart-configuration`.
+2. Build auth request (authorize endpoint) with scopes, PKCE, redirect_uri, state, code_challenge, launch (if iframe), aud (issuer/platform) and optional `launch/patient`.
+3. Exchange code at token endpoint.
+4. Use `access_token` with openEHR endpoints. Add `Prefer: return=representation` when needing full payload.
+5. Handle 401 by refreshing token or re-authorizing.
+6. Use AQL queries for analytics/reporting; restrict fetch + offset for pagination.
+
+# Additional Notes
+- Always store server-generated identifiers; never attempt to rewrite historical version_uids.
+- COMPOSITION updates always create new VERSION internally; treat version_uid as immutable lineage.
+- For performance, narrow AQL queries with path constraints and parameters instead of wide wildcard queries.
+
+# Next Steps
+- Implement token acquisition using chosen OAuth2 library.
+- Build template registry sync job (optional) to ensure required templates exist before committing data.
+- Add application-level caching for templates and stored queries.
+- Introduce automated integration tests covering: EHR creation, template upload, composition commit, AQL retrieval, optimistic update failure path.
+
+# Glossary (selected)
+- AQL: Archetype Query Language used to query structured clinical data.
+- COMPOSITION: Top-level clinical document instance (versioned).
+- CONTRIBUTION: Logical commit grouping of one or more VERSIONs.
+- EHR: Root container for a patient’s clinical record.
+- VERSIONED_OBJECT: Container tracking successive VERSION states of a resource.
+- RESULT_SET: Structured result of a query execution.
+
+# Disclaimer
+This getting started guide is a distilled practical aid; always refer to the normative specifications linked above for authoritative definitions, edge cases and full semantics.
 

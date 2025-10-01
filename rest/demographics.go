@@ -2,152 +2,177 @@ package rest
 
 import "net/http"
 
-func HandleListAgent() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleListAgent() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleCreateAgent() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleCreateAgent() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleGetAgentById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGetAgentById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleUpdateAgentById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleUpdateAgentById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleDeleteAgentById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleDeleteAgentById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleListGroup() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleListGroup() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleCreateGroup() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleCreateGroup() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleGetGroupById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGetGroupById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleUpdateGroupById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleUpdateGroupById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleDeleteGroupById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleDeleteGroupById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleListOrganisation() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleListOrganisation() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleCreateOrganisation() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleCreateOrganisation() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleGetOrganisationById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGetOrganisationById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleUpdateOrganisationById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleUpdateOrganisationById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleDeleteOrganisationById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleDeleteOrganisationById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleListPerson() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleListPerson() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleCreatePerson() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleCreatePerson() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleGetPersonById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGetPersonById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleUpdatePersonById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleUpdatePersonById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleDeletePersonById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleDeletePersonById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleListRole() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleListRole() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleCreateRole() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleCreateRole() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleGetRoleById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleGetRoleById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleUpdateRoleById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleUpdateRoleById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }
 
-func HandleDeleteRoleById() HandleFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func HandleDeleteRoleById() HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) error {
 		// todo
+		return nil
 	}
 }

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://cdn.scalar.com/schema/scalar-config.json",
+  "subdomain": "gopenehr-scalar-github-test",
+  "guides": [
+    {
+      "name": "My awesome documentation",
+      "sidebar": [
+        {
+            "name": "Full Markdown",
+            "type": "link",
+            "url": "https://gist.github.com/allysonsilva/85fff14a22bbdf55485be947566cc09e#file-full-markdown-md"
+        }
+      ]
+    }
+  ],
+    "references": [
+    {
+      "name": "API Reference",
+      "liveLink": "https://gist.github.com/projectoperations/8650294200aad0921647124ef180c1bb#file-openapi-yml"
+    }
+  ]
+}

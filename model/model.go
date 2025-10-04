@@ -1,145 +1,103 @@
 package model
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 
 	"github.com/freekieb7/gopenehr/encoding/json"
+	"github.com/freekieb7/gopenehr/util"
 )
 
 var ErrNotFound = errors.New("value not found")
 var ErrBadType = errors.New("parse error")
-
-type Option[T any] struct {
-	Value T
-	Some  bool
-}
-
-func Some[T any](v T) Option[T] {
-	return Option[T]{Value: v, Some: true}
-}
-
-func None[T any]() Option[T] {
-	var zero T
-	return Option[T]{Value: zero, Some: false}
-}
-
-func (o Option[T]) IsSome() bool { return o.Some }
-func (o Option[T]) Unwrap() T    { return o.Value }
-
-func (o *Option[T]) Unmarshal(data []byte) error {
-	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
-		var zero T
-		o.Some = false
-		o.Value = zero
-	} else {
-		var v T
-		if err := json.Unmarshal(data, &v); err != nil {
-			return err
-		}
-		o.Value = v
-		o.Some = true
-	}
-
-	return nil
-}
-
-func (o Option[T]) Marshal() ([]byte, error) {
-	if o.Some {
-		return json.Marshal(o.Unwrap())
-	}
-
-	return []byte{}, nil
-}
 
 // -----------------------------------
 // EHR
 // -----------------------------------
 
 type EHR struct {
-	Type_         Option[string]         `json:"_type"`
-	SystemID      Option[HIER_OBJECT_ID] `json:"system_id"`
-	EHRID         HIER_OBJECT_ID         `json:"ehr_id"`
-	Contributions Option[[]OBJECT_REF]   `json:"contributions"`
-	EHRStatus     OBJECT_REF             `json:"ehr_status"`
-	EHRAccess     OBJECT_REF             `json:"ehr_access"`
-	Compositions  Option[[]OBJECT_REF]   `json:"compositions"`
-	Directory     Option[OBJECT_REF]     `json:"directory"`
-	TimeCreated   DV_DATE_TIME           `json:"time_created"`
-	Folders       Option[[]OBJECT_REF]   `json:"folders"`
+	Type_         util.Optional[string]         `json:"_type"`
+	SystemID      util.Optional[HIER_OBJECT_ID] `json:"system_id"`
+	EHRID         HIER_OBJECT_ID                `json:"ehr_id"`
+	Contributions util.Optional[[]OBJECT_REF]   `json:"contributions"`
+	EHRStatus     OBJECT_REF                    `json:"ehr_status"`
+	EHRAccess     OBJECT_REF                    `json:"ehr_access"`
+	Compositions  util.Optional[[]OBJECT_REF]   `json:"compositions"`
+	Directory     util.Optional[OBJECT_REF]     `json:"directory"`
+	TimeCreated   DV_DATE_TIME                  `json:"time_created"`
+	Folders       util.Optional[[]OBJECT_REF]   `json:"folders"`
 }
 
 type VERSIONED_EHR_ACCESS struct {
-	Type_       Option[string] `json:"_type"`
-	UID         HIER_OBJECT_ID `json:"uid"`
-	OwnerID     OBJECT_REF     `json:"owner_id"`
-	TimeCreated DV_DATE_TIME   `json:"time_created"`
+	Type_       util.Optional[string] `json:"_type"`
+	UID         HIER_OBJECT_ID        `json:"uid"`
+	OwnerID     OBJECT_REF            `json:"owner_id"`
+	TimeCreated DV_DATE_TIME          `json:"time_created"`
 }
 
 type EHR_ACCESS struct {
-	Type_            Option[string]       `json:"_type"`
-	Name             DV_TEXT              `json:"name"`
-	ArchetypeNodeID  string               `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID] `json:"uid"`
-	Links            Option[[]LINK]       `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]   `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT] `json:"feeder_audit"`
+	Type_            util.Optional[string]       `json:"_type"`
+	Name             DV_TEXT                     `json:"name"`
+	ArchetypeNodeID  string                      `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID] `json:"uid"`
+	Links            util.Optional[[]LINK]       `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]   `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT] `json:"feeder_audit"`
 }
 
 type VERSIONED_EHR_STATUS struct {
-	Type_       Option[string] `json:"_type"`
-	UID         HIER_OBJECT_ID `json:"uid"`
-	OwnerID     OBJECT_REF     `json:"owner_id"`
-	TimeCreated DV_DATE_TIME   `json:"time_created"`
+	Type_       util.Optional[string] `json:"_type"`
+	UID         HIER_OBJECT_ID        `json:"uid"`
+	OwnerID     OBJECT_REF            `json:"owner_id"`
+	TimeCreated DV_DATE_TIME          `json:"time_created"`
 }
 
 type EHR_STATUS struct {
-	Type_            Option[string]         `json:"_type"`
-	Name             DV_TEXT                `json:"name"`
-	ArchetypeNodeID  string                 `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID]   `json:"uid"`
-	Links            Option[[]LINK]         `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]     `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT]   `json:"feeder_audit"`
-	Subject          PARTY_SELF             `json:"subject"`
-	IsQueryable      bool                   `json:"is_queryable"`
-	IsModifiable     bool                   `json:"is_modifiable"`
-	OtherDetails     Option[ITEM_STRUCTURE] `json:"other_details"`
+	Type_            util.Optional[string]         `json:"_type"`
+	Name             DV_TEXT                       `json:"name"`
+	ArchetypeNodeID  string                        `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID]   `json:"uid"`
+	Links            util.Optional[[]LINK]         `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]     `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT]   `json:"feeder_audit"`
+	Subject          PARTY_SELF                    `json:"subject"`
+	IsQueryable      bool                          `json:"is_queryable"`
+	IsModifiable     bool                          `json:"is_modifiable"`
+	OtherDetails     util.Optional[ITEM_STRUCTURE] `json:"other_details"`
 }
 
 type VERSIONED_COMPOSITION struct {
-	Type_       Option[string] `json:"_type"`
-	UID         HIER_OBJECT_ID `json:"uid"`
-	OwnerID     OBJECT_REF     `json:"owner_id"`
-	TimeCreated DV_DATE_TIME   `json:"time_created"`
+	Type_       util.Optional[string] `json:"_type"`
+	UID         HIER_OBJECT_ID        `json:"uid"`
+	OwnerID     OBJECT_REF            `json:"owner_id"`
+	TimeCreated DV_DATE_TIME          `json:"time_created"`
 }
 
 type COMPOSITION struct {
-	Type_            Option[string]         `json:"_type"`
-	Name             DV_TEXT                `json:"name"`
-	ArchetypeNodeID  string                 `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID]   `json:"uid"`
-	Links            Option[[]LINK]         `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]     `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT]   `json:"feeder_audit"`
-	Language         CODE_PHRASE            `json:"language"`
-	Territory        CODE_PHRASE            `json:"territory"`
-	Category         DV_CODED_TEXT          `json:"category"`
-	Context          Option[EVENT_CONTEXT]  `json:"context"`
-	Composer         PARTY_PROXY            `json:"composer"`
-	Content          Option[[]CONTENT_ITEM] `json:"content"`
+	Type_            util.Optional[string]         `json:"_type"`
+	Name             DV_TEXT                       `json:"name"`
+	ArchetypeNodeID  string                        `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID]   `json:"uid"`
+	Links            util.Optional[[]LINK]         `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]     `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT]   `json:"feeder_audit"`
+	Language         CODE_PHRASE                   `json:"language"`
+	Territory        CODE_PHRASE                   `json:"territory"`
+	Category         DV_CODED_TEXT                 `json:"category"`
+	Context          util.Optional[EVENT_CONTEXT]  `json:"context"`
+	Composer         PARTY_PROXY                   `json:"composer"`
+	Content          util.Optional[[]CONTENT_ITEM] `json:"content"`
 }
 
 type EVENT_CONTEXT struct {
-	Type_              Option[string]           `json:"_type"`
-	StartTime          DV_DATE_TIME             `json:"start_time"`
-	EndTime            Option[DV_DATE_TIME]     `json:"end_time"`
-	Location           Option[string]           `json:"location"`
-	Setting            DV_CODED_TEXT            `json:"setting"`
-	OtherContext       Option[ITEM_STRUCTURE]   `json:"other_context"`
-	HealthCareFacility Option[PARTY_IDENTIFIED] `json:"health_care_facility"`
-	Participations     Option[[]PARTICIPATION]  `json:"participations"`
+	Type_              util.Optional[string]           `json:"_type"`
+	StartTime          DV_DATE_TIME                    `json:"start_time"`
+	EndTime            util.Optional[DV_DATE_TIME]     `json:"end_time"`
+	Location           util.Optional[string]           `json:"location"`
+	Setting            DV_CODED_TEXT                   `json:"setting"`
+	OtherContext       util.Optional[ITEM_STRUCTURE]   `json:"other_context"`
+	HealthCareFacility util.Optional[PARTY_IDENTIFIED] `json:"health_care_facility"`
+	Participations     util.Optional[[]PARTICIPATION]  `json:"participations"`
 }
 
 type ContentItemType string
@@ -211,14 +169,14 @@ func (c CONTENT_ITEM) Marshal() ([]byte, error) {
 }
 
 type SECTION struct {
-	Type_            Option[string]         `json:"_type"`
-	Name             DV_TEXT                `json:"name"`
-	ArchetypeNodeID  string                 `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID]   `json:"uid"`
-	Links            Option[[]LINK]         `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]     `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT]   `json:"feeder_audit"`
-	Items            Option[[]CONTENT_ITEM] `json:"items"`
+	Type_            util.Optional[string]         `json:"_type"`
+	Name             DV_TEXT                       `json:"name"`
+	ArchetypeNodeID  string                        `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID]   `json:"uid"`
+	Links            util.Optional[[]LINK]         `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]     `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT]   `json:"feeder_audit"`
+	Items            util.Optional[[]CONTENT_ITEM] `json:"items"`
 }
 
 type EntryType string
@@ -285,20 +243,20 @@ func (c ENTRY) Marshal() ([]byte, error) {
 }
 
 type ADMIN_ENTRY struct {
-	Type_               Option[string]          `json:"_type"`
-	Name                DV_TEXT                 `json:"name"`
-	ArchetypeNodeID     string                  `json:"archetype_node_id"`
-	UID                 Option[UID_BASED_ID]    `json:"uid"`
-	Links               Option[[]LINK]          `json:"links"`
-	ArchetypeDetails    Option[ARCHETYPED]      `json:"archetype_details"`
-	FeederAudit         Option[FEEDER_AUDIT]    `json:"feeder_audit"`
-	Language            CODE_PHRASE             `json:"language"`
-	Encoding            CODE_PHRASE             `json:"encoding"`
-	OtherParticipations Option[[]PARTICIPATION] `json:"other_participations"`
-	WorkflowID          Option[OBJECT_REF]      `json:"workflow_id"`
-	Subject             PARTY_PROXY             `json:"subject"`
-	Provider            Option[PARTY_PROXY]     `json:"provider"`
-	Data                ITEM_STRUCTURE          `json:"data"`
+	Type_               util.Optional[string]          `json:"_type"`
+	Name                DV_TEXT                        `json:"name"`
+	ArchetypeNodeID     string                         `json:"archetype_node_id"`
+	UID                 util.Optional[UID_BASED_ID]    `json:"uid"`
+	Links               util.Optional[[]LINK]          `json:"links"`
+	ArchetypeDetails    util.Optional[ARCHETYPED]      `json:"archetype_details"`
+	FeederAudit         util.Optional[FEEDER_AUDIT]    `json:"feeder_audit"`
+	Language            CODE_PHRASE                    `json:"language"`
+	Encoding            CODE_PHRASE                    `json:"encoding"`
+	OtherParticipations util.Optional[[]PARTICIPATION] `json:"other_participations"`
+	WorkflowID          util.Optional[OBJECT_REF]      `json:"workflow_id"`
+	Subject             PARTY_PROXY                    `json:"subject"`
+	Provider            util.Optional[PARTY_PROXY]     `json:"provider"`
+	Data                ITEM_STRUCTURE                 `json:"data"`
 }
 
 type CareEntryType string
@@ -360,114 +318,114 @@ func (c CARE_ENTRY) Marshal() ([]byte, error) {
 }
 
 type OBSERVATION struct {
-	Type_               Option[string]                  `json:"_type"`
-	Name                DV_TEXT                         `json:"name"`
-	ArchetypeNodeID     string                          `json:"archetype_node_id"`
-	UID                 Option[UID_BASED_ID]            `json:"uid"`
-	Links               Option[[]LINK]                  `json:"links"`
-	ArchetypeDetails    Option[ARCHETYPED]              `json:"archetype_details"`
-	FeederAudit         Option[FEEDER_AUDIT]            `json:"feeder_audit"`
-	Language            CODE_PHRASE                     `json:"language"`
-	Encoding            CODE_PHRASE                     `json:"encoding"`
-	OtherParticipations Option[[]PARTICIPATION]         `json:"other_participations"`
-	WorkflowID          Option[OBJECT_REF]              `json:"workflow_id"`
-	Subject             PARTY_PROXY                     `json:"subject"`
-	Provider            Option[PARTY_PROXY]             `json:"provider"`
-	Protocol            Option[ITEM_STRUCTURE]          `json:"protocol"`
-	GuidelineID         Option[OBJECT_REF]              `json:"guideline_id"`
-	Data                HISTORY[ITEM_STRUCTURE]         `json:"data"`
-	State               Option[HISTORY[ITEM_STRUCTURE]] `json:"state"`
+	Type_               util.Optional[string]                  `json:"_type"`
+	Name                DV_TEXT                                `json:"name"`
+	ArchetypeNodeID     string                                 `json:"archetype_node_id"`
+	UID                 util.Optional[UID_BASED_ID]            `json:"uid"`
+	Links               util.Optional[[]LINK]                  `json:"links"`
+	ArchetypeDetails    util.Optional[ARCHETYPED]              `json:"archetype_details"`
+	FeederAudit         util.Optional[FEEDER_AUDIT]            `json:"feeder_audit"`
+	Language            CODE_PHRASE                            `json:"language"`
+	Encoding            CODE_PHRASE                            `json:"encoding"`
+	OtherParticipations util.Optional[[]PARTICIPATION]         `json:"other_participations"`
+	WorkflowID          util.Optional[OBJECT_REF]              `json:"workflow_id"`
+	Subject             PARTY_PROXY                            `json:"subject"`
+	Provider            util.Optional[PARTY_PROXY]             `json:"provider"`
+	Protocol            util.Optional[ITEM_STRUCTURE]          `json:"protocol"`
+	GuidelineID         util.Optional[OBJECT_REF]              `json:"guideline_id"`
+	Data                HISTORY[ITEM_STRUCTURE]                `json:"data"`
+	State               util.Optional[HISTORY[ITEM_STRUCTURE]] `json:"state"`
 }
 
 type EVALUATION struct {
-	Type_               Option[string]          `json:"_type"`
-	Name                DV_TEXT                 `json:"name"`
-	ArchetypeNodeID     string                  `json:"archetype_node_id"`
-	UID                 Option[UID_BASED_ID]    `json:"uid"`
-	Links               Option[[]LINK]          `json:"links"`
-	ArchetypeDetails    Option[ARCHETYPED]      `json:"archetype_details"`
-	FeederAudit         Option[FEEDER_AUDIT]    `json:"feeder_audit"`
-	Language            CODE_PHRASE             `json:"language"`
-	Encoding            CODE_PHRASE             `json:"encoding"`
-	OtherParticipations Option[[]PARTICIPATION] `json:"other_participations"`
-	WorkflowID          Option[OBJECT_REF]      `json:"workflow_id"`
-	Subject             PARTY_PROXY             `json:"subject"`
-	Provider            Option[PARTY_PROXY]     `json:"provider"`
-	Protocol            Option[ITEM_STRUCTURE]  `json:"protocol"`
-	GuidelineID         Option[OBJECT_REF]      `json:"guideline_id"`
-	Data                ITEM_STRUCTURE          `json:"data"`
+	Type_               util.Optional[string]          `json:"_type"`
+	Name                DV_TEXT                        `json:"name"`
+	ArchetypeNodeID     string                         `json:"archetype_node_id"`
+	UID                 util.Optional[UID_BASED_ID]    `json:"uid"`
+	Links               util.Optional[[]LINK]          `json:"links"`
+	ArchetypeDetails    util.Optional[ARCHETYPED]      `json:"archetype_details"`
+	FeederAudit         util.Optional[FEEDER_AUDIT]    `json:"feeder_audit"`
+	Language            CODE_PHRASE                    `json:"language"`
+	Encoding            CODE_PHRASE                    `json:"encoding"`
+	OtherParticipations util.Optional[[]PARTICIPATION] `json:"other_participations"`
+	WorkflowID          util.Optional[OBJECT_REF]      `json:"workflow_id"`
+	Subject             PARTY_PROXY                    `json:"subject"`
+	Provider            util.Optional[PARTY_PROXY]     `json:"provider"`
+	Protocol            util.Optional[ITEM_STRUCTURE]  `json:"protocol"`
+	GuidelineID         util.Optional[OBJECT_REF]      `json:"guideline_id"`
+	Data                ITEM_STRUCTURE                 `json:"data"`
 }
 
 type INSTRUCTION struct {
-	Type_               Option[string]          `json:"_type"`
-	Name                DV_TEXT                 `json:"name"`
-	ArchetypeNodeID     string                  `json:"archetype_node_id"`
-	UID                 Option[UID_BASED_ID]    `json:"uid"`
-	Links               Option[[]LINK]          `json:"links"`
-	ArchetypeDetails    Option[ARCHETYPED]      `json:"archetype_details"`
-	FeederAudit         Option[FEEDER_AUDIT]    `json:"feeder_audit"`
-	Language            CODE_PHRASE             `json:"language"`
-	Encoding            CODE_PHRASE             `json:"encoding"`
-	OtherParticipations Option[[]PARTICIPATION] `json:"other_participations"`
-	WorkflowID          Option[OBJECT_REF]      `json:"workflow_id"`
-	Subject             PARTY_PROXY             `json:"subject"`
-	Provider            Option[PARTY_PROXY]     `json:"provider"`
-	Protocol            Option[ITEM_STRUCTURE]  `json:"protocol"`
-	GuidelineID         Option[OBJECT_REF]      `json:"guideline_id"`
-	Narrative           DV_TEXT                 `json:"narrative"`
-	ExpiryTime          Option[DV_DATE_TIME]    `json:"expiry_time"`
-	WFDefinition        Option[DV_PARSABLE]     `json:"wf_definition"`
-	Activities          Option[[]ACTIVITY]      `json:"activities"`
+	Type_               util.Optional[string]          `json:"_type"`
+	Name                DV_TEXT                        `json:"name"`
+	ArchetypeNodeID     string                         `json:"archetype_node_id"`
+	UID                 util.Optional[UID_BASED_ID]    `json:"uid"`
+	Links               util.Optional[[]LINK]          `json:"links"`
+	ArchetypeDetails    util.Optional[ARCHETYPED]      `json:"archetype_details"`
+	FeederAudit         util.Optional[FEEDER_AUDIT]    `json:"feeder_audit"`
+	Language            CODE_PHRASE                    `json:"language"`
+	Encoding            CODE_PHRASE                    `json:"encoding"`
+	OtherParticipations util.Optional[[]PARTICIPATION] `json:"other_participations"`
+	WorkflowID          util.Optional[OBJECT_REF]      `json:"workflow_id"`
+	Subject             PARTY_PROXY                    `json:"subject"`
+	Provider            util.Optional[PARTY_PROXY]     `json:"provider"`
+	Protocol            util.Optional[ITEM_STRUCTURE]  `json:"protocol"`
+	GuidelineID         util.Optional[OBJECT_REF]      `json:"guideline_id"`
+	Narrative           DV_TEXT                        `json:"narrative"`
+	ExpiryTime          util.Optional[DV_DATE_TIME]    `json:"expiry_time"`
+	WFDefinition        util.Optional[DV_PARSABLE]     `json:"wf_definition"`
+	Activities          util.Optional[[]ACTIVITY]      `json:"activities"`
 }
 
 type ACTIVITY struct {
-	Type_             Option[string]       `json:"_type"`
-	Name              DV_TEXT              `json:"name"`
-	ArchetypeNodeID   string               `json:"archetype_node_id"`
-	UID               Option[UID_BASED_ID] `json:"uid"`
-	Links             Option[[]LINK]       `json:"links"`
-	ArchetypeDetails  Option[ARCHETYPED]   `json:"archetype_details"`
-	FeederAudit       Option[FEEDER_AUDIT] `json:"feeder_audit"`
-	Timing            Option[DV_PARSABLE]  `json:"timing"`
-	ActionArchetypeID string               `json:"action_archetype_id"`
-	Description       ITEM_STRUCTURE       `json:"description"`
+	Type_             util.Optional[string]       `json:"_type"`
+	Name              DV_TEXT                     `json:"name"`
+	ArchetypeNodeID   string                      `json:"archetype_node_id"`
+	UID               util.Optional[UID_BASED_ID] `json:"uid"`
+	Links             util.Optional[[]LINK]       `json:"links"`
+	ArchetypeDetails  util.Optional[ARCHETYPED]   `json:"archetype_details"`
+	FeederAudit       util.Optional[FEEDER_AUDIT] `json:"feeder_audit"`
+	Timing            util.Optional[DV_PARSABLE]  `json:"timing"`
+	ActionArchetypeID string                      `json:"action_archetype_id"`
+	Description       ITEM_STRUCTURE              `json:"description"`
 }
 
 type ACTION struct {
-	Type_               Option[string]              `json:"_type"`
-	Name                DV_TEXT                     `json:"name"`
-	ArchetypeNodeID     string                      `json:"archetype_node_id"`
-	UID                 Option[UID_BASED_ID]        `json:"uid"`
-	Links               Option[[]LINK]              `json:"links"`
-	ArchetypeDetails    Option[ARCHETYPED]          `json:"archetype_details"`
-	FeederAudit         Option[FEEDER_AUDIT]        `json:"feeder_audit"`
-	Language            CODE_PHRASE                 `json:"language"`
-	Encoding            CODE_PHRASE                 `json:"encoding"`
-	OtherParticipations Option[[]PARTICIPATION]     `json:"other_participations"`
-	WorkflowID          Option[OBJECT_REF]          `json:"workflow_id"`
-	Subject             PARTY_PROXY                 `json:"subject"`
-	Provider            Option[PARTY_PROXY]         `json:"provider"`
-	Protocol            Option[ITEM_STRUCTURE]      `json:"protocol"`
-	GuidelineID         Option[OBJECT_REF]          `json:"guideline_id"`
-	Time                DV_DATE_TIME                `json:"time"`
-	IsmTransition       ISM_TRANSITION              `json:"ism_transition"`
-	InstructionDetails  Option[INSTRUCTION_DETAILS] `json:"instruction_details"`
-	Description         ITEM_STRUCTURE              `json:"description"`
+	Type_               util.Optional[string]              `json:"_type"`
+	Name                DV_TEXT                            `json:"name"`
+	ArchetypeNodeID     string                             `json:"archetype_node_id"`
+	UID                 util.Optional[UID_BASED_ID]        `json:"uid"`
+	Links               util.Optional[[]LINK]              `json:"links"`
+	ArchetypeDetails    util.Optional[ARCHETYPED]          `json:"archetype_details"`
+	FeederAudit         util.Optional[FEEDER_AUDIT]        `json:"feeder_audit"`
+	Language            CODE_PHRASE                        `json:"language"`
+	Encoding            CODE_PHRASE                        `json:"encoding"`
+	OtherParticipations util.Optional[[]PARTICIPATION]     `json:"other_participations"`
+	WorkflowID          util.Optional[OBJECT_REF]          `json:"workflow_id"`
+	Subject             PARTY_PROXY                        `json:"subject"`
+	Provider            util.Optional[PARTY_PROXY]         `json:"provider"`
+	Protocol            util.Optional[ITEM_STRUCTURE]      `json:"protocol"`
+	GuidelineID         util.Optional[OBJECT_REF]          `json:"guideline_id"`
+	Time                DV_DATE_TIME                       `json:"time"`
+	IsmTransition       ISM_TRANSITION                     `json:"ism_transition"`
+	InstructionDetails  util.Optional[INSTRUCTION_DETAILS] `json:"instruction_details"`
+	Description         ITEM_STRUCTURE                     `json:"description"`
 }
 
 type INSTRUCTION_DETAILS struct {
-	Type_         Option[string]         `json:"_type"`
-	InstructionID LOCATABLE_REF          `json:"instruction_id"`
-	ActivityID    string                 `json:"activity"`
-	WfDetails     Option[ITEM_STRUCTURE] `json:"wf_details"`
+	Type_         util.Optional[string]         `json:"_type"`
+	InstructionID LOCATABLE_REF                 `json:"instruction_id"`
+	ActivityID    string                        `json:"activity"`
+	WfDetails     util.Optional[ITEM_STRUCTURE] `json:"wf_details"`
 }
 
 type ISM_TRANSITION struct {
-	Type_        Option[string]        `json:"_type"`
-	CurrentState DV_CODED_TEXT         `json:"current_state"`
-	Transition   Option[DV_CODED_TEXT] `json:"transition"`
-	CareflowStep Option[DV_CODED_TEXT] `json:"cateflow_step"`
-	Reason       Option[DV_TEXT]       `json:"reason"`
+	Type_        util.Optional[string]        `json:"_type"`
+	CurrentState DV_CODED_TEXT                `json:"current_state"`
+	Transition   util.Optional[DV_CODED_TEXT] `json:"transition"`
+	CareflowStep util.Optional[DV_CODED_TEXT] `json:"cateflow_step"`
+	Reason       util.Optional[DV_TEXT]       `json:"reason"`
 }
 
 // -----------------------------------
@@ -750,37 +708,37 @@ func (l LOCATABLE) Marshal() ([]byte, error) {
 }
 
 type ARCHETYPED struct {
-	Type_       Option[string]      `json:"_type"`
-	ArchetypeID ARCHETYPE_ID        `json:"archetype_id"`
-	TemplateID  Option[TEMPLATE_ID] `json:"template_id"`
-	RMVersion   string              `json:"rm_version"`
+	Type_       util.Optional[string]      `json:"_type"`
+	ArchetypeID ARCHETYPE_ID               `json:"archetype_id"`
+	TemplateID  util.Optional[TEMPLATE_ID] `json:"template_id"`
+	RMVersion   string                     `json:"rm_version"`
 }
 
 type LINK struct {
-	Type_   Option[string] `json:"_type"`
-	Meaning DV_TEXT        `json:"meaning"`
-	Type    DV_TEXT        `json:"type"`
-	Target  DV_EHR_URI     `json:"target"`
+	Type_   util.Optional[string] `json:"_type"`
+	Meaning DV_TEXT               `json:"meaning"`
+	Type    DV_TEXT               `json:"type"`
+	Target  DV_EHR_URI            `json:"target"`
 }
 
 type FEEDER_AUDIT struct {
-	Type_                    Option[string]               `json:"_type"`
-	OriginatingSystemItemIDs Option[[]DV_IDENTIFIER]      `json:"originating_system_item_ids"`
-	FeederSystemItemIDs      Option[[]DV_IDENTIFIER]      `json:"feeder_system_item_ids"`
-	OriginalContent          Option[DV_ENCAPSULATED]      `json:"original_content"`
-	OriginatingSystemAudit   FEEDER_AUDIT_DETAILS         `json:"originating_system_audit"`
-	FeederSystemAudit        Option[FEEDER_AUDIT_DETAILS] `json:"feeder_system_audit"`
+	Type_                    util.Optional[string]               `json:"_type"`
+	OriginatingSystemItemIDs util.Optional[[]DV_IDENTIFIER]      `json:"originating_system_item_ids"`
+	FeederSystemItemIDs      util.Optional[[]DV_IDENTIFIER]      `json:"feeder_system_item_ids"`
+	OriginalContent          util.Optional[DV_ENCAPSULATED]      `json:"original_content"`
+	OriginatingSystemAudit   FEEDER_AUDIT_DETAILS                `json:"originating_system_audit"`
+	FeederSystemAudit        util.Optional[FEEDER_AUDIT_DETAILS] `json:"feeder_system_audit"`
 }
 
 type FEEDER_AUDIT_DETAILS struct {
-	Type_        Option[string]           `json:"_type"`
-	SystemID     string                   `json:"system_id"`
-	Location     Option[PARTY_IDENTIFIED] `json:"location"`
-	Subject      Option[PARTY_PROXY]      `json:"subject"`
-	Provider     Option[PARTY_IDENTIFIED] `json:"provider"`
-	Time         Option[DV_DATE_TIME]     `json:"time"`
-	VersionID    Option[string]           `json:"version_id"`
-	OtherDetails Option[ITEM_STRUCTURE]   `json:"other_details"`
+	Type_        util.Optional[string]           `json:"_type"`
+	SystemID     string                          `json:"system_id"`
+	Location     util.Optional[PARTY_IDENTIFIED] `json:"location"`
+	Subject      util.Optional[PARTY_PROXY]      `json:"subject"`
+	Provider     util.Optional[PARTY_IDENTIFIED] `json:"provider"`
+	Time         util.Optional[DV_DATE_TIME]     `json:"time"`
+	VersionID    util.Optional[string]           `json:"version_id"`
+	OtherDetails util.Optional[ITEM_STRUCTURE]   `json:"other_details"`
 }
 
 type PartyProxyType string
@@ -832,85 +790,85 @@ func (c PARTY_PROXY) Marshal() ([]byte, error) {
 }
 
 type PARTY_SELF struct {
-	Type_       Option[string]    `json:"_type"`
-	ExternalRef Option[PARTY_REF] `json:"external_ref"`
+	Type_       util.Optional[string]    `json:"_type"`
+	ExternalRef util.Optional[PARTY_REF] `json:"external_ref"`
 }
 
 type PARTY_IDENTIFIED struct {
-	Type_       Option[string]          `json:"_type"`
-	ExternalRef Option[PARTY_REF]       `json:"external_ref"`
-	Name        Option[string]          `json:"name"`
-	Identifiers Option[[]DV_IDENTIFIER] `json:"identifiers"`
+	Type_       util.Optional[string]          `json:"_type"`
+	ExternalRef util.Optional[PARTY_REF]       `json:"external_ref"`
+	Name        util.Optional[string]          `json:"name"`
+	Identifiers util.Optional[[]DV_IDENTIFIER] `json:"identifiers"`
 }
 
 type PARTY_RELATED struct {
-	Type_        Option[string]          `json:"_type"`
-	ExternalRef  Option[PARTY_REF]       `json:"external_ref"`
-	Name         Option[string]          `json:"name"`
-	Identifiers  Option[[]DV_IDENTIFIER] `json:"identifiers"`
-	Relationship DV_CODED_TEXT           `json:"relationship"`
+	Type_        util.Optional[string]          `json:"_type"`
+	ExternalRef  util.Optional[PARTY_REF]       `json:"external_ref"`
+	Name         util.Optional[string]          `json:"name"`
+	Identifiers  util.Optional[[]DV_IDENTIFIER] `json:"identifiers"`
+	Relationship DV_CODED_TEXT                  `json:"relationship"`
 }
 
 type PARTICIPATION struct {
-	Type_     Option[string]        `json:"_type"`
-	Function  DV_TEXT               `json:"function"`
-	Mode      Option[DV_CODED_TEXT] `json:"mode"`
-	Performer PARTY_PROXY           `json:"performer"`
-	Time      Option[DV_INTERVAL]   `json:"time"`
+	Type_     util.Optional[string]        `json:"_type"`
+	Function  DV_TEXT                      `json:"function"`
+	Mode      util.Optional[DV_CODED_TEXT] `json:"mode"`
+	Performer PARTY_PROXY                  `json:"performer"`
+	Time      util.Optional[DV_INTERVAL]   `json:"time"`
 }
 
 type AUDIT_DETAILS struct {
-	Type_         Option[string]  `json:"_type"`
-	SystemID      string          `json:"system_id"`
-	TimeCommitted DV_DATE_TIME    `json:"time_committed"`
-	ChangeType    DV_CODED_TEXT   `json:"change_type"`
-	Description   Option[DV_TEXT] `json:"description"`
-	Committer     PARTY_PROXY     `json:"committer"`
+	Type_         util.Optional[string]  `json:"_type"`
+	SystemID      string                 `json:"system_id"`
+	TimeCommitted DV_DATE_TIME           `json:"time_committed"`
+	ChangeType    DV_CODED_TEXT          `json:"change_type"`
+	Description   util.Optional[DV_TEXT] `json:"description"`
+	Committer     PARTY_PROXY            `json:"committer"`
 }
 
 type ATTESTATION struct {
-	Type_         Option[string]        `json:"_type"`
-	SystemID      string                `json:"system_id"`
-	TimeCommitted DV_DATE_TIME          `json:"time_committed"`
-	ChangeType    DV_CODED_TEXT         `json:"change_type"`
-	Description   Option[DV_TEXT]       `json:"description"`
-	Committer     PARTY_PROXY           `json:"committer"`
-	AttestedView  Option[DV_MULTIMEDIA] `json:"attested_view"`
-	Proof         Option[string]        `json:"proof"`
-	Items         Option[[]DV_EHR_URI]  `json:"items"`
-	Reason        DV_TEXT               `json:"reason"`
-	IsPending     bool                  `json:"is_pending"`
+	Type_         util.Optional[string]        `json:"_type"`
+	SystemID      string                       `json:"system_id"`
+	TimeCommitted DV_DATE_TIME                 `json:"time_committed"`
+	ChangeType    DV_CODED_TEXT                `json:"change_type"`
+	Description   util.Optional[DV_TEXT]       `json:"description"`
+	Committer     PARTY_PROXY                  `json:"committer"`
+	AttestedView  util.Optional[DV_MULTIMEDIA] `json:"attested_view"`
+	Proof         util.Optional[string]        `json:"proof"`
+	Items         util.Optional[[]DV_EHR_URI]  `json:"items"`
+	Reason        DV_TEXT                      `json:"reason"`
+	IsPending     bool                         `json:"is_pending"`
 }
 
 type REVISION_HISTORY struct {
-	Type_ Option[string]          `json:"_type"`
+	Type_ util.Optional[string]   `json:"_type"`
 	Items []REVISION_HISTORY_ITEM `json:"items"`
 }
 
 type REVISION_HISTORY_ITEM struct {
-	Type_     Option[string]    `json:"_type"`
-	VersionID OBJECT_VERSION_ID `json:"version_id"`
-	Audits    []AUDIT_DETAILS   `json:"audits"`
+	Type_     util.Optional[string] `json:"_type"`
+	VersionID OBJECT_VERSION_ID     `json:"version_id"`
+	Audits    []AUDIT_DETAILS       `json:"audits"`
 }
 
 type VERSIONED_FOLDER struct {
-	Type_       Option[string] `json:"_type"`
-	UID         HIER_OBJECT_ID `json:"uid"`
-	OwnerID     OBJECT_REF     `json:"owner_id"`
-	TimeCreated DV_DATE_TIME   `json:"time_created"`
+	Type_       util.Optional[string] `json:"_type"`
+	UID         HIER_OBJECT_ID        `json:"uid"`
+	OwnerID     OBJECT_REF            `json:"owner_id"`
+	TimeCreated DV_DATE_TIME          `json:"time_created"`
 }
 
 type FOLDER struct {
-	Type_            Option[string]         `json:"_type"`
-	Name             DV_TEXT                `json:"name"`
-	ArchetypeNodeID  string                 `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID]   `json:"uid"`
-	Links            Option[[]LINK]         `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]     `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT]   `json:"feeder_audit"`
-	Items            Option[[]OBJECT_REF]   `json:"items"`
-	Folders          Option[[]FOLDER]       `json:"folders"`
-	Details          Option[ITEM_STRUCTURE] `json:"details"`
+	Type_            util.Optional[string]         `json:"_type"`
+	Name             DV_TEXT                       `json:"name"`
+	ArchetypeNodeID  string                        `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID]   `json:"uid"`
+	Links            util.Optional[[]LINK]         `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]     `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT]   `json:"feeder_audit"`
+	Items            util.Optional[[]OBJECT_REF]   `json:"items"`
+	Folders          util.Optional[[]FOLDER]       `json:"folders"`
+	Details          util.Optional[ITEM_STRUCTURE] `json:"details"`
 }
 
 type VersionedObjectType string
@@ -1012,29 +970,29 @@ func (c VERSION) Marshal() ([]byte, error) {
 }
 
 type ORIGINAL_VERSION struct {
-	Contribution          OBJECT_REF                  `json:"contribution"`
-	Signature             Option[string]              `json:"signature"`
-	CommitAudit           AUDIT_DETAILS               `json:"commit_audit"`
-	UID                   OBJECT_VERSION_ID           `json:"uid"`
-	PrecedingVersionUID   Option[OBJECT_VERSION_ID]   `json:"preceding_version_uid"`
-	OtherInputVersionUIDs Option[[]OBJECT_VERSION_ID] `json:"other_input_version_uids"`
-	LifecycleState        DV_CODED_TEXT               `json:"lifecycle_state"`
-	Attestations          Option[[]ATTESTATION]       `json:"attestations"`
-	Data                  any                         `json:"data"`
+	Contribution          OBJECT_REF                         `json:"contribution"`
+	Signature             util.Optional[string]              `json:"signature"`
+	CommitAudit           AUDIT_DETAILS                      `json:"commit_audit"`
+	UID                   OBJECT_VERSION_ID                  `json:"uid"`
+	PrecedingVersionUID   util.Optional[OBJECT_VERSION_ID]   `json:"preceding_version_uid"`
+	OtherInputVersionUIDs util.Optional[[]OBJECT_VERSION_ID] `json:"other_input_version_uids"`
+	LifecycleState        DV_CODED_TEXT                      `json:"lifecycle_state"`
+	Attestations          util.Optional[[]ATTESTATION]       `json:"attestations"`
+	Data                  any                                `json:"data"`
 }
 
 type IMPORTED_VERSION struct {
-	Contribution OBJECT_REF       `json:"contribution"`
-	Signature    Option[string]   `json:"signature"`
-	CommitAudit  AUDIT_DETAILS    `json:"commit_audit"`
-	Item         ORIGINAL_VERSION `json:"item"`
+	Contribution OBJECT_REF            `json:"contribution"`
+	Signature    util.Optional[string] `json:"signature"`
+	CommitAudit  AUDIT_DETAILS         `json:"commit_audit"`
+	Item         ORIGINAL_VERSION      `json:"item"`
 }
 
 type CONTRIBUTION struct {
-	Type_    Option[string] `json:"_type"`
-	UID      HIER_OBJECT_ID `json:"uid"`
-	Versions []OBJECT_REF   `json:"versions"`
-	Audit    AUDIT_DETAILS  `json:"audit"`
+	Type_    util.Optional[string] `json:"_type"`
+	UID      HIER_OBJECT_ID        `json:"uid"`
+	Versions []OBJECT_REF          `json:"versions"`
+	Audit    AUDIT_DETAILS         `json:"audit"`
 }
 
 // idk what these are for yet
@@ -1101,47 +1059,47 @@ func (c ITEM_STRUCTURE) Marshal() ([]byte, error) {
 }
 
 type ITEM_SINGLE struct {
-	Type_            Option[string]       `json:"_type"`
-	Name             DV_TEXT              `json:"name"`
-	ArchetypeNodeID  string               `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID] `json:"uid"`
-	Links            Option[LINK]         `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]   `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT] `json:"feeder_audit"`
-	Item             ELEMENT              `json:"item"`
+	Type_            util.Optional[string]       `json:"_type"`
+	Name             DV_TEXT                     `json:"name"`
+	ArchetypeNodeID  string                      `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID] `json:"uid"`
+	Links            util.Optional[LINK]         `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]   `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT] `json:"feeder_audit"`
+	Item             ELEMENT                     `json:"item"`
 }
 
 type ITEM_LIST struct {
-	Type_            Option[string]       `json:"_type"`
-	Name             DV_TEXT              `json:"name"`
-	ArchetypeNodeID  string               `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID] `json:"uid"`
-	Links            Option[[]LINK]       `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]   `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT] `json:"feeder_audit"`
-	Items            Option[[]ELEMENT]    `json:"items"`
+	Type_            util.Optional[string]       `json:"_type"`
+	Name             DV_TEXT                     `json:"name"`
+	ArchetypeNodeID  string                      `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID] `json:"uid"`
+	Links            util.Optional[[]LINK]       `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]   `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT] `json:"feeder_audit"`
+	Items            util.Optional[[]ELEMENT]    `json:"items"`
 }
 
 type ITEM_TABLE struct {
-	Type_            Option[string]       `json:"_type"`
-	Name             DV_TEXT              `json:"name"`
-	ArchetypeNodeID  string               `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID] `json:"uid"`
-	Links            Option[[]LINK]       `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]   `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT] `json:"feeder_audit"`
-	Rows             Option[[]CLUSTER]    `json:"rows"`
+	Type_            util.Optional[string]       `json:"_type"`
+	Name             DV_TEXT                     `json:"name"`
+	ArchetypeNodeID  string                      `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID] `json:"uid"`
+	Links            util.Optional[[]LINK]       `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]   `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT] `json:"feeder_audit"`
+	Rows             util.Optional[[]CLUSTER]    `json:"rows"`
 }
 
 type ITEM_TREE struct {
-	Type_            Option[string]       `json:"_type"`
-	Name             DV_TEXT              `json:"name"`
-	ArchetypeNodeID  string               `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID] `json:"uid"`
-	Links            Option[[]LINK]       `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]   `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT] `json:"feeder_audit"`
-	Items            Option[[]ITEM]       `json:"items"`
+	Type_            util.Optional[string]       `json:"_type"`
+	Name             DV_TEXT                     `json:"name"`
+	ArchetypeNodeID  string                      `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID] `json:"uid"`
+	Links            util.Optional[[]LINK]       `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]   `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT] `json:"feeder_audit"`
+	Items            util.Optional[[]ITEM]       `json:"items"`
 }
 
 type ItemType string
@@ -1188,42 +1146,42 @@ func (c ITEM) Marshal() ([]byte, error) {
 }
 
 type CLUSTER struct {
-	Type_            Option[string]       `json:"_type"`
-	Name             DV_TEXT              `json:"name"`
-	ArchetypeNodeID  string               `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID] `json:"uid"`
-	Links            Option[[]LINK]       `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]   `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT] `json:"feeder_audit"`
-	Items            []ITEM               `json:"items"`
+	Type_            util.Optional[string]       `json:"_type"`
+	Name             DV_TEXT                     `json:"name"`
+	ArchetypeNodeID  string                      `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID] `json:"uid"`
+	Links            util.Optional[[]LINK]       `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]   `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT] `json:"feeder_audit"`
+	Items            []ITEM                      `json:"items"`
 }
 
 type ELEMENT struct {
-	Type_            Option[string]        `json:"_type"`
-	Name             DV_TEXT               `json:"name"`
-	ArchetypeNodeID  string                `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID]  `json:"uid"`
-	Links            Option[[]LINK]        `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]    `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT]  `json:"feeder_audit"`
-	NullFlavour      Option[DV_CODED_TEXT] `json:"null_flavour"`
-	Value            Option[DATA_VALUE]    `json:"value"`
-	NullReason       Option[DV_TEXT]       `json:"null_reason"`
+	Type_            util.Optional[string]        `json:"_type"`
+	Name             DV_TEXT                      `json:"name"`
+	ArchetypeNodeID  string                       `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID]  `json:"uid"`
+	Links            util.Optional[[]LINK]        `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]    `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT]  `json:"feeder_audit"`
+	NullFlavour      util.Optional[DV_CODED_TEXT] `json:"null_flavour"`
+	Value            util.Optional[DATA_VALUE]    `json:"value"`
+	NullReason       util.Optional[DV_TEXT]       `json:"null_reason"`
 }
 
 type HISTORY[T any] struct {
-	Type_            Option[string]         `json:"_type"`
-	Name             DV_TEXT                `json:"name"`
-	ArchetypeNodeID  string                 `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID]   `json:"uid"`
-	Links            Option[[]LINK]         `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]     `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT]   `json:"feeder_audit"`
-	Origin           DV_DATE_TIME           `json:"origin"`
-	Period           Option[DV_DURATION]    `json:"period"`
-	Duration         Option[DV_DURATION]    `json:"duration"`
-	Summary          Option[ITEM_STRUCTURE] `json:"summary"`
-	Events           Option[[]EVENT[T]]     `json:"events"`
+	Type_            util.Optional[string]         `json:"_type"`
+	Name             DV_TEXT                       `json:"name"`
+	ArchetypeNodeID  string                        `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID]   `json:"uid"`
+	Links            util.Optional[[]LINK]         `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]     `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT]   `json:"feeder_audit"`
+	Origin           DV_DATE_TIME                  `json:"origin"`
+	Period           util.Optional[DV_DURATION]    `json:"period"`
+	Duration         util.Optional[DV_DURATION]    `json:"duration"`
+	Summary          util.Optional[ITEM_STRUCTURE] `json:"summary"`
+	Events           util.Optional[[]EVENT[T]]     `json:"events"`
 }
 
 type EventType string
@@ -1270,32 +1228,32 @@ func (c EVENT[T]) Marshal() ([]byte, error) {
 }
 
 type POINT_EVENT[T any] struct {
-	Type_            string                 `json:"_type"`
-	Name             DV_TEXT                `json:"name"`
-	ArchetypeNodeID  string                 `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID]   `json:"uid"`
-	Links            Option[[]LINK]         `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]     `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT]   `json:"feeder_audit"`
-	Time             DV_DATE_TIME           `json:"time"`
-	State            Option[ITEM_STRUCTURE] `json:"state"`
-	Data             T                      `json:"data"`
+	Type_            string                        `json:"_type"`
+	Name             DV_TEXT                       `json:"name"`
+	ArchetypeNodeID  string                        `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID]   `json:"uid"`
+	Links            util.Optional[[]LINK]         `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]     `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT]   `json:"feeder_audit"`
+	Time             DV_DATE_TIME                  `json:"time"`
+	State            util.Optional[ITEM_STRUCTURE] `json:"state"`
+	Data             T                             `json:"data"`
 }
 
 type INTERVAL_EVENT[T any] struct {
-	Type_            string                 `json:"_type"`
-	Name             DV_TEXT                `json:"name"`
-	ArchetypeNodeID  string                 `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID]   `json:"uid"`
-	Links            Option[[]LINK]         `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]     `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT]   `json:"feeder_audit"`
-	Time             DV_DATE_TIME           `json:"time"`
-	State            Option[ITEM_STRUCTURE] `json:"state"`
-	Data             T                      `json:"data"`
-	Width            DV_DURATION            `json:"width"`
-	SampleCount      Option[int64]          `json:"sample_count"`
-	MathFunction     DV_CODED_TEXT          `json:"math_function"`
+	Type_            string                        `json:"_type"`
+	Name             DV_TEXT                       `json:"name"`
+	ArchetypeNodeID  string                        `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID]   `json:"uid"`
+	Links            util.Optional[[]LINK]         `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]     `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT]   `json:"feeder_audit"`
+	Time             DV_DATE_TIME                  `json:"time"`
+	State            util.Optional[ITEM_STRUCTURE] `json:"state"`
+	Data             T                             `json:"data"`
+	Width            DV_DURATION                   `json:"width"`
+	SampleCount      util.Optional[int64]          `json:"sample_count"`
+	MathFunction     DV_CODED_TEXT                 `json:"math_function"`
 }
 
 // -----------------------------------
@@ -1446,62 +1404,62 @@ func (c DATA_VALUE) Marshal() ([]byte, error) {
 }
 
 type DV_BOOLEAN struct {
-	Type_ Option[string] `json:"_type"`
-	Value bool           `json:"value"`
+	Type_ util.Optional[string] `json:"_type"`
+	Value bool                  `json:"value"`
 }
 
 type DV_STATE struct {
-	Type_      Option[string] `json:"_type"`
-	Value      DV_CODED_TEXT  `json:"value"`
-	IsTerminal bool           `json:"is_terminal"`
+	Type_      util.Optional[string] `json:"_type"`
+	Value      DV_CODED_TEXT         `json:"value"`
+	IsTerminal bool                  `json:"is_terminal"`
 }
 
 type DV_IDENTIFIER struct {
-	Type_    Option[string] `json:"_type"`
-	Issuer   Option[string] `json:"issuer"`
-	Assigner Option[string] `json:"assigner"`
-	ID       string         `json:"id"`
-	Type     Option[string] `json:"type"`
+	Type_    util.Optional[string] `json:"_type"`
+	Issuer   util.Optional[string] `json:"issuer"`
+	Assigner util.Optional[string] `json:"assigner"`
+	ID       string                `json:"id"`
+	Type     util.Optional[string] `json:"type"`
 }
 
 type DV_TEXT struct {
-	Type_      Option[string]         `json:"_type"`
-	Value      string                 `json:"value"`
-	Hyperlink  Option[DV_URI]         `json:"hyperlink"`
-	Formatting Option[string]         `json:"formatting"`
-	Mappings   Option[[]TERM_MAPPING] `json:"mappings"`
-	Language   Option[CODE_PHRASE]    `json:"language"`
-	Encoding   Option[CODE_PHRASE]    `json:"encoding"`
+	Type_      util.Optional[string]         `json:"_type"`
+	Value      string                        `json:"value"`
+	Hyperlink  util.Optional[DV_URI]         `json:"hyperlink"`
+	Formatting util.Optional[string]         `json:"formatting"`
+	Mappings   util.Optional[[]TERM_MAPPING] `json:"mappings"`
+	Language   util.Optional[CODE_PHRASE]    `json:"language"`
+	Encoding   util.Optional[CODE_PHRASE]    `json:"encoding"`
 }
 
 type TERM_MAPPING struct {
-	Type_   Option[string]        `json:"_type"`
-	Match   byte                  `json:"match"`
-	Purpose Option[DV_CODED_TEXT] `json:"purpose"`
-	Target  CODE_PHRASE           `json:"target"`
+	Type_   util.Optional[string]        `json:"_type"`
+	Match   byte                         `json:"match"`
+	Purpose util.Optional[DV_CODED_TEXT] `json:"purpose"`
+	Target  CODE_PHRASE                  `json:"target"`
 }
 
 type CODE_PHRASE struct {
-	Type_         Option[string] `json:"_type"`
-	TerminologyId TERMINOLOGY_ID `json:"terminology_id"`
-	CodeString    string         `json:"code_string"`
-	PreferredTerm Option[string] `json:"preferred_term"`
+	Type_         util.Optional[string] `json:"_type"`
+	TerminologyId TERMINOLOGY_ID        `json:"terminology_id"`
+	CodeString    string                `json:"code_string"`
+	PreferredTerm util.Optional[string] `json:"preferred_term"`
 }
 
 type DV_CODED_TEXT struct {
-	Type_        Option[string]         `json:"_type"`
-	Value        string                 `json:"value"`
-	Hyperlink    Option[DV_URI]         `json:"hyperlink"`
-	Formatting   Option[string]         `json:"formatting"`
-	Mappings     Option[[]TERM_MAPPING] `json:"mappings"`
-	Language     Option[CODE_PHRASE]    `json:"language"`
-	Encoding     Option[CODE_PHRASE]    `json:"encoding"`
-	DefiningCode CODE_PHRASE            `json:"defining_code"`
+	Type_        util.Optional[string]         `json:"_type"`
+	Value        string                        `json:"value"`
+	Hyperlink    util.Optional[DV_URI]         `json:"hyperlink"`
+	Formatting   util.Optional[string]         `json:"formatting"`
+	Mappings     util.Optional[[]TERM_MAPPING] `json:"mappings"`
+	Language     util.Optional[CODE_PHRASE]    `json:"language"`
+	Encoding     util.Optional[CODE_PHRASE]    `json:"encoding"`
+	DefiningCode CODE_PHRASE                   `json:"defining_code"`
 }
 
 type DV_PARAGRAPH struct {
-	Type_ Option[string] `json:"_type"`
-	Items []DV_TEXT      `json:"items"`
+	Type_ util.Optional[string] `json:"_type"`
+	Items []DV_TEXT             `json:"items"`
 }
 
 type DvOrderedType string
@@ -1583,131 +1541,131 @@ func (c DV_ORDERED) Marshal() ([]byte, error) {
 }
 
 type DV_INTERVAL struct {
-	Type_          Option[string] `json:"_type"`
-	Lower          any            `json:"lower"`
-	Upper          any            `json:"upper"`
-	LowerUnbounded bool           `json:"lower_unbounded"`
-	UpperUnbounded bool           `json:"upper_unbounded"`
-	LowerIncluded  bool           `json:"lower_included"`
-	UpperIncluded  bool           `json:"upper_included"`
+	Type_          util.Optional[string] `json:"_type"`
+	Lower          any                   `json:"lower"`
+	Upper          any                   `json:"upper"`
+	LowerUnbounded bool                  `json:"lower_unbounded"`
+	UpperUnbounded bool                  `json:"upper_unbounded"`
+	LowerIncluded  bool                  `json:"lower_included"`
+	UpperIncluded  bool                  `json:"upper_included"`
 }
 
 type REFERENCE_RANGE struct {
-	Type_   Option[string] `json:"_type"`
-	Meaning DV_TEXT        `json:"meaning"`
-	Range   DV_INTERVAL    `json:"range"`
+	Type_   util.Optional[string] `json:"_type"`
+	Meaning DV_TEXT               `json:"meaning"`
+	Range   DV_INTERVAL           `json:"range"`
 }
 
 type DV_ORDINAL struct {
-	Type_                Option[string]          `json:"_type"`
-	NormalStatus         Option[CODE_PHRASE]     `json:"normal_status"`
-	NormalRange          Option[DV_INTERVAL]     `json:"normal_range"`
-	OtherReferenceRanges Option[REFERENCE_RANGE] `json:"other_reference_ranges"`
-	Symbol               DV_CODED_TEXT           `json:"symbol"`
-	Value                int64                   `json:"value"`
+	Type_                util.Optional[string]          `json:"_type"`
+	NormalStatus         util.Optional[CODE_PHRASE]     `json:"normal_status"`
+	NormalRange          util.Optional[DV_INTERVAL]     `json:"normal_range"`
+	OtherReferenceRanges util.Optional[REFERENCE_RANGE] `json:"other_reference_ranges"`
+	Symbol               DV_CODED_TEXT                  `json:"symbol"`
+	Value                int64                          `json:"value"`
 }
 
 type DV_SCALE struct {
-	Type_                Option[string]            `json:"_type"`
-	NormalStatus         Option[CODE_PHRASE]       `json:"normal_status"`
-	NormalRange          Option[DV_INTERVAL]       `json:"normal_range"`
-	OtherReferenceRanges Option[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
-	Symbol               DV_CODED_TEXT             `json:"symbol"`
-	Value                float64                   `json:"value"`
+	Type_                util.Optional[string]            `json:"_type"`
+	NormalStatus         util.Optional[CODE_PHRASE]       `json:"normal_status"`
+	NormalRange          util.Optional[DV_INTERVAL]       `json:"normal_range"`
+	OtherReferenceRanges util.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
+	Symbol               DV_CODED_TEXT                    `json:"symbol"`
+	Value                float64                          `json:"value"`
 }
 
 type DV_QUANTITY struct {
-	Type_                Option[string]            `json:"_type"`
-	NormalStatus         Option[CODE_PHRASE]       `json:"normal_status"`
-	MagnitudeStatus      Option[string]            `json:"magnitude_status"`
-	AccuracyIsPercent    Option[bool]              `json:"accuracy_is_percent"`
-	Accuracy             Option[float64]           `json:"accuracy"`
-	Magnitude            float64                   `json:"magnitude"`
-	Precision            Option[int64]             `json:"precision"`
-	Units                string                    `json:"units"`
-	UnitsSystem          Option[string]            `json:"units_system"`
-	UnitsDisplayName     Option[string]            `json:"units_display_name"`
-	NormalRange          Option[DV_INTERVAL]       `json:"normal_range"`
-	OtherReferenceRanges Option[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
+	Type_                util.Optional[string]            `json:"_type"`
+	NormalStatus         util.Optional[CODE_PHRASE]       `json:"normal_status"`
+	MagnitudeStatus      util.Optional[string]            `json:"magnitude_status"`
+	AccuracyIsPercent    util.Optional[bool]              `json:"accuracy_is_percent"`
+	Accuracy             util.Optional[float64]           `json:"accuracy"`
+	Magnitude            float64                          `json:"magnitude"`
+	Precision            util.Optional[int64]             `json:"precision"`
+	Units                string                           `json:"units"`
+	UnitsSystem          util.Optional[string]            `json:"units_system"`
+	UnitsDisplayName     util.Optional[string]            `json:"units_display_name"`
+	NormalRange          util.Optional[DV_INTERVAL]       `json:"normal_range"`
+	OtherReferenceRanges util.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
 }
 
 type DV_COUNT struct {
-	Type_                Option[string]            `json:"_type"`
-	NormalStatus         Option[CODE_PHRASE]       `json:"normal_status"`
-	MagnitudeStatus      Option[string]            `json:"magnitude_status"`
-	AccuracyIsPercent    Option[bool]              `json:"accuracy_is_percent"`
-	Accuracy             Option[float64]           `json:"accuracy"`
-	Magnitude            int64                     `json:"magnitude"`
-	NormalRange          Option[DV_INTERVAL]       `json:"normal_range"`
-	OtherReferenceRanges Option[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
+	Type_                util.Optional[string]            `json:"_type"`
+	NormalStatus         util.Optional[CODE_PHRASE]       `json:"normal_status"`
+	MagnitudeStatus      util.Optional[string]            `json:"magnitude_status"`
+	AccuracyIsPercent    util.Optional[bool]              `json:"accuracy_is_percent"`
+	Accuracy             util.Optional[float64]           `json:"accuracy"`
+	Magnitude            int64                            `json:"magnitude"`
+	NormalRange          util.Optional[DV_INTERVAL]       `json:"normal_range"`
+	OtherReferenceRanges util.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
 }
 
 type DV_PROPORTION struct {
-	Type_                Option[string]            `json:"_type"`
-	NormalStatus         Option[CODE_PHRASE]       `json:"normal_status"`
-	MagnitudeStatus      Option[string]            `json:"magnitude_status"`
-	AccuracyIsPercent    Option[bool]              `json:"accuracy_is_percent"`
-	Accuracy             Option[float64]           `json:"accuracy"`
-	Numerator            float64                   `json:"numerator"`
-	Denominator          float64                   `json:"denominator"`
-	Type                 int64                     `json:"type"`
-	Precision            Option[int64]             `json:"precision"`
-	NormalRange          Option[DV_INTERVAL]       `json:"normal_range"`
-	OtherReferenceRanges Option[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
+	Type_                util.Optional[string]            `json:"_type"`
+	NormalStatus         util.Optional[CODE_PHRASE]       `json:"normal_status"`
+	MagnitudeStatus      util.Optional[string]            `json:"magnitude_status"`
+	AccuracyIsPercent    util.Optional[bool]              `json:"accuracy_is_percent"`
+	Accuracy             util.Optional[float64]           `json:"accuracy"`
+	Numerator            float64                          `json:"numerator"`
+	Denominator          float64                          `json:"denominator"`
+	Type                 int64                            `json:"type"`
+	Precision            util.Optional[int64]             `json:"precision"`
+	NormalRange          util.Optional[DV_INTERVAL]       `json:"normal_range"`
+	OtherReferenceRanges util.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
 }
 
 type DV_DATE struct {
-	Type_                Option[string]            `json:"_type"`
-	NormalStatus         Option[CODE_PHRASE]       `json:"normal_status"`
-	NormalRange          Option[DV_INTERVAL]       `json:"normal_range"`
-	OtherReferenceRanges Option[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
-	MagnitudeStatus      Option[string]            `json:"magnitude_status"`
-	AccuracyIsPercent    Option[bool]              `json:"accuracy_is_percent"`
-	Accuracy             Option[DV_DURATION]       `json:"accuracy"`
-	Value                string                    `json:"value"`
+	Type_                util.Optional[string]            `json:"_type"`
+	NormalStatus         util.Optional[CODE_PHRASE]       `json:"normal_status"`
+	NormalRange          util.Optional[DV_INTERVAL]       `json:"normal_range"`
+	OtherReferenceRanges util.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
+	MagnitudeStatus      util.Optional[string]            `json:"magnitude_status"`
+	AccuracyIsPercent    util.Optional[bool]              `json:"accuracy_is_percent"`
+	Accuracy             util.Optional[DV_DURATION]       `json:"accuracy"`
+	Value                string                           `json:"value"`
 }
 
 type DV_TIME struct {
-	Type_                Option[string]            `json:"_type"`
-	NormalStatus         Option[CODE_PHRASE]       `json:"normal_status"`
-	NormalRange          Option[DV_INTERVAL]       `json:"normal_range"`
-	OtherReferenceRanges Option[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
-	MagnitudeStatus      Option[string]            `json:"magnitude_status"`
-	AccuracyIsPercent    Option[bool]              `json:"accuracy_is_percent"`
-	Accuracy             Option[DV_DURATION]       `json:"accuracy"`
-	Value                string                    `json:"value"`
+	Type_                util.Optional[string]            `json:"_type"`
+	NormalStatus         util.Optional[CODE_PHRASE]       `json:"normal_status"`
+	NormalRange          util.Optional[DV_INTERVAL]       `json:"normal_range"`
+	OtherReferenceRanges util.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
+	MagnitudeStatus      util.Optional[string]            `json:"magnitude_status"`
+	AccuracyIsPercent    util.Optional[bool]              `json:"accuracy_is_percent"`
+	Accuracy             util.Optional[DV_DURATION]       `json:"accuracy"`
+	Value                string                           `json:"value"`
 }
 
 type DV_DATE_TIME struct {
-	Type_                Option[string]            `json:"_type"`
-	NormalStatus         Option[CODE_PHRASE]       `json:"normal_status"`
-	NormalRange          Option[DV_INTERVAL]       `json:"normal_range"`
-	OtherReferenceRanges Option[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
-	MagnitudeStatus      Option[string]            `json:"magnitude_status"`
-	AccuracyIsPercent    Option[bool]              `json:"accuracy_is_percent"`
-	Accuracy             Option[DV_DURATION]       `json:"accuracy"`
-	Value                string                    `json:"value"`
+	Type_                util.Optional[string]            `json:"_type"`
+	NormalStatus         util.Optional[CODE_PHRASE]       `json:"normal_status"`
+	NormalRange          util.Optional[DV_INTERVAL]       `json:"normal_range"`
+	OtherReferenceRanges util.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
+	MagnitudeStatus      util.Optional[string]            `json:"magnitude_status"`
+	AccuracyIsPercent    util.Optional[bool]              `json:"accuracy_is_percent"`
+	Accuracy             util.Optional[DV_DURATION]       `json:"accuracy"`
+	Value                string                           `json:"value"`
 }
 
 type DV_DURATION struct {
-	Type_                string                    `json:"_type"`
-	NormalStatus         Option[CODE_PHRASE]       `json:"normal_status"`
-	NormalRange          Option[DV_INTERVAL]       `json:"normal_range"`
-	OtherReferenceRanges Option[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
-	MagnitudeStatus      Option[string]            `json:"magnitude_status"`
-	AccuracyIsPercent    Option[bool]              `json:"accuracy_is_percent"`
-	Accuracy             Option[bool]              `json:"accuracy"`
-	Value                string                    `json:"value"`
+	Type_                string                           `json:"_type"`
+	NormalStatus         util.Optional[CODE_PHRASE]       `json:"normal_status"`
+	NormalRange          util.Optional[DV_INTERVAL]       `json:"normal_range"`
+	OtherReferenceRanges util.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges"`
+	MagnitudeStatus      util.Optional[string]            `json:"magnitude_status"`
+	AccuracyIsPercent    util.Optional[bool]              `json:"accuracy_is_percent"`
+	Accuracy             util.Optional[bool]              `json:"accuracy"`
+	Value                string                           `json:"value"`
 }
 
 type DV_PERIODIC_TIME_SPECIFICATION struct {
-	Type_ Option[string] `json:"_type"`
-	Value DV_PARSABLE    `json:"value"`
+	Type_ util.Optional[string] `json:"_type"`
+	Value DV_PARSABLE           `json:"value"`
 }
 
 type DV_GENERAL_TIME_SPECIFICATION struct {
-	Type_ Option[string] `json:"_type"`
-	Value DV_PARSABLE    `json:"value"`
+	Type_ util.Optional[string] `json:"_type"`
+	Value DV_PARSABLE           `json:"value"`
 }
 
 type DvEncapsulatedType string
@@ -1754,37 +1712,37 @@ func (c DV_ENCAPSULATED) Marshal() ([]byte, error) {
 }
 
 type DV_MULTIMEDIA struct {
-	Type_                   Option[string]         `json:"_type"`
-	Charset                 Option[CODE_PHRASE]    `json:"charset"`
-	Language                Option[CODE_PHRASE]    `json:"language"`
-	AlternateText           Option[string]         `json:"alternate_text"`
-	Uri                     Option[DV_URI]         `json:"uri"`
-	Data                    Option[string]         `json:"data"`
-	MediaType               CODE_PHRASE            `json:"media_type"`
-	CompressionAlgorithm    Option[CODE_PHRASE]    `json:"compression_algorithm"`
-	IntegrityCheck          Option[string]         `json:"integrity_check"`
-	IntegrityCheckAlgorithm Option[CODE_PHRASE]    `json:"integrity_check_algorithm"`
-	Thumbnail               Option[*DV_MULTIMEDIA] `json:"thumbnail"`
-	Size                    int64                  `json:"size"`
+	Type_                   util.Optional[string]         `json:"_type"`
+	Charset                 util.Optional[CODE_PHRASE]    `json:"charset"`
+	Language                util.Optional[CODE_PHRASE]    `json:"language"`
+	AlternateText           util.Optional[string]         `json:"alternate_text"`
+	Uri                     util.Optional[DV_URI]         `json:"uri"`
+	Data                    util.Optional[string]         `json:"data"`
+	MediaType               CODE_PHRASE                   `json:"media_type"`
+	CompressionAlgorithm    util.Optional[CODE_PHRASE]    `json:"compression_algorithm"`
+	IntegrityCheck          util.Optional[string]         `json:"integrity_check"`
+	IntegrityCheckAlgorithm util.Optional[CODE_PHRASE]    `json:"integrity_check_algorithm"`
+	Thumbnail               util.Optional[*DV_MULTIMEDIA] `json:"thumbnail"`
+	Size                    int64                         `json:"size"`
 }
 
 type DV_PARSABLE struct {
-	Type_     Option[string]      `json:"_type"`
-	Charset   Option[CODE_PHRASE] `json:"charset"`
-	Language  Option[CODE_PHRASE] `json:"language"`
-	Value     string              `json:"value"`
-	Formalism string              `json:"formalism"`
+	Type_     util.Optional[string]      `json:"_type"`
+	Charset   util.Optional[CODE_PHRASE] `json:"charset"`
+	Language  util.Optional[CODE_PHRASE] `json:"language"`
+	Value     string                     `json:"value"`
+	Formalism string                     `json:"formalism"`
 }
 
 type DV_URI struct {
-	Type_ Option[string] `json:"_type"`
-	Value string         `json:"value"`
+	Type_ util.Optional[string] `json:"_type"`
+	Value string                `json:"value"`
 }
 
 type DV_EHR_URI struct {
-	Type_              Option[string] `json:"_type"`
-	Value              string         `json:"value"`
-	LocalTerminologyId string         `json:"local_terminology_id"`
+	Type_              util.Optional[string] `json:"_type"`
+	Value              string                `json:"value"`
+	LocalTerminologyId string                `json:"local_terminology_id"`
 }
 
 // -----------------------------------
@@ -1840,18 +1798,18 @@ func (c UID) Marshal() ([]byte, error) {
 }
 
 type ISO_OID struct {
-	Type_ Option[string] `json:"_type"`
-	Value string         `json:"value"`
+	Type_ util.Optional[string] `json:"_type"`
+	Value string                `json:"value"`
 }
 
 type UUID struct {
-	Type_ Option[string] `json:"_type"`
-	Value string         `json:"value"`
+	Type_ util.Optional[string] `json:"_type"`
+	Value string                `json:"value"`
 }
 
 type INTERNET_ID struct {
-	Type_ Option[string] `json:"_type"`
-	Value string         `json:"value"`
+	Type_ util.Optional[string] `json:"_type"`
+	Value string                `json:"value"`
 }
 
 type ObjectIdType string
@@ -1957,56 +1915,56 @@ func (c UID_BASED_ID) Marshal() ([]byte, error) {
 }
 
 type HIER_OBJECT_ID struct {
-	Type_ Option[string] `json:"_type"`
-	Value string         `json:"value"`
+	Type_ util.Optional[string] `json:"_type"`
+	Value string                `json:"value"`
 }
 
 type OBJECT_VERSION_ID struct {
-	Type_ Option[string] `json:"_type"`
-	Value string         `json:"value"`
+	Type_ util.Optional[string] `json:"_type"`
+	Value string                `json:"value"`
 }
 
 type ARCHETYPE_ID struct {
-	Type_ Option[string] `json:"_type"`
-	Value string         `json:"value"`
+	Type_ util.Optional[string] `json:"_type"`
+	Value string                `json:"value"`
 }
 
 type TEMPLATE_ID struct {
-	Type_ Option[string] `json:"_type"`
-	Value string         `json:"value"`
+	Type_ util.Optional[string] `json:"_type"`
+	Value string                `json:"value"`
 }
 
 type TERMINOLOGY_ID struct {
-	Type_ Option[string] `json:"_type"`
-	Value string         `json:"value"`
+	Type_ util.Optional[string] `json:"_type"`
+	Value string                `json:"value"`
 }
 
 type GENERIC_ID struct {
-	Type_  Option[string] `json:"_type"`
-	Value  string         `json:"value"`
-	Scheme string         `json:"scheme"`
+	Type_  util.Optional[string] `json:"_type"`
+	Value  string                `json:"value"`
+	Scheme string                `json:"scheme"`
 }
 
 type OBJECT_REF struct {
-	Type_     Option[string] `json:"object_ref"`
-	Namespace string         `json:"namespace"`
-	Type      string         `json:"type"`
-	ID        OBJECT_ID      `json:"id"`
+	Type_     util.Optional[string] `json:"object_ref"`
+	Namespace string                `json:"namespace"`
+	Type      string                `json:"type"`
+	ID        OBJECT_ID             `json:"id"`
 }
 
 type PARTY_REF struct {
-	Type_     Option[string] `json:"_type"`
-	Namespace string         `json:"namespace"`
-	Type      string         `json:"type"`
-	ID        OBJECT_ID      `json:"id"`
+	Type_     util.Optional[string] `json:"_type"`
+	Namespace string                `json:"namespace"`
+	Type      string                `json:"type"`
+	ID        OBJECT_ID             `json:"id"`
 }
 
 type LOCATABLE_REF struct {
-	Type_     Option[string] `json:"_type"`
-	Namespace string         `json:"namespace"`
-	Type      string         `json:"type"`
-	Path      Option[string] `json:"path"`
-	ID        UID_BASED_ID   `json:"id"`
+	Type_     util.Optional[string] `json:"_type"`
+	Namespace string                `json:"namespace"`
+	Type      string                `json:"type"`
+	Path      util.Optional[string] `json:"path"`
+	ID        UID_BASED_ID          `json:"id"`
 }
 
 type PartyType string
@@ -2074,81 +2032,81 @@ type VERSIONED_PARTY struct {
 }
 
 type ROLE struct {
-	Type_                Option[string]               `json:"_type"`
-	Name                 DV_TEXT                      `json:"name"`
-	ArchetypeNodeID      string                       `json:"archetype_node_id"`
-	UID                  Option[UID_BASED_ID]         `json:"uid"`
-	Links                Option[[]LINK]               `json:"links"`
-	ArchetypeDetails     Option[ARCHETYPED]           `json:"archetype_details"`
-	FeederAudit          Option[FEEDER_AUDIT]         `json:"feeder_audit"`
-	Identities           []PARTY_IDENTITY             `json:"identities"`
-	Contacts             Option[[]CONTACT]            `json:"contacts"`
-	Details              Option[ITEM_STRUCTURE]       `json:"details"`
-	ReverseRelationships Option[[]PARTY_RELATIONSHIP] `json:"reverse_relationships"`
-	Relationships        Option[[]PARTY_RELATIONSHIP] `json:"relationships"`
-	TimeValidity         Option[DV_INTERVAL]          `json:"time_validity"`
-	Performer            PARTY_REF                    `json:"performer"`
-	Capabilities         Option[[]CAPABILITY]         `json:"capabilities"`
+	Type_                util.Optional[string]               `json:"_type"`
+	Name                 DV_TEXT                             `json:"name"`
+	ArchetypeNodeID      string                              `json:"archetype_node_id"`
+	UID                  util.Optional[UID_BASED_ID]         `json:"uid"`
+	Links                util.Optional[[]LINK]               `json:"links"`
+	ArchetypeDetails     util.Optional[ARCHETYPED]           `json:"archetype_details"`
+	FeederAudit          util.Optional[FEEDER_AUDIT]         `json:"feeder_audit"`
+	Identities           []PARTY_IDENTITY                    `json:"identities"`
+	Contacts             util.Optional[[]CONTACT]            `json:"contacts"`
+	Details              util.Optional[ITEM_STRUCTURE]       `json:"details"`
+	ReverseRelationships util.Optional[[]PARTY_RELATIONSHIP] `json:"reverse_relationships"`
+	Relationships        util.Optional[[]PARTY_RELATIONSHIP] `json:"relationships"`
+	TimeValidity         util.Optional[DV_INTERVAL]          `json:"time_validity"`
+	Performer            PARTY_REF                           `json:"performer"`
+	Capabilities         util.Optional[[]CAPABILITY]         `json:"capabilities"`
 }
 
 type PARTY_RELATIONSHIP struct {
-	Type_            Option[string]         `json:"_type"`
-	Name             DV_TEXT                `json:"name"`
-	ArchetypeNodeID  string                 `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID]   `json:"uid"`
-	Links            Option[[]LINK]         `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]     `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT]   `json:"feeder_audit"`
-	Details          Option[ITEM_STRUCTURE] `json:"details"`
-	Target           PARTY_REF              `json:"target"`
-	TimeValidity     Option[DV_INTERVAL]    `json:"time_validity"`
-	Source           PARTY_REF              `json:"source"`
+	Type_            util.Optional[string]         `json:"_type"`
+	Name             DV_TEXT                       `json:"name"`
+	ArchetypeNodeID  string                        `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID]   `json:"uid"`
+	Links            util.Optional[[]LINK]         `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]     `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT]   `json:"feeder_audit"`
+	Details          util.Optional[ITEM_STRUCTURE] `json:"details"`
+	Target           PARTY_REF                     `json:"target"`
+	TimeValidity     util.Optional[DV_INTERVAL]    `json:"time_validity"`
+	Source           PARTY_REF                     `json:"source"`
 }
 
 type PARTY_IDENTITY struct {
-	Type_            Option[string]       `json:"_type"`
-	Name             DV_TEXT              `json:"name"`
-	ArchetypeNodeID  string               `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID] `json:"uid"`
-	Links            Option[[]LINK]       `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]   `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT] `json:"feeder_audit"`
-	Details          ITEM_STRUCTURE       `json:"details"`
+	Type_            util.Optional[string]       `json:"_type"`
+	Name             DV_TEXT                     `json:"name"`
+	ArchetypeNodeID  string                      `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID] `json:"uid"`
+	Links            util.Optional[[]LINK]       `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]   `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT] `json:"feeder_audit"`
+	Details          ITEM_STRUCTURE              `json:"details"`
 }
 
 type CONTACT struct {
-	Type_            Option[string]       `json:"_type"`
-	Name             DV_TEXT              `json:"name"`
-	ArchetypeNodeID  string               `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID] `json:"uid"`
-	Links            Option[[]LINK]       `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]   `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT] `json:"feeder_audit"`
-	Addresses        []ADDRESS            `json:"addresses"`
-	TimeValidity     Option[DV_INTERVAL]  `json:"time_validity"`
+	Type_            util.Optional[string]       `json:"_type"`
+	Name             DV_TEXT                     `json:"name"`
+	ArchetypeNodeID  string                      `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID] `json:"uid"`
+	Links            util.Optional[[]LINK]       `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]   `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT] `json:"feeder_audit"`
+	Addresses        []ADDRESS                   `json:"addresses"`
+	TimeValidity     util.Optional[DV_INTERVAL]  `json:"time_validity"`
 }
 
 type ADDRESS struct {
-	Type_            Option[string]       `json:"_type"`
-	Name             DV_TEXT              `json:"name"`
-	ArchetypeNodeID  string               `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID] `json:"uid"`
-	Links            Option[[]LINK]       `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]   `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT] `json:"feeder_audit"`
-	Details          ITEM_STRUCTURE       `json:"details"`
+	Type_            util.Optional[string]       `json:"_type"`
+	Name             DV_TEXT                     `json:"name"`
+	ArchetypeNodeID  string                      `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID] `json:"uid"`
+	Links            util.Optional[[]LINK]       `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]   `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT] `json:"feeder_audit"`
+	Details          ITEM_STRUCTURE              `json:"details"`
 }
 
 type CAPABILITY struct {
-	Type_            Option[string]       `json:"_type"`
-	Name             DV_TEXT              `json:"name"`
-	ArchetypeNodeID  string               `json:"archetype_node_id"`
-	UID              Option[UID_BASED_ID] `json:"uid"`
-	Links            Option[[]LINK]       `json:"links"`
-	ArchetypeDetails Option[ARCHETYPED]   `json:"archetype_details"`
-	FeederAudit      Option[FEEDER_AUDIT] `json:"feeder_audit"`
-	Credentials      ITEM_STRUCTURE       `json:"credentials"`
-	TimeValidity     Option[DV_INTERVAL]  `json:"time_validity"`
+	Type_            util.Optional[string]       `json:"_type"`
+	Name             DV_TEXT                     `json:"name"`
+	ArchetypeNodeID  string                      `json:"archetype_node_id"`
+	UID              util.Optional[UID_BASED_ID] `json:"uid"`
+	Links            util.Optional[[]LINK]       `json:"links"`
+	ArchetypeDetails util.Optional[ARCHETYPED]   `json:"archetype_details"`
+	FeederAudit      util.Optional[FEEDER_AUDIT] `json:"feeder_audit"`
+	Credentials      ITEM_STRUCTURE              `json:"credentials"`
+	TimeValidity     util.Optional[DV_INTERVAL]  `json:"time_validity"`
 }
 
 type ActorType string
@@ -2200,69 +2158,69 @@ func (c ACTOR) Marshal() ([]byte, error) {
 }
 
 type PERSON struct {
-	Type_                Option[string]               `json:"_type"`
-	Name                 DV_TEXT                      `json:"name"`
-	ArchetypeNodeID      string                       `json:"archetype_node_id"`
-	UID                  Option[UID_BASED_ID]         `json:"uid"`
-	Links                Option[[]LINK]               `json:"links"`
-	ArchetypeDetails     Option[ARCHETYPED]           `json:"archetype_details"`
-	FeederAudit          Option[FEEDER_AUDIT]         `json:"feeder_audit"`
-	Identities           []PARTY_IDENTITY             `json:"identities"`
-	Contacts             Option[[]CONTACT]            `json:"contacts"`
-	Details              Option[ITEM_STRUCTURE]       `json:"details"`
-	ReverseRelationships Option[[]PARTY_RELATIONSHIP] `json:"reverse_relationships"`
-	Relationships        Option[[]PARTY_RELATIONSHIP] `json:"relationships"`
-	Languages            Option[[]DV_TEXT]            `json:"languages"`
-	Roles                Option[PARTY_REF]            `json:"roles"`
+	Type_                util.Optional[string]               `json:"_type"`
+	Name                 DV_TEXT                             `json:"name"`
+	ArchetypeNodeID      string                              `json:"archetype_node_id"`
+	UID                  util.Optional[UID_BASED_ID]         `json:"uid"`
+	Links                util.Optional[[]LINK]               `json:"links"`
+	ArchetypeDetails     util.Optional[ARCHETYPED]           `json:"archetype_details"`
+	FeederAudit          util.Optional[FEEDER_AUDIT]         `json:"feeder_audit"`
+	Identities           []PARTY_IDENTITY                    `json:"identities"`
+	Contacts             util.Optional[[]CONTACT]            `json:"contacts"`
+	Details              util.Optional[ITEM_STRUCTURE]       `json:"details"`
+	ReverseRelationships util.Optional[[]PARTY_RELATIONSHIP] `json:"reverse_relationships"`
+	Relationships        util.Optional[[]PARTY_RELATIONSHIP] `json:"relationships"`
+	Languages            util.Optional[[]DV_TEXT]            `json:"languages"`
+	Roles                util.Optional[PARTY_REF]            `json:"roles"`
 }
 
 type ORGANISATION struct {
-	Type_                Option[string]               `json:"_type"`
-	Name                 DV_TEXT                      `json:"name"`
-	ArchetypeNodeID      string                       `json:"archetype_node_id"`
-	UID                  Option[UID_BASED_ID]         `json:"uid"`
-	Links                Option[[]LINK]               `json:"links"`
-	ArchetypeDetails     Option[ARCHETYPED]           `json:"archetype_details"`
-	FeederAudit          Option[FEEDER_AUDIT]         `json:"feeder_audit"`
-	Identities           []PARTY_IDENTITY             `json:"identities"`
-	Contacts             Option[[]CONTACT]            `json:"contacts"`
-	Details              Option[ITEM_STRUCTURE]       `json:"details"`
-	ReverseRelationships Option[[]PARTY_RELATIONSHIP] `json:"reverse_relationships"`
-	Relationships        Option[[]PARTY_RELATIONSHIP] `json:"relationships"`
-	Languages            Option[[]DV_TEXT]            `json:"languages"`
-	Roles                Option[PARTY_REF]            `json:"roles"`
+	Type_                util.Optional[string]               `json:"_type"`
+	Name                 DV_TEXT                             `json:"name"`
+	ArchetypeNodeID      string                              `json:"archetype_node_id"`
+	UID                  util.Optional[UID_BASED_ID]         `json:"uid"`
+	Links                util.Optional[[]LINK]               `json:"links"`
+	ArchetypeDetails     util.Optional[ARCHETYPED]           `json:"archetype_details"`
+	FeederAudit          util.Optional[FEEDER_AUDIT]         `json:"feeder_audit"`
+	Identities           []PARTY_IDENTITY                    `json:"identities"`
+	Contacts             util.Optional[[]CONTACT]            `json:"contacts"`
+	Details              util.Optional[ITEM_STRUCTURE]       `json:"details"`
+	ReverseRelationships util.Optional[[]PARTY_RELATIONSHIP] `json:"reverse_relationships"`
+	Relationships        util.Optional[[]PARTY_RELATIONSHIP] `json:"relationships"`
+	Languages            util.Optional[[]DV_TEXT]            `json:"languages"`
+	Roles                util.Optional[PARTY_REF]            `json:"roles"`
 }
 
 type GROUP struct {
-	Type_                Option[string]               `json:"_type"`
-	Name                 DV_TEXT                      `json:"name"`
-	ArchetypeNodeID      string                       `json:"archetype_node_id"`
-	UID                  Option[UID_BASED_ID]         `json:"uid"`
-	Links                Option[[]LINK]               `json:"links"`
-	ArchetypeDetails     Option[ARCHETYPED]           `json:"archetype_details"`
-	FeederAudit          Option[FEEDER_AUDIT]         `json:"feeder_audit"`
-	Identities           []PARTY_IDENTITY             `json:"identities"`
-	Contacts             Option[[]CONTACT]            `json:"contacts"`
-	Details              Option[ITEM_STRUCTURE]       `json:"details"`
-	ReverseRelationships Option[[]PARTY_RELATIONSHIP] `json:"reverse_relationships"`
-	Relationships        Option[[]PARTY_RELATIONSHIP] `json:"relationships"`
-	Languages            Option[[]DV_TEXT]            `json:"languages"`
-	Roles                Option[PARTY_REF]            `json:"roles"`
+	Type_                util.Optional[string]               `json:"_type"`
+	Name                 DV_TEXT                             `json:"name"`
+	ArchetypeNodeID      string                              `json:"archetype_node_id"`
+	UID                  util.Optional[UID_BASED_ID]         `json:"uid"`
+	Links                util.Optional[[]LINK]               `json:"links"`
+	ArchetypeDetails     util.Optional[ARCHETYPED]           `json:"archetype_details"`
+	FeederAudit          util.Optional[FEEDER_AUDIT]         `json:"feeder_audit"`
+	Identities           []PARTY_IDENTITY                    `json:"identities"`
+	Contacts             util.Optional[[]CONTACT]            `json:"contacts"`
+	Details              util.Optional[ITEM_STRUCTURE]       `json:"details"`
+	ReverseRelationships util.Optional[[]PARTY_RELATIONSHIP] `json:"reverse_relationships"`
+	Relationships        util.Optional[[]PARTY_RELATIONSHIP] `json:"relationships"`
+	Languages            util.Optional[[]DV_TEXT]            `json:"languages"`
+	Roles                util.Optional[PARTY_REF]            `json:"roles"`
 }
 
 type AGENT struct {
-	Type_                Option[string]               `json:"_type"`
-	Name                 DV_TEXT                      `json:"name"`
-	ArchetypeNodeID      string                       `json:"archetype_node_id"`
-	UID                  Option[UID_BASED_ID]         `json:"uid"`
-	Links                Option[[]LINK]               `json:"links"`
-	ArchetypeDetails     Option[ARCHETYPED]           `json:"archetype_details"`
-	FeederAudit          Option[FEEDER_AUDIT]         `json:"feeder_audit"`
-	Identities           []PARTY_IDENTITY             `json:"identities"`
-	Contacts             Option[[]CONTACT]            `json:"contacts"`
-	Details              Option[ITEM_STRUCTURE]       `json:"details"`
-	ReverseRelationships Option[[]PARTY_RELATIONSHIP] `json:"reverse_relationships"`
-	Relationships        Option[[]PARTY_RELATIONSHIP] `json:"relationships"`
-	Languages            Option[[]DV_TEXT]            `json:"languages"`
-	Roles                Option[PARTY_REF]            `json:"roles"`
+	Type_                util.Optional[string]               `json:"_type"`
+	Name                 DV_TEXT                             `json:"name"`
+	ArchetypeNodeID      string                              `json:"archetype_node_id"`
+	UID                  util.Optional[UID_BASED_ID]         `json:"uid"`
+	Links                util.Optional[[]LINK]               `json:"links"`
+	ArchetypeDetails     util.Optional[ARCHETYPED]           `json:"archetype_details"`
+	FeederAudit          util.Optional[FEEDER_AUDIT]         `json:"feeder_audit"`
+	Identities           []PARTY_IDENTITY                    `json:"identities"`
+	Contacts             util.Optional[[]CONTACT]            `json:"contacts"`
+	Details              util.Optional[ITEM_STRUCTURE]       `json:"details"`
+	ReverseRelationships util.Optional[[]PARTY_RELATIONSHIP] `json:"reverse_relationships"`
+	Relationships        util.Optional[[]PARTY_RELATIONSHIP] `json:"relationships"`
+	Languages            util.Optional[[]DV_TEXT]            `json:"languages"`
+	Roles                util.Optional[PARTY_REF]            `json:"roles"`
 }

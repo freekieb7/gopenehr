@@ -1,57 +1,98 @@
 package util
 
-import "encoding/json"
+import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
+)
 
-type Option[T any] struct {
-	value *T
+type Optional[T any] struct {
+	Data T
+	Some bool
 }
 
-func Some[T any](v T) Option[T] {
-	return Option[T]{value: &v}
+func Some[T any](v T) Optional[T] {
+	return Optional[T]{Data: v, Some: true}
 }
 
-func None[T any]() Option[T] {
-	return Option[T]{value: nil}
+func None[T any]() Optional[T] {
+	return Optional[T]{}
 }
 
-func (o Option[T]) IsSome() bool {
-	return o.value != nil
-}
-
-func (o Option[T]) IsNone() bool {
-	return o.value == nil
-}
-
-func (o Option[T]) Unwrap() T {
-	if o.value == nil {
+func (o Optional[T]) Unwrap() T {
+	if !o.Some {
 		panic("called Unwrap on a None value")
 	}
-	return *o.value
+	return o.Data
 }
 
-func (o Option[T]) UnwrapOr(defaultValue T) T {
-	if o.value == nil {
-		return defaultValue
+func (o Optional[T]) UnwrapOr(defaultVal T) T {
+	if !o.Some {
+		return defaultVal
 	}
-	return *o.value
+	return o.Data
 }
 
-func (o Option[T]) MarshalJSON() ([]byte, error) {
-	if o.value == nil {
+func (o Optional[T]) MarshalJSON() ([]byte, error) {
+	if !o.Some {
 		return []byte("null"), nil
 	}
-	return json.Marshal(*o.value)
+	return json.Marshal(o.Data)
 }
 
-func (o *Option[T]) UnmarshalJSON(data []byte) error {
+func (o *Optional[T]) UnmarshalJSON(data []byte) error {
 	if string(data) == "null" {
-		o.value = nil
+		o.Some = false
 		return nil
 	}
 	var v T
 	if err := json.Unmarshal(data, &v); err != nil {
 		return err
 	}
-	o.value = &v
+	o.Data = v
 	return nil
+}
+
+// Scan implements the SQL driver.Scanner interface.
+func (o *Optional[T]) Scan(value any) error {
+	if value == nil {
+		o.Some = false
+		return nil
+	}
+
+	var v T
+	switch t := any(&v).(type) {
+	case interface{ Scan(any) error }:
+		if err := t.Scan(value); err != nil {
+			return err
+		}
+	default:
+		v = value.(T)
+	}
+
+	o.Data = v
+	o.Some = true
+
+	return nil
+}
+
+// Value implements the driver Valuer interface.
+func (o Optional[T]) Value() (driver.Value, error) {
+	if !o.Some {
+		return nil, nil
+	}
+	switch t := any(o.Data).(type) {
+	case interface{ Value() (any, error) }:
+		return t.Value()
+	default:
+		return o.Data, nil
+	}
+}
+
+func (o Optional[T]) String() string {
+	if !o.Some {
+		return ""
+	}
+
+	return fmt.Sprintf("%v", o.Data)
 }

@@ -4,7 +4,12 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"reflect"
 )
+
+type OptionalType interface {
+	GetInnerType() reflect.Type
+}
 
 type Optional[T any] struct {
 	Data T
@@ -95,4 +100,10 @@ func (o Optional[T]) String() string {
 	}
 
 	return fmt.Sprintf("%v", o.Data)
+}
+
+// Then in your Optional[T] implementation
+func (o Optional[T]) GetInnerType() reflect.Type {
+	var zero T
+	return reflect.TypeOf(zero)
 }

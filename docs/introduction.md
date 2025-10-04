@@ -17,13 +17,19 @@ Spec references (Release 1.0.3 unless stated):
 - SMART on openEHR (auth): https://specifications.openehr.org/releases/ITS-REST/development/smart_app_launch.html
 
 # Getting started
-Before being able to access any of our API's, the user should first be authenticated. For that you need to have your application/client registered in our Authentication service.
+Before being able to access any of our API's, the user should first be authenticated. For that you need to have your application/client registered in our Authentication Service (**Smart-Auth**).
 
-<scalar-callout type="info"> Since our Authentication Service is a closed system, please contact us so we can register your application. </scalar-callout>
+ [!tip] 
+ Since our Authentication Service is a closed system, please contact us so we can register your application.
 
 After you have obtained your Client ID, you can start using the Authentication Service to perform an [OAuth PKCE flow](https://specifications.openehr.org/releases/ITS-REST/development/smart_app_launch.html#_smart_authorization_flow). 
 
 Choose a Patient or Practitioner as the type of user you want to authenticate as. When all the credentials are valid, and access is granted by the user, your are ready to query the services.
+
+For a more in depth guide, follow the authentication guide.
+<scalar-page-link filepath="docs/authentication.md">
+</scalar-page-link>
+
 
 <scalar-callout type="info"> Use the tokens inside the header 'Authentication: Bearer \<token\>' before attempting to query the service </scalar-callout>
 

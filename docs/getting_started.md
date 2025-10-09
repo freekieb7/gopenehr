@@ -1,5 +1,3 @@
-openEHR REST API - Getting Started Guide
-==================
 Practical primer for developers integrating with the openEHR REST APIs (EHR, Definition, Query) plus SMART on openEHR authentication.
 
 # Overview

@@ -1,16 +1,34 @@
-FROM golang:1.24.3 AS development
+# ---- Build stage ----
+FROM golang:1.25.4-alpine AS builder
+WORKDIR /app
+
+# Cache deps
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source
+COPY . .
+
+# Build static binary for linux
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-s -w" \
+    -o gopenehr ./cmd/main.go
+
+# ---- Runtime stage ----
+# Distroless for Kubernetes (has certificates + minimal attack surface)
+FROM gcr.io/distroless/static:nonroot
 
 WORKDIR /app
 
-COPY . .
+# Copy binary (web assets are embedded)
+COPY --from=builder /app/gopenehr .
+# COPY --from=builder /app/internal/database/migrations ./internal/database/migrations
 
-RUN go mod download
+# Expose
+EXPOSE 3000
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /gopenehr cmd/main.go
+# Run as non-root by default
+USER nonroot:nonroot
 
-CMD ["/gopenehr"]
-
-FROM scratch AS production
-WORKDIR /
-COPY --from=development /gopenehr /
-CMD ["/gopenehr"]
+# No shell - must use ENTRYPOINT
+ENTRYPOINT ["/app/gopenehr"]

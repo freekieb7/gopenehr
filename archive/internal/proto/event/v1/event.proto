@@ -1,0 +1,58 @@
+// https://github.com/open-telemetry/opentelemetry-proto/blob/main/opentelemetry/proto/metrics/v1/metrics.proto
+
+syntax = "proto3";
+
+package event.v1;
+
+import "common/v1/common.proto";
+import "resource/v1/resource.proto";
+
+option go_package = "github.com/freekieb7/gopenehr/internal/proto/gen/event/v1";
+
+message EventsData {
+    repeated ResourceEvent resource_events = 1;
+}
+
+message ResourceEvent {
+    resource.v1.Resource resource = 1;
+    repeated ScopeEvent scope_events = 2;
+    string schema_url = 3;
+}
+
+message ScopeEvent {
+    common.v1.ArchetypeScope scope = 1;
+    repeated Event events = 2;
+    string schema_url = 3;
+}
+
+message Event {
+    string name = 1;
+    string description = 2;
+    oneof data {
+        Observation observation = 3;
+        Evaluation evaluation = 4;
+        Instruction instruction = 5;
+        Action action = 6;
+    }
+    repeated common.v1.KeyValue metadata = 7;
+}
+
+message Observation {
+    repeated common.v1.KeyValue attributes = 1;
+    fixed64 timestamp_unix_nano = 2;
+}
+
+message Instruction {
+    repeated common.v1.KeyValue attributes = 1;
+    fixed64 timestamp_unix_nano = 2;
+}
+
+message Evaluation {
+    repeated common.v1.KeyValue attributes = 1;
+    fixed64 timestamp_unix_nano = 2;
+}
+
+message Action {
+    repeated common.v1.KeyValue attributes = 1;
+    fixed64 timestamp_unix_nano = 2;
+}

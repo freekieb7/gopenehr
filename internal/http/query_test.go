@@ -19,7 +19,7 @@ func TestExperimentHandleExecuteQuery(t *testing.T) {
 	handler := NewQueryHandler(&slog.Logger{}, &db)
 
 	data, err := json.Marshal(ExecuteQueryRequest{
-		AQL: "SELECT e ex, COUNT(c) FROM EHR e JOIN COMPOSITION c ON e GROUP BY ex",
+		AQL: "SELECT e FROM EHR e JOIN PERSON patient ON e JOIN PARTY_RELATIONSHIP relation IN patient JOIN GROUP group ON patient WHERE relation/name/value = 'patientOf' AND group/uid/value IN (SELECT group/uid/value FROM PERSON practitioner JOIN PARTY_RELATIONSHIP relation IN practitioner JOIN GROUP group ON relation WHERE relation/name/value = 'memberOf') LIMIT 1",
 	})
 	if err != nil {
 		t.Fatal(err)

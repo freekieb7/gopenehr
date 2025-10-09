@@ -18,7 +18,7 @@
 // - protoc             (unknown)
 // source: invoice/v1/invoice_service.proto
 
-package invoicev1
+package v1
 
 import (
 	context "context"

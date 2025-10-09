@@ -23,7 +23,7 @@ func (e BuildError) Error() string {
 
 type Parameters map[string]any
 
-type ActiveTable struct {
+type PreparedTable struct {
 	Name   string
 	Source string
 	Ctx    gen.ISelectQueryContext
@@ -186,10 +186,10 @@ func ReflectFrom(name string) (reflect.Type, error) {
 	}
 }
 
-func BuildQuery(query gen.IQueryContext, params Parameters, activeTables []ActiveTable) (string, []Column, error) {
+func BuildQuery(query gen.IQueryContext, params Parameters, preparedTables []PreparedTable) (string, []Column, error) {
 	switch true {
 	case query.SelectQuery() != nil:
-		selectQ, cols, err := BuildSelectQuery(query.SelectQuery(), params, activeTables)
+		selectQ, cols, err := BuildSelectQuery(query.SelectQuery(), params, preparedTables)
 		if err != nil {
 			return "", nil, err
 		}
@@ -211,23 +211,28 @@ func BuildQuery(query gen.IQueryContext, params Parameters, activeTables []Activ
 	}
 }
 
-func BuildSelectQuery(ctx gen.ISelectQueryContext, params Parameters, activeTables []ActiveTable) (string, []Column, error) {
+func BuildSelectQuery(ctx gen.ISelectQueryContext, params Parameters, preparedTables []PreparedTable) (string, []Column, error) {
 	// FROM clause
-	fromClause, tables, err := BuildFromClause(ctx.FromClause(), activeTables)
+	fromClause, tables, err := BuildFromClause(ctx.FromClause(), preparedTables)
 	if err != nil {
 		return "", nil, err
 	}
 
 	// JOIN clauses
+	extraWhereExprs := make([]string, 0)
 	if ctx.AllJoinClause() != nil {
 		for _, join := range ctx.AllJoinClause() {
-			q, table, err := BuildJoinClause(join, params, tables)
+			q, w, table, err := BuildJoinClause(join, params, tables)
 			if err != nil {
 				return "", nil, err
 			}
 
 			fromClause += " " + q
 			tables = append(tables, table)
+
+			if w != "" {
+				extraWhereExprs = append(extraWhereExprs, w)
+			}
 		}
 	}
 
@@ -239,6 +244,14 @@ func BuildSelectQuery(ctx gen.ISelectQueryContext, params Parameters, activeTabl
 			return "", nil, err
 		}
 		whereClause = q
+	}
+
+	if len(extraWhereExprs) > 0 {
+		if whereClause == "" {
+			whereClause = "WHERE " + strings.Join(extraWhereExprs, " AND ")
+		} else {
+			whereClause += " AND " + strings.Join(extraWhereExprs, " AND ")
+		}
 	}
 
 	// SELECT clause
@@ -264,7 +277,7 @@ func BuildSelectQuery(ctx gen.ISelectQueryContext, params Parameters, activeTabl
 		if ctx.ALL() != nil {
 			unionClause += "ALL "
 		}
-		qUnion, colsUnion, err := BuildSelectQuery(ctx.SelectQuery(), params, activeTables)
+		qUnion, colsUnion, err := BuildSelectQuery(ctx.SelectQuery(), params, preparedTables)
 		if err != nil {
 			return "", nil, err
 		}
@@ -277,7 +290,7 @@ func BuildSelectQuery(ctx gen.ISelectQueryContext, params Parameters, activeTabl
 		for i := range len(cols) {
 			if cols[i].Type != colsUnion[i].Type {
 				return "", nil, BuildError{
-					Message: fmt.Sprintf("different column types in union: %s and %s", cols[i].Type.Name(), colsUnion[i].Type.Name()),
+					Message: fmt.Sprintf("different column types in union: %s and %s", GetTypeName(cols[i].Type), GetTypeName(colsUnion[i].Type)),
 					Code:    "UNION_COLUMN_MISMATCH",
 				}
 			}
@@ -309,8 +322,8 @@ func BuildSelectQuery(ctx gen.ISelectQueryContext, params Parameters, activeTabl
 	return fmt.Sprintf("%s %s %s %s %s %s %s", selectClause, fromClause, whereClause, groupByClause, unionClause, orderByClause, limitOffsetClause), cols, nil
 }
 
-func BuildFromClause(ctx gen.IFromClauseContext, activeTables []ActiveTable) (string, []Table, error) {
-	q, tables, err := BuildFromExpr(ctx.FromExpr(), activeTables)
+func BuildFromClause(ctx gen.IFromClauseContext, preparedTables []PreparedTable) (string, []Table, error) {
+	q, tables, err := BuildFromExpr(ctx.FromExpr(), preparedTables)
 	if err != nil {
 		return q, tables, err
 	}
@@ -318,12 +331,12 @@ func BuildFromClause(ctx gen.IFromClauseContext, activeTables []ActiveTable) (st
 	return "FROM " + q, tables, nil
 }
 
-func BuildFromExpr(ctx gen.IFromExprContext, activeTables []ActiveTable) (string, []Table, error) {
+func BuildFromExpr(ctx gen.IFromExprContext, preparedTables []PreparedTable) (string, []Table, error) {
 	name := ctx.IDENTIFIER(0).GetText()
 	t, err := ReflectFrom(name)
 	if err != nil {
 		// Check if it's an active table
-		return BuildActiveTable(name, activeTables)
+		return BuildPreparedTable(name, preparedTables)
 	}
 	table := Table{
 		Type:   t,
@@ -402,10 +415,10 @@ func BuildFromExpr(ctx gen.IFromExprContext, activeTables []ActiveTable) (string
 	return q, []Table{table}, nil
 }
 
-func BuildActiveTable(name string, activeTables []ActiveTable) (string, []Table, error) {
-	for _, at := range activeTables {
-		if at.Name == name {
-			_, cols, err := BuildSelectQuery(at.Ctx, Parameters{}, make([]ActiveTable, 0)) // Validate the active table's AQL
+func BuildPreparedTable(name string, preparedTables []PreparedTable) (string, []Table, error) {
+	for _, pt := range preparedTables {
+		if pt.Name == name {
+			_, cols, err := BuildSelectQuery(pt.Ctx, Parameters{}, make([]PreparedTable, 0)) // Validate the prepared table's AQL
 			if err != nil {
 				return "", nil, err
 			}
@@ -415,12 +428,12 @@ func BuildActiveTable(name string, activeTables []ActiveTable) (string, []Table,
 				tables[i] = Table{
 					Type:   col.Type,
 					Name:   col.Name,
-					Source: at.Source,
+					Source: pt.Source,
 					Data:   col.Source,
 				}
 			}
 
-			return at.Source, tables, nil
+			return pt.Source, tables, nil
 		}
 	}
 	return "", nil, BuildError{
@@ -429,30 +442,30 @@ func BuildActiveTable(name string, activeTables []ActiveTable) (string, []Table,
 	}
 }
 
-func BuildJoinClause(ctx gen.IJoinClauseContext, params Parameters, tables []Table) (string, Table, error) {
+func BuildJoinClause(ctx gen.IJoinClauseContext, params Parameters, tables []Table) (string, string, Table, error) {
 	q := "JOIN "
 	if ctx.LEFT() != nil {
 		q = "LEFT JOIN "
 	}
 
-	qExpr, table, err := BuildJoinExpr(ctx.JoinExpr(), params, tables)
+	qExpr, wExpr, table, err := BuildJoinExpr(ctx.JoinExpr(), params, tables)
 	if err != nil {
-		return "", table, err
+		return "", "", table, err
 	}
 
 	q += " " + qExpr
-	return q, table, nil
+	return q, wExpr, table, nil
 }
 
-func BuildJoinExpr(ctx gen.IJoinExprContext, params Parameters, tables []Table) (string, Table, error) {
+func BuildJoinExpr(ctx gen.IJoinExprContext, params Parameters, tables []Table) (string, string, Table, error) {
 	name := ctx.IDENTIFIER(0).GetText()
 	t, err := ReflectFrom(name)
 	if err != nil {
-		return "", Table{}, err
+		return "", "", Table{}, err
 	}
 
 	if t == String || t == Integer || t == Float || t == Boolean || t == Null {
-		return "", Table{}, BuildError{
+		return "", "", Table{}, BuildError{
 			Message: fmt.Sprintf("cannot use %s in JOIN clause", t.Name()),
 			Code:    "INVALID_TYPE",
 		}
@@ -482,7 +495,7 @@ func BuildJoinExpr(ctx gen.IJoinExprContext, params Parameters, tables []Table) 
 				}
 			}
 			if !found {
-				return "", targetTable, BuildError{
+				return "", "", targetTable, BuildError{
 					Message: "unknown table in JOIN: " + sourceName,
 					Code:    "UNKNOWN_TABLE",
 				}
@@ -527,7 +540,7 @@ func BuildJoinExpr(ctx gen.IJoinExprContext, params Parameters, tables []Table) 
 					}
 					q = fmt.Sprintf("%s %s ON %s.party_id = %s.id", q, targetTable.Source, sourceTable.Source, targetTable.Source)
 				default:
-					return "", targetTable, BuildError{
+					return "", "", targetTable, BuildError{
 						Message: "cannot join EHR with " + targetTable.Type.Name(),
 						Code:    "UNKNOWN_TABLE",
 					}
@@ -549,7 +562,7 @@ func BuildJoinExpr(ctx gen.IJoinExprContext, params Parameters, tables []Table) 
 					}
 					q = fmt.Sprintf("tbl_party_relationship tmp_%s ON %s.id = tmp_%s.source_id JOIN %s %s ON tmp_%s.target_id = %s.id", targetTable.Source, sourceTable.Source, targetTable.Source, q, targetTable.Source, targetTable.Source, targetTable.Source)
 				default:
-					return "", targetTable, BuildError{
+					return "", "", targetTable, BuildError{
 						Message: "cannot join EHR with " + targetTable.Type.Name(),
 						Code:    "UNKNOWN_TABLE",
 					}
@@ -564,13 +577,13 @@ func BuildJoinExpr(ctx gen.IJoinExprContext, params Parameters, tables []Table) 
 					q = fmt.Sprintf("%s %s ON (%s.%s -> 'target' -> 'id' ->> 'value') = %s.id", q, targetTable.Source, sourceTable.Source, sourceTable.Data, targetTable.Source)
 				}
 			default:
-				return "", targetTable, BuildError{
+				return "", "", targetTable, BuildError{
 					Message: "cannot join from type: " + sourceTable.Type.Name(),
 					Code:    "UNKNOWN_TABLE",
 				}
 			}
 
-			return q, targetTable, nil
+			return q, "", targetTable, nil
 
 		}
 	case ctx.IN() != nil:
@@ -586,34 +599,37 @@ func BuildJoinExpr(ctx gen.IJoinExprContext, params Parameters, tables []Table) 
 				}
 			}
 			if !found {
-				return "", targetTable, BuildError{
+				return "", "", targetTable, BuildError{
 					Message: "unknown table in IN clause: " + sourceName,
 					Code:    "UNKNOWN_TABLE",
 				}
 			}
 
-			return fmt.Sprintf("LATERAL (SELECT * FROM JSON_TABLE(%s.%s, 'strict $.*.** ? (@._type == \"%s\")' COLUMNS(%s JSONB PATH '$'))) %s ON TRUE", sourceTable.Source, sourceTable.Data, targetTable.Type.Name(), targetTable.Data, targetTable.Source), targetTable, nil
+			q := fmt.Sprintf("LATERAL (SELECT * FROM JSON_TABLE(%s.%s, 'strict $.*.** ? (@._type == \"%s\")' COLUMNS(%s JSONB PATH '$'))) %s ON TRUE", sourceTable.Source, sourceTable.Data, targetTable.Type.Name(), targetTable.Data, targetTable.Source)
+			w := fmt.Sprintf("jsonb_path_query_array(%s.%s, '$.*.**._type') @> '[\"%s\"]'::jsonb", sourceTable.Source, sourceTable.Data, targetTable.Type.Name())
+			return q, w, targetTable, nil
 		}
 	case ctx.AT() != nil:
 		{
 			sourceTable, path, typ, err := BuildIdentifiedPath(ctx.IdentifiedPath(), params, tables)
 			if err != nil {
-				return "", targetTable, err
+				return "", "", targetTable, err
 			}
 
 			// Only allow joining on complex types
 			if typ == String || typ == Integer || typ == Float || typ == Boolean || typ == Null {
-				return "", targetTable, BuildError{
+				return "", "", targetTable, BuildError{
 					Message: fmt.Sprintf("cannot use %s in AT clause", typ.Name()),
 					Code:    "INVALID_TYPE",
 				}
 			}
 
-			return fmt.Sprintf("LATERAL (SELECT * FROM JSON_TABLE(%s.%s, '$%s ? (@._type == \"%s\")')) %s ON TRUE", sourceTable.Source, sourceTable.Data, path, targetTable.Type.Name(), targetTable.Source), targetTable, nil
+			q := fmt.Sprintf("LATERAL (SELECT * FROM JSON_TABLE(%s.%s, '$%s ? (@._type == \"%s\")' COLUMNS(%s JSONB PATH '$'))) %s ON TRUE", sourceTable.Source, sourceTable.Data, path, targetTable.Type.Name(), targetTable.Data, targetTable.Source)
+			return q, "", targetTable, nil
 		}
 	default:
 		{
-			return "", Table{}, errors.New("unknown join expression")
+			return "", "", Table{}, errors.New("unknown join expression")
 		}
 	}
 }
@@ -811,7 +827,7 @@ func BuildInOperand(ctx gen.IInOperandContext, params Parameters) (string, refle
 	switch true {
 	case ctx.SelectQuery() != nil:
 		{
-			q, cols, err := BuildSelectQuery(ctx.SelectQuery(), params, make([]ActiveTable, 0))
+			q, cols, err := BuildSelectQuery(ctx.SelectQuery(), params, make([]PreparedTable, 0))
 			if err != nil {
 				return "", nil, err
 			}
@@ -1482,7 +1498,7 @@ func BuildPathPart(ctx gen.IPathPartContext, params Parameters, t reflect.Type) 
 	pathType, found := GetFieldTypeByJSONTag(t, path)
 	if !found {
 		return "", nil, BuildError{
-			Message: fmt.Sprintf("unknown path part '%s' in type %s", path, t.Name()),
+			Message: fmt.Sprintf("unknown path part '%s' in type %s", path, GetTypeName(t)),
 			Code:    "UNKNOWN_PATH",
 		}
 	}
@@ -1593,6 +1609,50 @@ func BuildPathConditionOperand(ctx gen.IPathConditionOperandContext, params Para
 			return "", nil, errors.New("unknown path condition operand")
 		}
 	}
+}
+
+func GetTypeName(t reflect.Type) string {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+
+	val := reflect.New(t).Interface()
+	if optType, ok := val.(util.OptionalType); ok {
+		return GetTypeName(optType.GetInnerType())
+	}
+	if optType, ok := val.(util.AbstractType); ok {
+		return GetTypeName(optType.GetAbstractType())
+	}
+
+	if t.Kind() == reflect.Slice {
+		return "[]" + GetTypeName(t.Elem())
+	}
+
+	if t.Kind() == reflect.Struct {
+		return t.Name()
+	}
+
+	if t.Kind() == reflect.Int || t.Kind() == reflect.Int8 || t.Kind() == reflect.Int16 || t.Kind() == reflect.Int32 || t.Kind() == reflect.Int64 {
+		return "int"
+	}
+
+	if t.Kind() == reflect.Float32 || t.Kind() == reflect.Float64 {
+		return "float"
+	}
+
+	if t.Kind() == reflect.String {
+		return "string"
+	}
+
+	if t.Kind() == reflect.Bool {
+		return "bool"
+	}
+
+	if t.Kind() == reflect.Interface {
+		return "interface"
+	}
+
+	return "unknown"
 }
 
 func GetFieldTypeByJSONTag(t reflect.Type, jsonTag string) (reflect.Type, bool) {

@@ -42,38 +42,38 @@ func (h *QueryHandler) ExecuteQuery(w http.ResponseWriter, r *http.Request) erro
 		return nil
 	}
 
-	activeQueries, err := h.db.GetAllActiveQueries(ctx) // Make sure active queries are loaded
+	knownPreparedTables, err := h.db.GetAllPreparedTables(ctx) // Make sure prepared tables are loaded
 	if err != nil {
-		h.logger.Error("get active queries error:", err)
+		h.logger.Error("get prepared tables error", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return nil
 	}
 
-	activeTables := make([]aql.ActiveTable, len(activeQueries))
-	for i, query := range activeQueries {
+	preparedTables := make([]aql.PreparedTable, len(knownPreparedTables))
+	for i, query := range knownPreparedTables {
 		ctx, err := aql.QueryContext(query.AQL)
 		if err != nil {
-			h.logger.Error("parse active query error:", err)
+			h.logger.Error("parse prepared table error", "error", err)
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return nil
 		}
 
-		activeTables[i] = aql.ActiveTable{
+		preparedTables[i] = aql.PreparedTable{
 			Name:   query.Name,
 			Source: query.TableName,
 			Ctx:    ctx.SelectQuery(),
 		}
 	}
 
-	q, cols, err := aql.BuildQuery(queryContext, req.Parameters, activeTables)
+	q, cols, err := aql.BuildQuery(queryContext, req.Parameters, preparedTables)
 	if err != nil {
-		h.logger.Error("build query error:", err)
+		h.logger.Error("build query error", "error", err)
 		if buildError, ok := err.(aql.BuildError); ok {
 			http.Error(w, buildError.Message, http.StatusBadRequest)
 			return nil
 		}
 
-		h.logger.Error("internal error:", err)
+		h.logger.Error("internal error", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return nil
 	}
@@ -109,7 +109,7 @@ func (h *QueryHandler) ExecuteQuery(w http.ResponseWriter, r *http.Request) erro
 	for rows.Next() {
 		var jsonData []byte
 		if err := rows.Scan(&jsonData); err != nil {
-			h.logger.Error("scan error:", err)
+			h.logger.Error("scan error", "error", err)
 			continue
 		}
 
@@ -129,16 +129,16 @@ func (h *QueryHandler) ExecuteQuery(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
-type CreateActiveQueryRequest struct {
+type CreatePreparedTableRequest struct {
 	Name string `json:"name"`
 	AQL  string `json:"aql"`
 }
 
-func (h *QueryHandler) CreateActiveQuery(w http.ResponseWriter, r *http.Request) error {
+func (h *QueryHandler) CreatePreparedTable(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
 	// Parse request body
-	var req CreateActiveQueryRequest
+	var req CreatePreparedTableRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return err
 	}
@@ -178,15 +178,15 @@ func (h *QueryHandler) CreateActiveQuery(w http.ResponseWriter, r *http.Request)
 		return nil
 	}
 
-	sqlQuery, cols, err := aql.BuildSelectQuery(listener.Query.SelectQuery(), make(aql.Parameters), make([]aql.ActiveTable, 0))
+	sqlQuery, cols, err := aql.BuildSelectQuery(listener.Query.SelectQuery(), make(aql.Parameters), make([]aql.PreparedTable, 0))
 	if err != nil {
-		h.logger.Error("build query error:", err)
+		h.logger.Error("build query error", "error", err)
 		if buildError, ok := err.(aql.BuildError); ok {
 			http.Error(w, buildError.Message, http.StatusBadRequest)
 			return nil
 		}
 
-		h.logger.Error("internal error:", err)
+		h.logger.Error("internal error", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return nil
 	}
@@ -205,13 +205,13 @@ func (h *QueryHandler) CreateActiveQuery(w http.ResponseWriter, r *http.Request)
 		return nil
 	}
 
-	// Store active query
-	if _, err := h.db.CreateActiveQuery(ctx, storage.CreateActiveQueryParams{
+	// Store prepared table
+	if _, err := h.db.CreatePreparedTable(ctx, storage.CreatePreparedTableParams{
 		Name: req.Name,
 		AQL:  req.AQL,
 		SQL:  sqlQuery,
 	}); err != nil {
-		h.logger.Error("create active query error:", err)
+		h.logger.Error("create prepared table error", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return nil
 	}
@@ -220,24 +220,24 @@ func (h *QueryHandler) CreateActiveQuery(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (h *QueryHandler) SyncActiveQuery(w http.ResponseWriter, r *http.Request) error {
+func (h *QueryHandler) SyncPreparedTable(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
 	name := r.URL.Query().Get("name")
 
-	activeQuery, err := h.db.GetActiveQueryByName(ctx, name)
+	preparedTable, err := h.db.GetPreparedTableByName(ctx, name)
 	if err != nil {
 		if errors.Is(err, storage.ErrNoRows) {
-			http.Error(w, "active query not found", http.StatusNotFound)
+			http.Error(w, "prepared table not found", http.StatusNotFound)
 			return nil
 		}
-		h.logger.Error("get active query error:", err)
+		h.logger.Error("get prepared table error", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return nil
 	}
 
-	if err := h.db.SyncActiveQuery(ctx, activeQuery.ID); err != nil {
-		h.logger.Error("sync active query error:", err)
+	if err := h.db.SyncPreparedTable(ctx, preparedTable.ID); err != nil {
+		h.logger.Error("sync prepared table error", "error", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return nil
 	}

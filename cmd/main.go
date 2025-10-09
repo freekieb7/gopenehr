@@ -2,14 +2,17 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/freekieb7/gopenehr/internal/grpc"
 	"github.com/freekieb7/gopenehr/internal/http"
 	"github.com/freekieb7/gopenehr/internal/storage"
 )
@@ -24,12 +27,17 @@ func main() {
 }
 
 func Run(ctx context.Context) error {
+	var (
+		apiPort  = flag.Int("port", 8080, "Port for the OpenEHR API")
+		grpcPort = flag.Int("grpc-port", 8081, "Port for the gRPC server")
+	)
+	flag.Parse()
+
 	// Add gracefull shutdown support by listening for interuptions
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
 
-	port := 8080
-	addr := fmt.Sprintf("0.0.0.0:%d", port)
+	addr := fmt.Sprintf("0.0.0.0:%d", *apiPort)
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
@@ -48,6 +56,13 @@ func Run(ctx context.Context) error {
 	router := http.NewRouter()
 
 	// Add routes
+	router.Group("/schemas", func(group *http.Router) {
+		schemaHandler := http.NewSchemaHandler()
+		group.GET("", schemaHandler.GetSchemas)
+		group.GET("/{name}", schemaHandler.GetSchema)
+	})
+
+	// OpenEHR API routes
 	router.Group("/openehr/v1", func(group *http.Router) {
 		group.GET("/", openEHRHandler.ServerInfo)
 
@@ -158,8 +173,8 @@ func Run(ctx context.Context) error {
 
 		group.Group("/query", func(group *http.Router) {
 			group.POST("", queryHandler.ExecuteQuery)
-			group.POST("/active", queryHandler.CreateActiveQuery)
-			group.POST("/active/{name}/sync", queryHandler.SyncActiveQuery)
+			group.POST("/prepared", queryHandler.CreatePreparedTable)
+			group.POST("/prepared/{name}/sync", queryHandler.SyncPreparedTable)
 		})
 	})
 
@@ -170,6 +185,20 @@ func Run(ctx context.Context) error {
 	go func() {
 		log.Printf("Listening and serving on: %s", addr)
 		srvErr <- server.ListenAndServe(addr)
+	}()
+
+	// Run grpc server
+	grpcServer := grpc.NewServer()
+	go func() {
+		lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", *grpcPort))
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+		}
+
+		log.Printf("gRPC server listening on %s", lis.Addr().String())
+		if err := grpcServer.Serve(lis); err != nil {
+			srvErr <- err
+		}
 	}()
 
 	// Wait for interruption.

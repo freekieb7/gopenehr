@@ -1,0 +1,56 @@
+{
+    "data": {
+        "resource_events": [
+            {
+                "resource": {
+                    "attributes": [
+                        {
+                            "key": "service.name",
+                            "value": {
+                                "string_value": "gopenehr"
+                            }
+                        },
+                        {
+                            "key": "service.version",
+                            "value": {
+                                "string_value": "0.0.1"
+                            }
+                        }
+                    ]
+                },
+                "scope_events": [
+                    {
+                        "scope": {
+                            "name": "openEHR-EHR-OBSERVATION.blood_pressure",
+                            "version": "v2"
+                        },
+                        "events": [
+                            {
+                                "name": "blood.pressure",
+                                "unit": "mmHg",
+                                "observation": {
+                                    "attributes": [
+                                        {
+                                            "key": "systolisch",
+                                            "value": {
+                                                "double_value": 120.0
+                                            }
+                                        },
+                                        {
+                                            "key": "diastolisch",
+                                            "value": {
+                                                "double_value": 56.0
+                                            }
+                                        }
+                                    ],
+                                    "timestamp_unix_nano": 1732301400000000000
+                                }
+                            }
+                        ],
+                        "schema_url": "https://ckm.openehr.org/ckm/archetypes/1013.1.3574"
+                    }
+                ]
+            }
+        ]
+    }
+}

@@ -12,7 +12,11 @@ down:
 
 .PHONY: air
 air:
-	air -c .air.toml
+	~/go/bin/air -c .air.toml
+
+.PHONY: dump
+dump:
+	docker compose exec -u postgres db pg_dump postgres --schema-only --clean --if-exists > var/pg/dump2.sql
 
 .PHONY: buf-gen
 buf-gen:

@@ -18,7 +18,7 @@
 // 	protoc        (unknown)
 // source: invoice/v1/invoice_service.proto
 
-package invoicev1
+package v1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -150,8 +150,8 @@ const file_invoice_v1_invoice_service_proto_rawDesc = "" +
 	"invoice_id\x18\x01 \x01(\tR\tinvoiceId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x04R\aversion2f\n" +
 	"\x0eInvoiceService\x12T\n" +
-	"\rCreateInvoice\x12 .invoice.v1.CreateInvoiceRequest\x1a!.invoice.v1.CreateInvoiceResponseB\xc6\x01\n" +
-	"\x0ecom.invoice.v1B\x13InvoiceServiceProtoP\x01ZVgithub.com/bufbuild/buf-examples/protovalidate/grpc-go/finish/gen/invoice/v1;invoicev1\xa2\x02\x03IXX\xaa\x02\n" +
+	"\rCreateInvoice\x12 .invoice.v1.CreateInvoiceRequest\x1a!.invoice.v1.CreateInvoiceResponseB\xab\x01\n" +
+	"\x0ecom.invoice.v1B\x13InvoiceServiceProtoP\x01Z;github.com/freekieb7/gopenehr/internal/proto/gen/invoice/v1\xa2\x02\x03IXX\xaa\x02\n" +
 	"Invoice.V1\xca\x02\n" +
 	"Invoice\\V1\xe2\x02\x16Invoice\\V1\\GPBMetadata\xea\x02\vInvoice::V1b\x06proto3"
 

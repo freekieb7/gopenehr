@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/freekieb7/gopenehr/encoding/json"
-	"github.com/freekieb7/gopenehr/model"
+	"github.com/freekieb7/gopenehr/internal/encoding/json"
+	"github.com/freekieb7/gopenehr/internal/model"
 )
 
 func BenchmarkUnmarshalEhrStatus(b *testing.B) {

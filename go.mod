@@ -2,7 +2,10 @@ module github.com/freekieb7/gopenehr
 
 go 1.25.1
 
-require github.com/gofiber/fiber/v2 v2.52.9
+require (
+	github.com/gofiber/fiber/v2 v2.52.9
+	go.uber.org/automaxprocs v1.6.0
+)
 
 require (
 	github.com/andybalholm/brotli v1.1.0 // indirect

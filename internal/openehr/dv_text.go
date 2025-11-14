@@ -12,8 +12,6 @@ import (
 
 const DV_TEXT_MODEL_NAME string = "DV_TEXT"
 
-var _ util.ReferenceModel = (*DV_TEXT)(nil)
-
 type DV_TEXT struct {
 	Type_      util.Optional[string]         `json:"_type,omitzero"`
 	Value      string                        `json:"value"`
@@ -23,8 +21,27 @@ type DV_TEXT struct {
 	Encoding   util.Optional[CODE_PHRASE]    `json:"encoding,omitzero"`
 }
 
+func (d DV_TEXT) isDataValueModel() {}
+
+func (d DV_TEXT) isDvTextModel() {}
+
 func (d DV_TEXT) HasModelName() bool {
-	return d.Type_.IsSet()
+	return d.Type_.E
+}
+
+func (d *DV_TEXT) SetModelName() {
+	d.Type_ = util.Some(DV_TEXT_MODEL_NAME)
+	if d.Mappings.E {
+		for i := range d.Mappings.V {
+			d.Mappings.V[i].SetModelName()
+		}
+	}
+	if d.Language.E {
+		d.Language.V.SetModelName()
+	}
+	if d.Encoding.E {
+		d.Encoding.V.SetModelName()
+	}
 }
 
 func (d DV_TEXT) Validate(path string) []util.ValidationError {
@@ -32,25 +49,25 @@ func (d DV_TEXT) Validate(path string) []util.ValidationError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.IsSet() && d.Type_.Unwrap() != DV_TEXT_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_TEXT_MODEL_NAME {
 		attrPath = path + "._type"
 		errors = append(errors, util.ValidationError{
 			Model:          DV_TEXT_MODEL_NAME,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_TEXT_MODEL_NAME, d.Type_.Unwrap()),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_TEXT_MODEL_NAME, d.Type_.V),
 			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", DV_TEXT_MODEL_NAME),
 		})
 	}
 
 	// Validate formatting
-	if d.Formatting.IsSet() {
+	if d.Formatting.E {
 		attrPath = path + ".formatting"
 		validFormats := []string{"plain", "plain_no_newlines", "markdown"}
-		if !slices.Contains(validFormats, d.Formatting.Unwrap()) {
+		if !slices.Contains(validFormats, d.Formatting.V) {
 			errors = append(errors, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid formatting field: %s", d.Formatting.Unwrap()),
+				Message:        fmt.Sprintf("invalid formatting field: %s", d.Formatting.V),
 				Recommendation: "Ensure formatting field is one of 'plain', 'plain_no_newlines', 'markdown'",
 			})
 		}
@@ -74,7 +91,7 @@ func (d DV_TEXT) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	if d.Formatting.IsSet() && d.Formatting.Unwrap() == "plain_no_newlines" {
+	if d.Formatting.E && d.Formatting.V == "plain_no_newlines" {
 		if strings.ContainsAny(d.Value, "\n\r") {
 			errors = append(errors, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
@@ -86,90 +103,82 @@ func (d DV_TEXT) Validate(path string) []util.ValidationError {
 	}
 
 	// Validate mappings
-	if d.Mappings.IsSet() {
+	if d.Mappings.E {
 		attrPath = path + ".mappings"
-		for i, v := range d.Mappings.Unwrap() {
-			errors = append(errors, v.Validate(fmt.Sprintf("%s[%d]", attrPath, i))...)
+		for i := range d.Mappings.V {
+			attrPath := fmt.Sprintf("%s[%d]", attrPath, i)
+			errors = append(errors, d.Mappings.V[i].Validate(attrPath)...)
 		}
 	}
 
 	// Validate language
-	if d.Language.IsSet() {
+	if d.Language.E {
 		attrPath = path + ".language"
-		v := d.Language.Unwrap()
-		if !terminology.IsValidLanguageTerminologyID(v.TerminologyId.Value) {
+		if !terminology.IsValidLanguageTerminologyID(d.Language.V.TerminologyID.Value) {
 			errors = append(errors, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid language field: %s", d.Language.Unwrap()),
+				Message:        fmt.Sprintf("invalid language field: %s", d.Language.V.TerminologyID.Value),
 				Recommendation: "Ensure language field is a known ISO 639-1 or ISO 639-2 language code",
 			})
 		}
 
-		if !terminology.IsValidLanguageCode(v.CodeString) {
+		if !terminology.IsValidLanguageCode(d.Language.V.CodeString) {
 			errors = append(errors, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid language field: %s", d.Language.Unwrap()),
+				Message:        fmt.Sprintf("invalid language field: %s", d.Language.V.CodeString),
 				Recommendation: "Ensure language field is a known ISO 639-1 or ISO 639-2 language code",
 			})
 		}
-		errors = append(errors, d.Language.Unwrap().Validate(attrPath)...)
+		errors = append(errors, d.Language.V.Validate(attrPath)...)
 	}
 
 	// Validate encoding
-	if d.Encoding.IsSet() {
+	if d.Encoding.E {
 		attrPath = path + ".encoding"
-		v := d.Encoding.Unwrap()
-		if !terminology.IsValidCharsetTerminologyID(v.TerminologyId.Value) {
+		if !terminology.IsValidCharsetTerminologyID(d.Encoding.V.TerminologyID.Value) {
 			errors = append(errors, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid encoding field: %s", d.Encoding.Unwrap()),
+				Message:        fmt.Sprintf("invalid encoding field: %s", d.Encoding.V.TerminologyID.Value),
 				Recommendation: "Ensure encoding field is a known IANA character set",
 			})
 		}
 
-		if !terminology.IsValidCharset(v.CodeString) {
+		if !terminology.IsValidCharset(d.Encoding.V.CodeString) {
 			errors = append(errors, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid encoding field: %s", d.Encoding.Unwrap()),
+				Message:        fmt.Sprintf("invalid encoding field: %s", d.Encoding.V.CodeString),
 				Recommendation: "Ensure encoding field is a known IANA character set",
 			})
 		}
-		errors = append(errors, d.Encoding.Unwrap().Validate(attrPath)...)
+		errors = append(errors, d.Encoding.V.Validate(attrPath)...)
 	}
 
 	return errors
 }
 
-// ========== Abstract of DV_TEXT ==========
+// ========== Union of DV_TEXT ==========
 
-var _ util.ReferenceModel = (*X_DV_TEXT)(nil)
-
-type X_DV_TEXT struct {
-	Value util.ReferenceModel
+type DvTextModel interface {
+	isDvTextModel()
+	HasModelName() bool
+	SetModelName()
+	Validate(path string) []util.ValidationError
 }
 
-func (x X_DV_TEXT) HasModelName() bool {
-	return x.Value.HasModelName()
+type X_DV_TEXT struct {
+	Value DvTextModel
+}
+
+func (x X_DV_TEXT) SetModelName() {
+	x.Value.SetModelName()
 }
 
 func (x X_DV_TEXT) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
-
-	// Abstract model requires _type to be defined
-	if !x.HasModelName() {
-		errs = append(errs, util.ValidationError{
-			Model:          OBJECT_REF_MODEL_NAME,
-			Path:           "._type",
-			Message:        "empty _type field",
-			Recommendation: "Ensure _type field is defined",
-		})
-	}
-
-	return append(errs, x.Value.Validate(path)...)
+	return x.Value.Validate(path)
 }
 
 func (a X_DV_TEXT) MarshalJSON() ([]byte, error) {
@@ -184,12 +193,10 @@ func (a *X_DV_TEXT) UnmarshalJSON(data []byte) error {
 
 	t := extractor.MetaType
 	switch t {
-	case DV_TEXT_MODEL_NAME:
+	case DV_TEXT_MODEL_NAME, "":
 		a.Value = new(DV_TEXT)
 	case DV_CODED_TEXT_MODEL_NAME:
 		a.Value = new(DV_CODED_TEXT)
-	case "":
-		return fmt.Errorf("missing DV_TEXT _type field")
 	default:
 		return fmt.Errorf("DV_TEXT unexpected _type %s", t)
 	}

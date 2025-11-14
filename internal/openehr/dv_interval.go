@@ -8,8 +8,6 @@ import (
 
 const DV_INTERVAL_MODEL_NAME string = "DV_INTERVAL"
 
-var _ util.ReferenceModel = (*DV_INTERVAL)(nil)
-
 type DV_INTERVAL struct {
 	Type_          util.Optional[string] `json:"_type,omitzero"`
 	Lower          any                   `json:"lower"`
@@ -20,8 +18,14 @@ type DV_INTERVAL struct {
 	UpperIncluded  bool                  `json:"upper_included"`
 }
 
+func (d DV_INTERVAL) isDataValueModel() {}
+
 func (d DV_INTERVAL) HasModelName() bool {
-	return d.Type_.IsSet()
+	return d.Type_.E
+}
+
+func (d *DV_INTERVAL) SetModelName() {
+	d.Type_ = util.Some(DV_INTERVAL_MODEL_NAME)
 }
 
 func (d DV_INTERVAL) Validate(path string) []util.ValidationError {
@@ -29,12 +33,12 @@ func (d DV_INTERVAL) Validate(path string) []util.ValidationError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.IsSet() && d.Type_.Unwrap() != DV_INTERVAL_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_INTERVAL_MODEL_NAME {
 		attrPath = path + "._type"
 		errors = append(errors, util.ValidationError{
 			Model:          DV_INTERVAL_MODEL_NAME,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_INTERVAL_MODEL_NAME, d.Type_.Unwrap()),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_INTERVAL_MODEL_NAME, d.Type_.V),
 			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", DV_INTERVAL_MODEL_NAME),
 		})
 	}

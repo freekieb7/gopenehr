@@ -9,8 +9,6 @@ import (
 
 const DV_DURATION_MODEL_NAME string = "DV_DURATION"
 
-var _ util.ReferenceModel = (*DV_DURATION)(nil)
-
 type DV_DURATION struct {
 	Type_                util.Optional[string]            `json:"_type,omitzero"`
 	NormalStatus         util.Optional[CODE_PHRASE]       `json:"normal_status,omitzero"`
@@ -22,8 +20,25 @@ type DV_DURATION struct {
 	Value                string                           `json:"value"`
 }
 
+func (d DV_DURATION) isDataValueModel() {}
+
 func (d DV_DURATION) HasModelName() bool {
-	return d.Type_.IsSet()
+	return d.Type_.E
+}
+
+func (d *DV_DURATION) SetModelName() {
+	d.Type_ = util.Some(DV_DURATION_MODEL_NAME)
+	if d.NormalStatus.E {
+		d.NormalStatus.V.SetModelName()
+	}
+	if d.NormalRange.E {
+		d.NormalRange.V.SetModelName()
+	}
+	if d.OtherReferenceRanges.E {
+		for i := range d.OtherReferenceRanges.V {
+			d.OtherReferenceRanges.V[i].SetModelName()
+		}
+	}
 }
 
 func (d DV_DURATION) Validate(path string) []util.ValidationError {
@@ -31,56 +46,55 @@ func (d DV_DURATION) Validate(path string) []util.ValidationError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.IsSet() && d.Type_.Unwrap() != DV_DURATION_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_DURATION_MODEL_NAME {
 		attrPath = path + "._type"
 		errors = append(errors, util.ValidationError{
 			Model:          DV_DURATION_MODEL_NAME,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_DURATION_MODEL_NAME, d.Type_.Unwrap()),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_DURATION_MODEL_NAME, d.Type_.V),
 			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", DV_DURATION_MODEL_NAME),
 		})
 	}
 
 	// Validate normal_status
-	if d.NormalStatus.IsSet() {
+	if d.NormalStatus.E {
 		attrPath = path + ".normal_status"
-		errors = append(errors, d.NormalStatus.Unwrap().Validate(attrPath)...)
+		errors = append(errors, d.NormalStatus.V.Validate(attrPath)...)
 	}
 
 	// Validate normal_range
-	if d.NormalRange.IsSet() {
+	if d.NormalRange.E {
 		attrPath = path + ".normal_range"
-		errors = append(errors, d.NormalRange.Unwrap().Validate(attrPath)...)
+		errors = append(errors, d.NormalRange.V.Validate(attrPath)...)
 	}
 
 	// Validate other_reference_ranges
-	if d.OtherReferenceRanges.IsSet() {
-		attrPath = path + ".other_reference_ranges"
-		for i, v := range d.OtherReferenceRanges.Unwrap() {
-			errors = append(errors, v.Validate(fmt.Sprintf("%s[%d]", attrPath, i))...)
+	if d.OtherReferenceRanges.E {
+		for i := range d.OtherReferenceRanges.V {
+			itemPath := fmt.Sprintf("%s.other_reference_ranges[%d]", path, i)
+			errors = append(errors, d.OtherReferenceRanges.V[i].Validate(itemPath)...)
 		}
 	}
 
 	// Validate magnitude_status
-	if d.MagnitudeStatus.IsSet() {
+	if d.MagnitudeStatus.E {
 		attrPath = path + ".magnitude_status"
 		validValues := []string{"<", ">", "<=", ">=", "=", "~"}
-		value := d.MagnitudeStatus.Unwrap()
-		isValid := slices.Contains(validValues, d.MagnitudeStatus.Unwrap())
+		isValid := slices.Contains(validValues, d.MagnitudeStatus.V)
 		if !isValid {
 			errors = append(errors, util.ValidationError{
 				Model:          DV_DURATION_MODEL_NAME,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid %s magnitude_status field: %s", DV_DURATION_MODEL_NAME, value),
+				Message:        fmt.Sprintf("invalid %s magnitude_status field: %s", DV_DURATION_MODEL_NAME, d.MagnitudeStatus.V),
 				Recommendation: "Ensure magnitude_status field is one of '<', '>', '<=', '>=', '=', '~'",
 			})
 		}
 	}
 
 	// Validate accuracy
-	if d.Accuracy.IsSet() {
+	if d.Accuracy.E {
 		attrPath = path + ".accuracy"
-		value := d.Accuracy.Unwrap()
+		value := d.Accuracy.V
 		if value < 0 {
 			errors = append(errors, util.ValidationError{
 				Model:          DV_DURATION_MODEL_NAME,

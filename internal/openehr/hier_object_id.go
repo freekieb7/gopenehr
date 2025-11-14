@@ -9,15 +9,21 @@ import (
 
 const HIER_OBJECT_ID_MODEL_NAME string = "HIER_OBJECT_ID"
 
-var _ util.ReferenceModel = (*HIER_OBJECT_ID)(nil)
-
 type HIER_OBJECT_ID struct {
 	Type_ util.Optional[string] `json:"_type,omitzero"`
 	Value string                `json:"value"`
 }
 
+func (h HIER_OBJECT_ID) isUidBasedIDModel() {}
+
+func (h HIER_OBJECT_ID) isObjectIDModel() {}
+
 func (h HIER_OBJECT_ID) HasModelName() bool {
-	return h.Type_.IsSet()
+	return h.Type_.E
+}
+
+func (h *HIER_OBJECT_ID) SetModelName() {
+	h.Type_ = util.Some(HIER_OBJECT_ID_MODEL_NAME)
 }
 
 func (h HIER_OBJECT_ID) Validate(path string) []util.ValidationError {
@@ -25,12 +31,12 @@ func (h HIER_OBJECT_ID) Validate(path string) []util.ValidationError {
 	var attrPath string
 
 	// Validate _type
-	if h.Type_.IsSet() && h.Type_.Unwrap() != HIER_OBJECT_ID_MODEL_NAME {
+	if h.Type_.E && h.Type_.V != HIER_OBJECT_ID_MODEL_NAME {
 		attrPath = path + "._type"
 		errs = append(errs, util.ValidationError{
 			Model:          HIER_OBJECT_ID_MODEL_NAME,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", HIER_OBJECT_ID_MODEL_NAME, h.Type_.Unwrap()),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", HIER_OBJECT_ID_MODEL_NAME, h.Type_.V),
 			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", HIER_OBJECT_ID_MODEL_NAME),
 		})
 	}

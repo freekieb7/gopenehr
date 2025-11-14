@@ -3,8 +3,6 @@ package util
 import (
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
-	"reflect"
 )
 
 type OptionalValue interface {
@@ -12,8 +10,8 @@ type OptionalValue interface {
 }
 
 type Optional[T any] struct {
-	V T    `json:"-"` // Value
-	E bool `json:"-"` // Exists
+	V T
+	E bool
 }
 
 func Some[T any](v T) Optional[T] {
@@ -24,27 +22,9 @@ func None[T any]() Optional[T] {
 	return Optional[T]{}
 }
 
-func (o Optional[T]) IsSet() bool {
-	return o.E
-}
-
-func (o Optional[T]) Unwrap() T {
-	if !o.E {
-		panic("called Unwrap on a None value")
-	}
-	return o.V
-}
-
-func (o Optional[T]) UnwrapOr(defaultVal T) T {
-	if !o.E {
-		return defaultVal
-	}
-	return o.V
-}
-
-func (o Optional[T]) IsZero() bool {
-	return !o.E
-}
+// func (o Optional[T]) IsZero() bool {
+// 	return !o.E
+// }
 
 func (o Optional[T]) MarshalJSON() ([]byte, error) {
 	if !o.E {
@@ -101,18 +81,4 @@ func (o Optional[T]) Value() (driver.Value, error) {
 	default:
 		return o.V, nil
 	}
-}
-
-func (o Optional[T]) String() string {
-	if !o.E {
-		return ""
-	}
-
-	return fmt.Sprintf("%v", o.V)
-}
-
-// Then in your Optional[T] implementation
-func (o Optional[T]) GetInnerType() reflect.Type {
-	var zero T
-	return reflect.TypeOf(zero)
 }

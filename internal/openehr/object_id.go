@@ -7,29 +7,53 @@ import (
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 )
 
-// ========== Abstract of OBJECT_ID ==========
-
-var _ util.ReferenceModel = (*X_OBJECT_ID)(nil)
+const OBJECT_ID_MODEL_NAME string = "OBJECT_ID"
 
 // Abstract
+type OBJECT_ID struct {
+	Type_ util.Optional[string] `json:"_type,omitzero"`
+	Value string                `json:"value"`
+}
+
+func (o OBJECT_ID) MarshalJSON() ([]byte, error) {
+	return nil, fmt.Errorf("cannot marshal abstract OBJECT_ID type")
+}
+
+func (o *OBJECT_ID) UnmarshalJSON(data []byte) error {
+	return fmt.Errorf("cannot unmarshal abstract OBJECT_ID type")
+}
+
+// ========== Union of OBJECT_ID ==========
+
+type ObjectIDModel interface {
+	isObjectIDModel()
+	HasModelName() bool
+	SetModelName()
+	Validate(path string) []util.ValidationError
+}
+
 type X_OBJECT_ID struct {
-	Value util.ReferenceModel
+	Value ObjectIDModel
 }
 
 func (x X_OBJECT_ID) HasModelName() bool {
 	return x.Value.HasModelName()
 }
 
+func (x *X_OBJECT_ID) SetModelName() {
+	x.Value.SetModelName()
+}
+
 func (x X_OBJECT_ID) Validate(path string) []util.ValidationError {
 	var errs []util.ValidationError
-	var valuePath string
+	var attrPath string
 
 	// Abstract model requires _type to be defined
 	if !x.HasModelName() {
-		valuePath = path + "._type"
+		attrPath = path + "._type"
 		errs = append(errs, util.ValidationError{
 			Model:          OBJECT_REF_MODEL_NAME,
-			Path:           valuePath,
+			Path:           attrPath,
 			Message:        "empty _type field",
 			Recommendation: "Ensure _type field is defined",
 		})

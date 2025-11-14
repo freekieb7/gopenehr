@@ -126,7 +126,7 @@ func (m *Migrator) MigrateUpMigration(ctx context.Context, migration database.Mi
 		return false, fmt.Errorf("failed to begin transaction for migration %s: %w", migration.Name, err)
 	}
 	defer func() {
-		if err := tx.Rollback(ctx); err != nil {
+		if err := tx.Rollback(ctx); err != nil && err != database.ErrTxClosed {
 			m.Logger.ErrorContext(ctx, "Failed to rollback transaction", "error", err)
 		}
 	}()
@@ -235,7 +235,7 @@ func (m *Migrator) MigrateDownMigration(ctx context.Context, migration database.
 		return false, fmt.Errorf("failed to begin transaction for migration %s: %w", migration.Name, err)
 	}
 	defer func() {
-		if err := tx.Rollback(ctx); err != nil {
+		if err := tx.Rollback(ctx); err != nil && err != database.ErrTxClosed {
 			m.Logger.ErrorContext(ctx, "Failed to rollback transaction", "error", err)
 		}
 	}()

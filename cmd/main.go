@@ -7,14 +7,17 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/freekieb7/gopenehr/internal/cli"
 	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/database"
 	"github.com/freekieb7/gopenehr/internal/health"
+	healthHandler "github.com/freekieb7/gopenehr/internal/health/handler"
+	openehrHandler "github.com/freekieb7/gopenehr/internal/openehr/handler"
 	openehrService "github.com/freekieb7/gopenehr/internal/openehr/service"
-	"github.com/freekieb7/gopenehr/internal/web"
-	"github.com/freekieb7/gopenehr/internal/web/handler"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/compress"
 	_ "go.uber.org/automaxprocs/maxprocs"
 )
 
@@ -69,30 +72,53 @@ func runServer(ctx context.Context) error {
 	defer db.Close()
 
 	// Init server
-	srv := web.NewServer()
+	srv := fiber.New(fiber.Config{
+		// Reduce memory allocations
+		DisableStartupMessage: true,
+		// Network performance
+		Network: "tcp4",
+
+		// Increase read/write buffers
+		ReadBufferSize:  8192,
+		WriteBufferSize: 8192,
+
+		// Connection limits
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  5 * time.Second,
+
+		// Reduce memory footprint
+		ReduceMemoryUsage: true,
+
+		// Enable SO_REUSEPORT for better load balancing across CPU cores
+		EnableSplittingOnParsers: true,
+	})
 
 	// Compression middleware (use in production)
 	if cfg.Environment == config.Production {
-		srv.EnableCompression()
+		srv.Use(compress.New(compress.Config{
+			Level: compress.LevelBestSpeed, // Faster than LevelBestCompression
+		}))
 	}
 
 	// Routes
-	healthHandler := handler.Health{
+	healthHandler := healthHandler.Handler{
 		HealthChecker: &health.Checker{
 			Version: cfg.Version,
 			DB:      &db,
 		},
 	}
-	healthHandler.RegisterRoutes(&srv)
+	healthHandler.RegisterRoutes(srv)
 
-	openEHRHandler := handler.OpenEHR{
+	openEHRHandler := openehrHandler.Handler{
 		Version: cfg.Version,
 		Logger:  logger,
 		EHRService: &openehrService.EHR{
-			DB: &db,
+			Logger: logger,
+			DB:     &db,
 		},
 	}
-	openEHRHandler.RegisterRoutes(&srv)
+	openEHRHandler.RegisterRoutes(srv)
 
 	// Set up signal handling for graceful shutdown
 	stopChan := make(chan os.Signal, 1)
@@ -103,7 +129,7 @@ func runServer(ctx context.Context) error {
 
 	// Start server
 	go func() {
-		if err := srv.ListenAndServe(":3000"); err != nil {
+		if err := srv.Listen(":3000"); err != nil {
 			serverErrChan <- err
 		}
 	}()
@@ -119,7 +145,7 @@ func runServer(ctx context.Context) error {
 		}
 	}
 
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.ShutdownWithContext(ctx); err != nil {
 		logger.ErrorContext(ctx, "Failed to shutdown server", "error", err)
 	} else {
 		logger.InfoContext(ctx, "Server shutdown completed")

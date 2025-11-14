@@ -1,0 +1,94 @@
+package openehr
+
+import "github.com/freekieb7/gopenehr/internal/openehr/util"
+
+const FEEDER_AUDIT_DETAILS_MODEL_NAME string = "FEEDER_AUDIT_DETAILS"
+
+type FEEDER_AUDIT_DETAILS struct {
+	Type_        util.Optional[string]           `json:"_type,omitzero"`
+	SystemID     string                          `json:"system_id"`
+	Location     util.Optional[PARTY_IDENTIFIED] `json:"location,omitzero"`
+	Subject      util.Optional[X_PARTY_PROXY]    `json:"subject,omitzero"`
+	Provider     util.Optional[PARTY_IDENTIFIED] `json:"provider,omitzero"`
+	Time         util.Optional[DV_DATE_TIME]     `json:"time,omitzero"`
+	VersionID    util.Optional[string]           `json:"version_id,omitzero"`
+	OtherDetails util.Optional[X_ITEM_STRUCTURE] `json:"other_details,omitzero"`
+}
+
+func (f *FEEDER_AUDIT_DETAILS) SetModelName() {
+	f.Type_ = util.Some(FEEDER_AUDIT_DETAILS_MODEL_NAME)
+	if f.Location.E {
+		f.Location.V.SetModelName()
+	}
+	if f.Subject.E {
+		f.Subject.V.SetModelName()
+	}
+	if f.Provider.E {
+		f.Provider.V.SetModelName()
+	}
+	if f.Time.E {
+		f.Time.V.SetModelName()
+	}
+	if f.OtherDetails.E {
+		f.OtherDetails.V.SetModelName()
+	}
+}
+
+func (f FEEDER_AUDIT_DETAILS) Validate(path string) []util.ValidationError {
+	var errors []util.ValidationError
+	var attrPath string
+
+	// Validate _type
+	if f.Type_.E && f.Type_.V != FEEDER_AUDIT_DETAILS_MODEL_NAME {
+		attrPath = path + "._type"
+		errors = append(errors, util.ValidationError{
+			Model:          FEEDER_AUDIT_DETAILS_MODEL_NAME,
+			Path:           attrPath,
+			Message:        "invalid _type field",
+			Recommendation: "Ensure _type field is set to FEEDER_AUDIT_DETAILS",
+		})
+	}
+
+	// Validate system_id
+	attrPath = path + ".system_id"
+	if f.SystemID == "" {
+		errors = append(errors, util.ValidationError{
+			Model:          FEEDER_AUDIT_DETAILS_MODEL_NAME,
+			Path:           attrPath,
+			Message:        "system_id field cannot be empty",
+			Recommendation: "Ensure system_id field is not empty",
+		})
+	}
+
+	// Validate location
+	if f.Location.E {
+		attrPath = path + ".location"
+		errors = append(errors, f.Location.V.Validate(attrPath)...)
+	}
+
+	// Validate subject
+	if f.Subject.E {
+		attrPath = path + ".subject"
+		errors = append(errors, f.Subject.V.Validate(attrPath)...)
+	}
+
+	// Validate provider
+	if f.Provider.E {
+		attrPath = path + ".provider"
+		errors = append(errors, f.Provider.V.Validate(attrPath)...)
+	}
+
+	// Validate time
+	if f.Time.E {
+		attrPath = path + ".time"
+		errors = append(errors, f.Time.V.Validate(attrPath)...)
+	}
+
+	// Validate other_details
+	if f.OtherDetails.E {
+		attrPath = path + ".other_details"
+		errors = append(errors, f.OtherDetails.V.Validate(attrPath)...)
+	}
+
+	return errors
+}

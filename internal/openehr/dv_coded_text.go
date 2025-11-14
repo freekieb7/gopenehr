@@ -11,8 +11,6 @@ import (
 
 const DV_CODED_TEXT_MODEL_NAME string = "DV_CODED_TEXT"
 
-var _ util.ReferenceModel = (*DV_CODED_TEXT)(nil)
-
 type DV_CODED_TEXT struct {
 	Type_        util.Optional[string]         `json:"_type,omitzero"`
 	Value        string                        `json:"value"`
@@ -24,36 +22,61 @@ type DV_CODED_TEXT struct {
 	DefiningCode CODE_PHRASE                   `json:"defining_code"`
 }
 
+func (d DV_CODED_TEXT) isDataValueModel() {}
+
+func (d DV_CODED_TEXT) isDvTextModel() {}
+
 func (d DV_CODED_TEXT) HasModelName() bool {
-	return d.Type_.IsSet()
+	return d.Type_.E
+}
+
+func (d *DV_CODED_TEXT) SetModelName() {
+	d.Type_ = util.Some(DV_CODED_TEXT_MODEL_NAME)
+	d.DefiningCode.SetModelName()
+	if d.Hyperlink.E {
+		d.Hyperlink.V.SetModelName()
+	}
+	if d.Language.E {
+		d.Language.V.SetModelName()
+	}
+	if d.Encoding.E {
+		d.Encoding.V.SetModelName()
+	}
+	if d.Mappings.E {
+		for i := range d.Mappings.V {
+			d.Mappings.V[i].SetModelName()
+		}
+	}
 }
 
 func (d DV_CODED_TEXT) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
+	var attrPath string
 
 	// Validate _type
-	if d.Type_.IsSet() && d.Type_.Unwrap() != DV_CODED_TEXT_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_CODED_TEXT_MODEL_NAME {
+		attrPath = path + "._type"
 		errors = append(errors, util.ValidationError{
 			Model:          DV_CODED_TEXT_MODEL_NAME,
-			Path:           "._type",
-			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_CODED_TEXT_MODEL_NAME, d.Type_.Unwrap()),
+			Path:           attrPath,
+			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_CODED_TEXT_MODEL_NAME, d.Type_.V),
 			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", DV_CODED_TEXT_MODEL_NAME),
 		})
 	}
 
 	// Validate defining_code
-	attrPath := path + ".defining_code"
+	attrPath = path + ".defining_code"
 	errors = append(errors, d.DefiningCode.Validate(attrPath)...)
 
 	// Validate formatting
-	if d.Formatting.IsSet() {
+	if d.Formatting.E {
 		attrPath = path + ".formatting"
 		validFormats := []string{"plain", "plain_no_newlines", "markdown"}
-		if !slices.Contains(validFormats, d.Formatting.Unwrap()) {
+		if !slices.Contains(validFormats, d.Formatting.V) {
 			errors = append(errors, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid formatting field: %s", d.Formatting.Unwrap()),
+				Message:        fmt.Sprintf("invalid formatting field: %s", d.Formatting.V),
 				Recommendation: "Ensure formatting field is one of 'plain', 'plain_no_newlines', 'markdown'",
 			})
 		}
@@ -77,7 +100,7 @@ func (d DV_CODED_TEXT) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	if d.Formatting.IsSet() && d.Formatting.Unwrap() == "plain_no_newlines" {
+	if d.Formatting.E && d.Formatting.V == "plain_no_newlines" {
 		if strings.ContainsAny(d.Value, "\n\r") {
 			errors = append(errors, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
@@ -89,59 +112,61 @@ func (d DV_CODED_TEXT) Validate(path string) []util.ValidationError {
 	}
 
 	// Validate mappings
-	if d.Mappings.IsSet() {
+	if d.Mappings.E {
 		attrPath = path + ".mappings"
-		for i, v := range d.Mappings.Unwrap() {
+		for i, v := range d.Mappings.V {
 			errors = append(errors, v.Validate(fmt.Sprintf("%s[%d]", attrPath, i))...)
 		}
 	}
 
 	// Validate language
-	if d.Language.IsSet() {
+	if d.Language.E {
 		attrPath = path + ".language"
-		v := d.Language.Unwrap()
-		if !terminology.IsValidLanguageTerminologyID(v.TerminologyId.Value) {
+		if !terminology.IsValidLanguageTerminologyID(d.Language.V.TerminologyID.Value) {
+			attrPath = path + ".terminology_id.value"
 			errors = append(errors, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid language field: %s", d.Language.Unwrap()),
+				Message:        fmt.Sprintf("invalid language terminology ID: %s", d.Language.V.TerminologyID.Value),
 				Recommendation: "Ensure language field is a known ISO 639-1 or ISO 639-2 language code",
 			})
 		}
 
-		if !terminology.IsValidLanguageCode(v.CodeString) {
+		if !terminology.IsValidLanguageCode(d.Language.V.CodeString) {
+			attrPath = path + ".code_string"
 			errors = append(errors, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid language field: %s", d.Language.Unwrap()),
+				Message:        fmt.Sprintf("invalid language code: %s", d.Language.V.CodeString),
 				Recommendation: "Ensure language field is a known ISO 639-1 or ISO 639-2 language code",
 			})
 		}
-		errors = append(errors, d.Language.Unwrap().Validate(attrPath)...)
+		errors = append(errors, d.Language.V.Validate(attrPath)...)
 	}
 
 	// Validate encoding
-	if d.Encoding.IsSet() {
+	if d.Encoding.E {
 		attrPath = path + ".encoding"
-		v := d.Encoding.Unwrap()
-		if !terminology.IsValidCharsetTerminologyID(v.TerminologyId.Value) {
+		if !terminology.IsValidCharsetTerminologyID(d.Encoding.V.TerminologyID.Value) {
+			attrPath = path + ".terminology_id.value"
 			errors = append(errors, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid encoding field: %s", d.Encoding.Unwrap()),
+				Message:        fmt.Sprintf("invalid encoding terminology ID: %s", d.Encoding.V.TerminologyID.Value),
 				Recommendation: "Ensure encoding field is a known IANA character set",
 			})
 		}
 
-		if !terminology.IsValidCharset(v.CodeString) {
+		if !terminology.IsValidCharset(d.Encoding.V.CodeString) {
+			attrPath = path + ".code_string"
 			errors = append(errors, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid encoding field: %s", d.Encoding.Unwrap()),
+				Message:        fmt.Sprintf("invalid encoding charset: %s", d.Encoding.V.CodeString),
 				Recommendation: "Ensure encoding field is a known IANA character set",
 			})
 		}
-		errors = append(errors, d.Encoding.Unwrap().Validate(attrPath)...)
+		errors = append(errors, d.Encoding.V.Validate(attrPath)...)
 	}
 
 	return errors

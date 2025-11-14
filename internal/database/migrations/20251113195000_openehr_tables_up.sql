@@ -60,8 +60,6 @@ CREATE INDEX idx_openehr_versioned_object_data_type ON tbl_openehr_versioned_obj
 CREATE TABLE tbl_openehr_ehr_status (
     id TEXT PRIMARY KEY,
     versioned_object_id TEXT NOT NULL REFERENCES tbl_openehr_versioned_object(id) ON DELETE CASCADE,
-    system_id TEXT NOT NULL,
-    version_tree_id TEXT NOT NULL,
     ehr_id TEXT NOT NULL REFERENCES tbl_openehr_ehr(id) ON DELETE CASCADE,
     data JSONB NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -78,8 +76,6 @@ CREATE INDEX idx_openehr_ehr_status_data_type ON tbl_openehr_ehr_status USING GI
 CREATE TABLE tbl_openehr_ehr_access (
     id TEXT PRIMARY KEY,
     versioned_object_id TEXT NOT NULL REFERENCES tbl_openehr_versioned_object(id) ON DELETE CASCADE,
-    system_id TEXT NOT NULL,
-    version_tree_id TEXT NOT NULL,
     ehr_id TEXT NOT NULL REFERENCES tbl_openehr_ehr(id) ON DELETE CASCADE,
     data JSONB NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -96,8 +92,6 @@ CREATE INDEX idx_openehr_ehr_access_data_type ON tbl_openehr_ehr_access USING GI
 CREATE TABLE tbl_openehr_composition (
     id TEXT PRIMARY KEY,
     versioned_object_id TEXT NOT NULL REFERENCES tbl_openehr_versioned_object(id) ON DELETE CASCADE,
-    system_id TEXT NOT NULL,
-    version_tree_id TEXT NOT NULL,
     ehr_id TEXT NOT NULL REFERENCES tbl_openehr_ehr(id) ON DELETE CASCADE,
     data JSONB NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -114,8 +108,6 @@ CREATE INDEX idx_openehr_composition_data_type ON tbl_openehr_composition USING 
 CREATE TABLE tbl_openehr_folder (
     id TEXT PRIMARY KEY,
     versioned_object_id TEXT NOT NULL REFERENCES tbl_openehr_versioned_object(id) ON DELETE CASCADE,
-    system_id TEXT NOT NULL,
-    version_tree_id TEXT NOT NULL,
     ehr_id TEXT NOT NULL REFERENCES tbl_openehr_ehr(id) ON DELETE CASCADE,
     data JSONB NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -140,8 +132,6 @@ CREATE INDEX idx_openehr_folder_item_object_id ON tbl_openehr_folder_item(object
 CREATE TABLE tbl_openehr_role (
     id TEXT PRIMARY KEY,
     versioned_object_id TEXT NOT NULL REFERENCES tbl_openehr_versioned_object(id) ON DELETE CASCADE,
-    system_id TEXT NOT NULL,
-    version_tree_id TEXT NOT NULL,
     data JSONB NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -156,8 +146,6 @@ CREATE INDEX idx_openehr_role_data_type ON tbl_openehr_role USING GIN (
 CREATE TABLE tbl_openehr_person (
     id TEXT PRIMARY KEY,
     versioned_object_id TEXT NOT NULL REFERENCES tbl_openehr_versioned_object(id) ON DELETE CASCADE,
-    system_id TEXT NOT NULL,
-    version_tree_id TEXT NOT NULL,
     data JSONB NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -172,8 +160,6 @@ CREATE INDEX idx_openehr_person_data_type ON tbl_openehr_person USING GIN (
 CREATE TABLE tbl_openehr_agent (
     id TEXT PRIMARY KEY,
     versioned_object_id TEXT NOT NULL REFERENCES tbl_openehr_versioned_object(id) ON DELETE CASCADE,
-    system_id TEXT NOT NULL,
-    version_tree_id TEXT NOT NULL,
     data JSONB NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -188,8 +174,6 @@ CREATE INDEX idx_openehr_agent_data_type ON tbl_openehr_agent USING GIN (
 CREATE TABLE tbl_openehr_group (
     id TEXT PRIMARY KEY,
     versioned_object_id TEXT NOT NULL REFERENCES tbl_openehr_versioned_object(id) ON DELETE CASCADE,
-    system_id TEXT NOT NULL,
-    version_tree_id TEXT NOT NULL,
     data JSONB NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
@@ -204,8 +188,6 @@ CREATE INDEX idx_openehr_group_data_type ON tbl_openehr_group USING GIN (
 CREATE TABLE tbl_openehr_organisation (
     id TEXT PRIMARY KEY,
     versioned_object_id TEXT NOT NULL REFERENCES tbl_openehr_versioned_object(id) ON DELETE CASCADE,
-    system_id TEXT NOT NULL,
-    version_tree_id TEXT NOT NULL,
     data JSONB NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );

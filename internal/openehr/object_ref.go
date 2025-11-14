@@ -8,8 +8,6 @@ import (
 
 const OBJECT_REF_MODEL_NAME = "OBJECT_REF"
 
-var _ util.ReferenceModel = (*OBJECT_REF)(nil)
-
 type OBJECT_REF struct {
 	Type_     util.Optional[string] `json:"_type,omitzero"`
 	Namespace string                `json:"namespace"`
@@ -17,8 +15,9 @@ type OBJECT_REF struct {
 	ID        X_OBJECT_ID           `json:"id"`
 }
 
-func (o OBJECT_REF) HasModelName() bool {
-	return o.Type_.IsSet()
+func (o *OBJECT_REF) SetModelName() {
+	o.Type_ = util.Some(OBJECT_REF_MODEL_NAME)
+	o.ID.SetModelName()
 }
 
 func (o OBJECT_REF) Validate(path string) []util.ValidationError {
@@ -26,12 +25,12 @@ func (o OBJECT_REF) Validate(path string) []util.ValidationError {
 	var attrPath string
 
 	// Validate _type
-	if o.Type_.IsSet() && o.Type_.Unwrap() != OBJECT_REF_MODEL_NAME {
+	if o.Type_.E && o.Type_.V != OBJECT_REF_MODEL_NAME {
 		attrPath = path + "._type"
 		errs = append(errs, util.ValidationError{
 			Model:          OBJECT_REF_MODEL_NAME,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", OBJECT_REF_MODEL_NAME, o.Type_.Unwrap()),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", OBJECT_REF_MODEL_NAME, o.Type_.V),
 			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", OBJECT_REF_MODEL_NAME),
 		})
 	}
@@ -57,8 +56,8 @@ func (o OBJECT_REF) Validate(path string) []util.ValidationError {
 	}
 
 	// Validate type
-	attrPath = path + ".type"
 	if o.Type == "" {
+		attrPath = path + ".type"
 		errs = append(errs, util.ValidationError{
 			Model:          "String",
 			Path:           attrPath,

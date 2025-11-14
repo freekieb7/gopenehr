@@ -125,7 +125,11 @@ func (m *Migrator) MigrateUpMigration(ctx context.Context, migration database.Mi
 	if err != nil {
 		return false, fmt.Errorf("failed to begin transaction for migration %s: %w", migration.Name, err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil {
+			m.Logger.ErrorContext(ctx, "Failed to rollback transaction", "error", err)
+		}
+	}()
 
 	var applied bool
 	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM tbl_migration WHERE name=$1)", migration.Name).Scan(&applied); err != nil {
@@ -230,7 +234,11 @@ func (m *Migrator) MigrateDownMigration(ctx context.Context, migration database.
 	if err != nil {
 		return false, fmt.Errorf("failed to begin transaction for migration %s: %w", migration.Name, err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil {
+			m.Logger.ErrorContext(ctx, "Failed to rollback transaction", "error", err)
+		}
+	}()
 
 	var applied bool
 	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM tbl_migration WHERE name=$1)", migration.Name).Scan(&applied); err != nil {

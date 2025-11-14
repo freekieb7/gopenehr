@@ -4,15 +4,15 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/freekieb7/gopenehr/internal/openehr"
+	"github.com/freekieb7/gopenehr/internal/openehr/service"
 	"github.com/freekieb7/gopenehr/internal/web"
 	"github.com/gofiber/fiber/v2"
 )
 
 type OpenEHR struct {
-	Version string
-	Logger  *slog.Logger
-	Service *openehr.Service
+	Version    string
+	Logger     *slog.Logger
+	EHRService *service.EHR
 }
 
 func (h *OpenEHR) RegisterRoutes(s *web.Server) {
@@ -161,7 +161,7 @@ func (h *OpenEHR) GetEHRBySubjectID(c *fiber.Ctx) error {
 }
 
 func (h *OpenEHR) CreateEHR(c *fiber.Ctx) error {
-	ehr, err := h.Service.CreateEHR(c.Context())
+	ehr, err := h.EHRService.CreateEHR(c.Context())
 	if err != nil {
 		h.Logger.ErrorContext(c.Context(), "Failed to create EHR", "error", err)
 		c.Status(http.StatusInternalServerError)
@@ -178,7 +178,7 @@ func (h *OpenEHR) GetEHRByID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
 
-	ehr, err := h.Service.GetEHRByID(c.Context(), ehrID)
+	ehr, err := h.EHRService.GetEHRByID(c.Context(), ehrID)
 	if err != nil {
 		h.Logger.ErrorContext(c.Context(), "Failed to get EHR by ID", "error", err)
 		c.Status(http.StatusInternalServerError)
@@ -195,7 +195,7 @@ func (h *OpenEHR) CreateEHRWithID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
 
-	ehr, err := h.Service.CreateEHR(c.Context())
+	ehr, err := h.EHRService.CreateEHR(c.Context())
 	if err != nil {
 		h.Logger.ErrorContext(c.Context(), "Failed to create EHR", "error", err)
 		c.Status(http.StatusInternalServerError)

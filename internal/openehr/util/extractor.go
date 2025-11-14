@@ -1,4 +1,4 @@
-package openehr
+package util
 
 // Helper struct for extracting _type field
 type TypeExtractor struct {

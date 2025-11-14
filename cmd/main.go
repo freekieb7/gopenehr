@@ -9,10 +9,10 @@ import (
 	"syscall"
 
 	"github.com/freekieb7/gopenehr/internal/cli"
-	internal "github.com/freekieb7/gopenehr/internal/config"
+	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/database"
 	"github.com/freekieb7/gopenehr/internal/health"
-	"github.com/freekieb7/gopenehr/internal/openehr"
+	openehrService "github.com/freekieb7/gopenehr/internal/openehr/service"
 	"github.com/freekieb7/gopenehr/internal/web"
 	"github.com/freekieb7/gopenehr/internal/web/handler"
 	_ "go.uber.org/automaxprocs/maxprocs"
@@ -51,7 +51,7 @@ func run(ctx context.Context, args []string) error {
 
 func runServer(ctx context.Context) error {
 	// Load config
-	cfg := internal.Config{}
+	cfg := config.Config{}
 	if err := cfg.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
@@ -72,7 +72,7 @@ func runServer(ctx context.Context) error {
 	srv := web.NewServer()
 
 	// Compression middleware (use in production)
-	if cfg.Environment == internal.Production {
+	if cfg.Environment == config.Production {
 		srv.EnableCompression()
 	}
 
@@ -88,7 +88,7 @@ func runServer(ctx context.Context) error {
 	openEHRHandler := handler.OpenEHR{
 		Version: cfg.Version,
 		Logger:  logger,
-		Service: &openehr.Service{
+		EHRService: &openehrService.EHR{
 			DB: &db,
 		},
 	}
@@ -130,7 +130,7 @@ func runServer(ctx context.Context) error {
 
 func runMigrate(ctx context.Context, args []string) error {
 	// Load config
-	cfg := internal.Config{}
+	cfg := config.Config{}
 	if err := cfg.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}

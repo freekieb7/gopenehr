@@ -1,4 +1,4 @@
-package openehr
+package util
 
 import "reflect"
 

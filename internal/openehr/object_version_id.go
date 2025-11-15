@@ -106,3 +106,7 @@ func (o OBJECT_VERSION_ID) Validate(path string) []util.ValidationError {
 
 	return errors
 }
+
+func (o OBJECT_VERSION_ID) UID() string {
+	return strings.Split(o.Value, "::")[0]
+}

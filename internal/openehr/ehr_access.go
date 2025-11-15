@@ -19,7 +19,10 @@ type EHR_ACCESS struct {
 	// Settings         util.Optional[ACCESS_CONTROL_SETTINGS] `json:"settings,omitzero"`
 }
 
+func (e EHR_ACCESS) isVersionModel() {}
+
 func (e *EHR_ACCESS) SetModelName() {
+	e.MetaType = util.Some(EHR_ACCESS_MODEL_NAME)
 	e.Name.SetModelName()
 	if e.UID.E {
 		e.UID.V.SetModelName()

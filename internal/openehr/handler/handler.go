@@ -1,17 +1,21 @@
 package handler
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 
+	"github.com/freekieb7/gopenehr/internal/openehr"
 	"github.com/freekieb7/gopenehr/internal/openehr/service"
+	"github.com/freekieb7/gopenehr/internal/openehr/util"
 	"github.com/gofiber/fiber/v2"
 )
 
 type Handler struct {
 	Version    string
 	Logger     *slog.Logger
-	EHRService *service.EHR
+	EHRService *service.EHRService
 }
 
 func (h *Handler) RegisterRoutes(app *fiber.App) {
@@ -24,7 +28,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	v1.Get("/ehr/:ehr_id", h.GetEHRByID)
 	v1.Put("/ehr/:ehr_id", h.CreateEHRWithID)
 
-	v1.Get("/ehr/:ehr_id/ehr_status", h.GetEHRStatusAtTime)
+	v1.Get("/ehr/:ehr_id/ehr_status", h.GetEHRStatus)
 	v1.Put("/ehr/:ehr_id/ehr_status", h.UpdateEhrStatus)
 	v1.Get("/ehr/:ehr_id/ehr_status/:version_uid", h.GetEHRStatusByVersionID)
 
@@ -156,30 +160,53 @@ func (h *Handler) SystemInfo(c *fiber.Ctx) error {
 }
 
 func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
-	subjectID := c.Query("subject_id")
-	subjectNamespace := c.Query("subject_namespace")
+	ctx := c.Context()
 
-	if subjectID == "" || subjectNamespace == "" {
-		return c.Status(fiber.StatusBadRequest).SendString("subject_id and subject_namespace query parameters are required")
+	subjectID := c.Query("subject_id")
+	if subjectID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("subject_id query parameters are required")
 	}
 
-	ehr, err := h.EHRService.GetEHRBySubject(c.Context(), subjectID, subjectNamespace)
+	subjectNamespace := c.Query("subject_namespace")
+	if subjectNamespace == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("subject_namespace query parameters are required")
+	}
+
+	rawEHRJSON, err := h.EHRService.GetRawEHRBySubject(ctx, subjectID, subjectNamespace)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given subject")
 		}
-		h.Logger.ErrorContext(c.Context(), "Failed to get EHR by subject", "error", err)
+		h.Logger.ErrorContext(ctx, "Failed to get EHR by subject", "error", err)
 		c.Status(http.StatusInternalServerError)
 		return nil
 	}
 
-	return c.Status(fiber.StatusOK).JSON(ehr)
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawEHRJSON)
 }
 
 func (h *Handler) CreateEHR(c *fiber.Ctx) error {
-	ehr, err := h.EHRService.CreateEHR(c.Context())
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	// Check for optional EHR_STATUS in the request body
+	var newEhrStatus util.Optional[openehr.EHR_STATUS]
+	if len(c.Body()) > 0 {
+		if err := c.BodyParser(&newEhrStatus.V); err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+		}
+		newEhrStatus.E = true
+	}
+
+	ehr, err := h.EHRService.CreateEHR(ctx, newEhrStatus)
 	if err != nil {
-		h.Logger.ErrorContext(c.Context(), "Failed to create EHR", "error", err)
+		if newEhrStatus.E && err == service.ErrEHRStatusAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("EHR Status with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to create EHR", "error", err)
 		c.Status(http.StatusInternalServerError)
 		return nil
 	}
@@ -188,34 +215,51 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 }
 
 func (h *Handler) GetEHRByID(c *fiber.Ctx) error {
-	ehrID := c.Params("ehr_id")
+	ctx := c.Context()
 
+	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
 
-	ehr, err := h.EHRService.GetEHRByID(c.Context(), ehrID)
+	rawEHRJSON, err := h.EHRService.GetRawEHRByID(ctx, ehrID)
 	if err != nil {
-		h.Logger.ErrorContext(c.Context(), "Failed to get EHR by ID", "error", err)
+		h.Logger.ErrorContext(ctx, "Failed to get EHR by ID", "error", err)
 		c.Status(http.StatusInternalServerError)
 		return nil
 	}
 
-	return c.Status(fiber.StatusOK).JSON(ehr)
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawEHRJSON)
 }
 
 func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 	ctx := c.Context()
-	ehrID := c.Params("ehr_id")
 
+	c.Accepts("application/json")
+
+	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
 
-	ehr, err := h.EHRService.CreateEHRWithID(ctx, ehrID)
+	// Check for optional EHR_STATUS in the request body
+	var newEhrStatus util.Optional[openehr.EHR_STATUS]
+	if len(c.Body()) > 0 {
+		if err := c.BodyParser(&newEhrStatus.V); err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+		}
+		newEhrStatus.E = true
+	}
+
+	// Create EHR with specified ID and EHR_STATUS
+	ehr, err := h.EHRService.CreateEHRWithID(ctx, newEhrStatus, ehrID)
 	if err != nil {
 		if err == service.ErrEHRAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("EHR with the given ID already exists")
+		}
+		if newEhrStatus.E && err == service.ErrEHRStatusAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("EHR Status with the given UID already exists")
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create EHR", "error", err)
@@ -226,32 +270,230 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(ehr)
 }
 
-func (h *Handler) GetEHRStatusAtTime(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetEHRStatusAtTime not implemented yet")
+func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	var filterAtTime time.Time
+	if atTimeStr := c.Query("version_at_time"); atTimeStr != "" {
+		parsedTime, err := time.Parse(time.RFC3339, atTimeStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Invalid version_at_time format. Use RFC3339 format.")
+		}
+		filterAtTime = parsedTime
+	}
+
+	rawEHRStatusJSON, err := h.EHRService.GetRawEHRStatus(ctx, ehrID, filterAtTime, "")
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR Status not found for the given EHR ID at the specified time")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get EHR Status at time", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawEHRStatusJSON)
 }
 
 func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateEhrStatus not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	ifMatch := c.Get("If-Match")
+	if ifMatch == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
+	}
+
+	var newEhrStatus openehr.EHR_STATUS
+	if err := c.BodyParser(&newEhrStatus); err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	// Check collision using If-Match header
+	rawCurrentEhrStatus, err := h.EHRService.GetRawEHRStatus(ctx, ehrID, time.Time{}, "")
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR Status not found for the given EHR ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get current EHR Status", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+	var currentEhrStatus openehr.EHR_STATUS
+	if err := json.Unmarshal(rawCurrentEhrStatus, &currentEhrStatus); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to unmarshal current EHR Status", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing EHR Status
+	if currentEhrStatus.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
+		if currentEhrStatus.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID() != newEhrStatus.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID() {
+			return c.Status(fiber.StatusBadRequest).SendString("UID of the new EHR Status does not match the current EHR Status UID")
+		}
+
+		return c.Status(fiber.StatusPreconditionFailed).SendString("EHR Status has been modified since the provided version")
+	}
+
+	// Proceed to update EHR Status
+	if err := h.EHRService.UpdateEHRStatus(ctx, ehrID, newEhrStatus); err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR Status not found for the given EHR ID")
+		}
+		if err == service.ErrEHRStatusAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("EHR Status with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to update EHR Status", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetEHRStatusByVersionID not implemented yet")
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	versionUID := c.Params("version_uid")
+	if versionUID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("version_uid parameter is required")
+	}
+
+	rawEHRStatusJSON, err := h.EHRService.GetRawEHRStatus(ctx, ehrID, time.Time{}, versionUID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR Status not found for the given EHR ID and version UID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get EHR Status at time", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawEHRStatusJSON)
 }
 
 func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetVersionedEHRStatus not implemented yet")
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	rawVersionedStatusJSON, err := h.EHRService.GetRawVersionedEHRStatus(ctx, ehrID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Versioned EHR Status not found for the given EHR ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawVersionedStatusJSON)
 }
 
 func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetVersionedEHRStatusRevisionHistory not implemented yet")
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	rawRevisionHistoryData, err := h.EHRService.GetRawVersionedEHRStatusRevisionHistory(ctx, ehrID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Versioned EHR Status revision history not found for the given EHR ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status revision history", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawRevisionHistoryData)
 }
 
 func (h *Handler) GetVersionedEHRStatusVersionAtTime(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetVersionedEHRStatusVersionAtTime not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	var filterAtTime time.Time
+	atTimeStr := c.Query("version_at_time")
+	if atTimeStr != "" {
+		parsedTime, err := time.Parse(time.RFC3339, atTimeStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Invalid version_at_time format. Use RFC3339 format.")
+		}
+		filterAtTime = parsedTime
+	}
+
+	rawVersionData, err := h.EHRService.GetRawVersionedEHRStatusVersionAtTime(ctx, ehrID, filterAtTime)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Versioned EHR Status version not found for the given EHR ID at the specified time")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status version at time", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawVersionData)
 }
 
 func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetVersionedEHRStatusVersionByID not implemented yet")
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	versionUID := c.Params("version_uid")
+	if versionUID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("version_uid parameter is required")
+	}
+
+	rawVersionData, err := h.EHRService.GetRawVersionedEHRStatusByVersionID(ctx, ehrID, versionUID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Versioned EHR Status version not found for the given EHR ID and version UID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status version by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawVersionData)
 }
 
 func (h *Handler) CreateComposition(c *fiber.Ctx) error {

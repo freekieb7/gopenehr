@@ -113,7 +113,7 @@ func runServer(ctx context.Context) error {
 	openEHRHandler := openehrHandler.Handler{
 		Version: cfg.Version,
 		Logger:  logger,
-		EHRService: &openehrService.EHR{
+		EHRService: &openehrService.EHRService{
 			Logger: logger,
 			DB:     &db,
 		},

@@ -5,6 +5,9 @@ import (
 	"os"
 )
 
+const SYSTEM_ID_GOPENEHR = "gopenehr-system"
+const NAMESPACE_LOCAL = "local"
+
 var (
 	Version = "dev"
 )

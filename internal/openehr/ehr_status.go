@@ -22,7 +22,10 @@ type EHR_STATUS struct {
 	OtherDetails     util.Optional[X_ITEM_STRUCTURE] `json:"other_details,omitzero"`
 }
 
+func (e EHR_STATUS) isVersionModel() {}
+
 func (e *EHR_STATUS) SetModelName() {
+	e.Type_ = util.Some(EHR_STATUS_MODEL_NAME)
 	e.Name.SetModelName()
 	if e.UID.E {
 		e.UID.V.SetModelName()

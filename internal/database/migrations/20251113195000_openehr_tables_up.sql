@@ -18,7 +18,7 @@ CREATE TABLE tbl_openehr_ehr (
 CREATE INDEX idx_openehr_ehr_data ON tbl_openehr_ehr USING GIN (data);
 CREATE INDEX idx_openehr_ehr_created_at ON tbl_openehr_ehr(created_at);
 CREATE INDEX idx_openehr_ehr_data_type ON tbl_openehr_ehr USING GIN (
-    jsonb_path_query_array(data, '$.**.type')
+    jsonb_path_query_array(data, '$.**._type')
 );
 
 CREATE TABLE tbl_openehr_contribution (
@@ -32,7 +32,7 @@ CREATE INDEX idx_openehr_contribution_ehr_id ON tbl_openehr_contribution(ehr_id)
 CREATE INDEX idx_openehr_contribution_data ON tbl_openehr_contribution USING GIN (data);
 CREATE INDEX idx_openehr_contribution_created_at ON tbl_openehr_contribution(created_at);
 CREATE INDEX idx_openehr_contribution_data_type ON tbl_openehr_contribution USING GIN (
-    jsonb_path_query_array(data, '$.**.type')
+    jsonb_path_query_array(data, '$.**._type')
 );
 
 CREATE TABLE tbl_openehr_contribution_version (
@@ -54,7 +54,7 @@ CREATE INDEX idx_openehr_versioned_object_ehr_id ON tbl_openehr_versioned_object
 CREATE INDEX idx_openehr_versioned_object_data ON tbl_openehr_versioned_object USING GIN (data);
 CREATE INDEX idx_openehr_versioned_object_created_at ON tbl_openehr_versioned_object(created_at);
 CREATE INDEX idx_openehr_versioned_object_data_type ON tbl_openehr_versioned_object USING GIN (
-    jsonb_path_query_array(data, '$.**.type')
+    jsonb_path_query_array(data, '$.**._type')
 );
 
 CREATE TABLE tbl_openehr_ehr_status (
@@ -70,7 +70,7 @@ CREATE INDEX idx_openehr_ehr_status_ehr_id ON tbl_openehr_ehr_status(ehr_id);
 CREATE INDEX idx_openehr_ehr_status_data ON tbl_openehr_ehr_status USING GIN (data);
 CREATE INDEX idx_openehr_ehr_status_created_at ON tbl_openehr_ehr_status(created_at);
 CREATE INDEX idx_openehr_ehr_status_data_type ON tbl_openehr_ehr_status USING GIN (
-    jsonb_path_query_array(data, '$.**.type')
+    jsonb_path_query_array(data, '$.**._type')
 );
 
 CREATE TABLE tbl_openehr_ehr_access (
@@ -86,7 +86,7 @@ CREATE INDEX idx_openehr_ehr_access_ehr_id ON tbl_openehr_ehr_access(ehr_id);
 CREATE INDEX idx_openehr_ehr_access_data ON tbl_openehr_ehr_access USING GIN (data);
 CREATE INDEX idx_openehr_ehr_access_created_at ON tbl_openehr_ehr_access(created_at);
 CREATE INDEX idx_openehr_ehr_access_data_type ON tbl_openehr_ehr_access USING GIN (
-    jsonb_path_query_array(data, '$.**.type')
+    jsonb_path_query_array(data, '$.**._type')
 );
 
 CREATE TABLE tbl_openehr_composition (
@@ -102,7 +102,7 @@ CREATE INDEX idx_openehr_composition_ehr_id ON tbl_openehr_composition(ehr_id);
 CREATE INDEX idx_openehr_composition_data ON tbl_openehr_composition USING GIN (data);
 CREATE INDEX idx_openehr_composition_created_at ON tbl_openehr_composition(created_at);
 CREATE INDEX idx_openehr_composition_data_type ON tbl_openehr_composition USING GIN (
-    jsonb_path_query_array(data, '$.**.type')
+    jsonb_path_query_array(data, '$.**._type')
 );
 
 CREATE TABLE tbl_openehr_folder (
@@ -118,7 +118,7 @@ CREATE INDEX idx_openehr_folder_ehr_id ON tbl_openehr_folder(ehr_id);
 CREATE INDEX idx_openehr_folder_data ON tbl_openehr_folder USING GIN (data);
 CREATE INDEX idx_openehr_folder_created_at ON tbl_openehr_folder(created_at);
 CREATE INDEX idx_openehr_folder_data_type ON tbl_openehr_folder USING GIN (
-    jsonb_path_query_array(data, '$.**.type')
+    jsonb_path_query_array(data, '$.**._type')
 );
 
 CREATE TABLE tbl_openehr_folder_item (
@@ -140,7 +140,7 @@ CREATE INDEX idx_openehr_role_versioned_object_id ON tbl_openehr_role(versioned_
 CREATE INDEX idx_openehr_role_data ON tbl_openehr_role USING GIN (data);
 CREATE INDEX idx_openehr_role_created_at ON tbl_openehr_role(created_at);
 CREATE INDEX idx_openehr_role_data_type ON tbl_openehr_role USING GIN (
-    jsonb_path_query_array(data, '$.**.type')
+    jsonb_path_query_array(data, '$.**._type')
 );
 
 CREATE TABLE tbl_openehr_person (
@@ -154,7 +154,7 @@ CREATE INDEX idx_openehr_person_versioned_object_id ON tbl_openehr_person(versio
 CREATE INDEX idx_openehr_person_data ON tbl_openehr_person USING GIN (data);
 CREATE INDEX idx_openehr_person_created_at ON tbl_openehr_person(created_at);
 CREATE INDEX idx_openehr_person_data_type ON tbl_openehr_person USING GIN (
-    jsonb_path_query_array(data, '$.**.type')
+    jsonb_path_query_array(data, '$.**._type')
 );
 
 CREATE TABLE tbl_openehr_agent (
@@ -168,7 +168,7 @@ CREATE INDEX idx_openehr_agent_versioned_object_id ON tbl_openehr_agent(versione
 CREATE INDEX idx_openehr_agent_data ON tbl_openehr_agent USING GIN (data);
 CREATE INDEX idx_openehr_agent_created_at ON tbl_openehr_agent(created_at);
 CREATE INDEX idx_openehr_agent_data_type ON tbl_openehr_agent USING GIN (
-    jsonb_path_query_array(data, '$.**.type')
+    jsonb_path_query_array(data, '$.**._type')
 );
 
 CREATE TABLE tbl_openehr_group (
@@ -182,7 +182,7 @@ CREATE INDEX idx_openehr_group_versioned_object_id ON tbl_openehr_group(versione
 CREATE INDEX idx_openehr_group_data ON tbl_openehr_group USING GIN (data);
 CREATE INDEX idx_openehr_group_created_at ON tbl_openehr_group(created_at);
 CREATE INDEX idx_openehr_group_data_type ON tbl_openehr_group USING GIN (
-    jsonb_path_query_array(data, '$.**.type')
+    jsonb_path_query_array(data, '$.**._type')
 );
 
 CREATE TABLE tbl_openehr_organisation (
@@ -196,7 +196,7 @@ CREATE INDEX idx_openehr_organisation_versioned_object_id ON tbl_openehr_organis
 CREATE INDEX idx_openehr_organisation_data ON tbl_openehr_organisation USING GIN (data);
 CREATE INDEX idx_openehr_organisation_created_at ON tbl_openehr_organisation(created_at);
 CREATE INDEX idx_openehr_organisation_data_type ON tbl_openehr_organisation USING GIN (
-    jsonb_path_query_array(data, '$.**.type')
+    jsonb_path_query_array(data, '$.**._type')
 );
 
 CREATE TABLE tbl_patient_ehr_link (

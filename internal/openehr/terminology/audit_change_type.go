@@ -5,6 +5,19 @@ package terminology
 // Used in: AUDIT_DETAILS.change_type
 // External reference: openEHR terminology audit_change_type
 const (
+	AUDIT_CHANGE_TYPE_TERMINOLOGY_ID_OPENEHR string = "openehr"
+)
+
+var AuditChangeTypeTerminologyIDs = map[string]string{
+	AUDIT_CHANGE_TYPE_TERMINOLOGY_ID_OPENEHR: "openEHR",
+}
+
+func IsValidAuditChangeTypeTerminologyID(id string) bool {
+	_, exists := AuditChangeTypeTerminologyIDs[id]
+	return exists
+}
+
+const (
 	AUDIT_CHANGE_TYPE_CODE_CREATION          string = "249"
 	AUDIT_CHANGE_TYPE_CODE_AMENDMENT         string = "250"
 	AUDIT_CHANGE_TYPE_CODE_MODIFICATION      string = "251"

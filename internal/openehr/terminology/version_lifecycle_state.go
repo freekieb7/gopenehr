@@ -5,6 +5,19 @@ package terminology
 // Used in: ORIGINAL_VERSION.lifecycle_state, IMPORTED_VERSION.lifecycle_state, VERSIONED_OBJECT.lifecycle_state
 // External reference: openEHR terminology version_lifecycle_state
 const (
+	VERSION_LIFECYCLE_STATE_TERMINOLOGY_ID_OPENEHR string = "openehr"
+)
+
+var VersionLifecycleStateTerminologyIDs = map[string]string{
+	VERSION_LIFECYCLE_STATE_TERMINOLOGY_ID_OPENEHR: "openEHR",
+}
+
+func IsValidVersionLifecycleStateTerminologyID(id string) bool {
+	_, exists := VersionLifecycleStateTerminologyIDs[id]
+	return exists
+}
+
+const (
 	VERSION_LIFECYCLE_STATE_CODE_COMPLETE   string = "532"
 	VERSION_LIFECYCLE_STATE_CODE_INCOMPLETE string = "553"
 	VERSION_LIFECYCLE_STATE_CODE_DELETED    string = "523"

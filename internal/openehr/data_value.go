@@ -67,7 +67,7 @@ func (x *X_DATA_VALUE) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	t := extractor.MetaType
+	t := extractor.Type_
 	switch t {
 	case DV_BOOLEAN_MODEL_NAME:
 		x.Value = new(DV_BOOLEAN)

@@ -19,7 +19,7 @@ var (
 	// Lexical form: trunk_version [ '.' branch_number '.' branch_version ]
 	VersionTreeIDRegex = regexp.MustCompile(`^([0-9]+)(\.([0-9]+)\.([0-9]+))?$`)
 	// Lexical form: rm_originator '-' rm_name '-' rm_entity '.' concept_name { '-' specialisation }* '.v' number.
-	ArchetypeIDRegex = regexp.MustCompile(`^([a-zA-Z0-9]+)-([a-zA-Z0-9]+)-([a-zA-Z0-9]+)\.([a-zA-Z0-9]+)(-[a-zA-Z0-9]+)*\.v([0-9]+)$`)
+	ArchetypeIDRegex = regexp.MustCompile(`^([a-zA-Z0-9_]+)-([a-zA-Z0-9_]+)-([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)(-[a-zA-Z0-9_]+)*\.v([0-9]+)$`)
 )
 
 type ValidationError struct {

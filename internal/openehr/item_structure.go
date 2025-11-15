@@ -73,7 +73,7 @@ func (x *X_ITEM_STRUCTURE) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	t := extractor.MetaType
+	t := extractor.Type_
 	switch t {
 	case ITEM_SINGLE_MODEL_NAME:
 		x.Value = new(ITEM_SINGLE)

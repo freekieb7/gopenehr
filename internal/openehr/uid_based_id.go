@@ -66,7 +66,7 @@ func (a *X_UID_BASED_ID) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	t := extractor.MetaType
+	t := extractor.Type_
 	switch t {
 	case HIER_OBJECT_ID_MODEL_NAME:
 		a.Value = new(HIER_OBJECT_ID)

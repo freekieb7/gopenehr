@@ -70,7 +70,7 @@ func (i *X_ITEM) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	t := extractor.MetaType
+	t := extractor.Type_
 	switch t {
 	case CLUSTER_MODEL_NAME:
 		i.Value = new(CLUSTER)

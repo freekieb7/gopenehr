@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/freekieb7/gopenehr/internal/openehr"
@@ -340,10 +341,6 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 
 	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing EHR Status
 	if currentEhrStatus.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
-		if currentEhrStatus.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID() != newEhrStatus.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID() {
-			return c.Status(fiber.StatusBadRequest).SendString("UID of the new EHR Status does not match the current EHR Status UID")
-		}
-
 		return c.Status(fiber.StatusPreconditionFailed).SendString("EHR Status has been modified since the provided version")
 	}
 
@@ -497,35 +494,338 @@ func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
 }
 
 func (h *Handler) CreateComposition(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("CreateComposition not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	var newComposition openehr.COMPOSITION
+	if err := c.BodyParser(&newComposition); err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	composition, err := h.EHRService.CreateComposition(ctx, ehrID, newComposition)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrCompositionAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Composition with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to create Composition", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(composition)
 }
 
 func (h *Handler) GetCompositionByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetCompositionByID not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	var (
+		rawCompositionJSON []byte
+		err                error
+	)
+
+	if isVersionID := strings.Contains(uidBasedID, "::"); isVersionID {
+		// Fetch by version ID
+		rawCompositionJSON, err = h.EHRService.GetRawCompositionByID(ctx, ehrID, uidBasedID)
+	} else {
+		// Fetch by versioned object ID
+		rawCompositionJSON, err = h.EHRService.GetRawCurrentCompositionByVersionedObjectID(ctx, ehrID, uidBasedID)
+	}
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrCompositionNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Composition not found for the given UID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Composition by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawCompositionJSON)
 }
 
 func (h *Handler) UpdateCompositionByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateCompositionByID not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	ifMatch := c.Get("If-Match")
+	if ifMatch == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
+	}
+
+	var currentComposition openehr.COMPOSITION
+	if isVersionID := strings.Contains(uidBasedID, "::"); isVersionID {
+		// Fetch by version ID
+		rawCurrentComposition, err := h.EHRService.GetRawCompositionByID(ctx, ehrID, uidBasedID)
+		if err != nil {
+			if err == service.ErrEHRNotFound {
+				return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+			}
+			if err == service.ErrCompositionNotFound {
+				return c.Status(fiber.StatusNotFound).SendString("Composition not found for the given UID")
+			}
+			h.Logger.ErrorContext(ctx, "Failed to get current Composition by ID", "error", err)
+			c.Status(http.StatusInternalServerError)
+			return nil
+		}
+		if err := json.Unmarshal(rawCurrentComposition, &currentComposition); err != nil {
+			h.Logger.ErrorContext(ctx, "Failed to unmarshal current Composition", "error", err)
+			c.Status(http.StatusInternalServerError)
+			return nil
+		}
+	} else {
+		// Fetch by versioned object ID
+		rawCurrentComposition, err := h.EHRService.GetRawCurrentCompositionByVersionedObjectID(ctx, ehrID, uidBasedID)
+		if err != nil {
+			if err == service.ErrEHRNotFound {
+				return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+			}
+			if err == service.ErrCompositionNotFound {
+				return c.Status(fiber.StatusNotFound).SendString("Composition not found for the given UID")
+			}
+			h.Logger.ErrorContext(ctx, "Failed to get current Composition by versioned object ID", "error", err)
+			c.Status(http.StatusInternalServerError)
+			return nil
+		}
+		if err := json.Unmarshal(rawCurrentComposition, &currentComposition); err != nil {
+			h.Logger.ErrorContext(ctx, "Failed to unmarshal current Composition", "error", err)
+			c.Status(http.StatusInternalServerError)
+			return nil
+		}
+	}
+
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Composition
+	if currentComposition.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Composition has been modified since the provided version")
+	}
+
+	// Parse updated composition from request body
+	var updatedComposition openehr.COMPOSITION
+	if err := c.BodyParser(&updatedComposition); err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	// Proceed to update Composition
+	if err := h.EHRService.UpdateCompositionByID(ctx, ehrID, updatedComposition); err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrCompositionNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Composition not found for the given UID")
+		}
+		if err == service.ErrCompositionAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Composition with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to update Composition", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (h *Handler) DeleteCompositionByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeleteCompositionByID not implemented yet")
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	if err := h.EHRService.DeleteCompositionByID(ctx, ehrID, uidBasedID); err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrCompositionNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Composition not found for the given UID")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to delete Composition by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetVersionedCompositionByID not implemented yet")
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	versionedObjectID := c.Params("versioned_object_id")
+	if versionedObjectID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
+	}
+
+	rawVersionedCompositionJSON, err := h.EHRService.GetRawVersionedCompositionByID(ctx, ehrID, versionedObjectID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrCompositionNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Versioned Composition not found for the given versioned object ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Versioned Composition by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawVersionedCompositionJSON)
 }
 
 func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetVersionedCompositionRevisionHistory not implemented yet")
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	versionedObjectID := c.Params("versioned_object_id")
+	if versionedObjectID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
+	}
+
+	rawRevisionHistoryData, err := h.EHRService.GetRawVersionedCompositionRevisionHistory(ctx, ehrID, versionedObjectID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrCompositionNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Versioned Composition revision history not found for the given versioned object ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Versioned Composition revision history", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawRevisionHistoryData)
 }
 
 func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetVersionedCompositionVersionAtTime not implemented yet")
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	versionedObjectID := c.Params("versioned_object_id")
+	if versionedObjectID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
+	}
+
+	var filterAtTime time.Time
+	atTimeStr := c.Query("version_at_time")
+	if atTimeStr != "" {
+		parsedTime, err := time.Parse(time.RFC3339, atTimeStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Invalid version_at_time format. Use RFC3339 format.")
+		}
+		filterAtTime = parsedTime
+	}
+
+	rawVersionData, err := h.EHRService.GetRawVersionedCompositionVersionAtTime(ctx, ehrID, versionedObjectID, filterAtTime)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrCompositionNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Versioned Composition version not found for the given versioned object ID at the specified time")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Versioned Composition version at time", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawVersionData)
 }
 
 func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetVersionedCompositionVersionByID not implemented yet")
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	versionedObjectID := c.Params("versioned_object_id")
+	if versionedObjectID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
+	}
+
+	versionUID := c.Params("version_uid")
+	if versionUID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("version_uid parameter is required")
+	}
+
+	if versionedObjectID != strings.Split(versionUID, "::")[0] {
+		return c.Status(fiber.StatusBadRequest).SendString("version_uid does not match the versioned_object_id")
+	}
+
+	rawVersionData, err := h.EHRService.GetRawVersionedCompositionByVersionID(ctx, ehrID, versionUID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrCompositionNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Versioned Composition version not found for the given versioned object ID and version UID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Versioned Composition version by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(rawVersionData)
 }
 
 func (h *Handler) CreateDirectory(c *fiber.Ctx) error {

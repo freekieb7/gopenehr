@@ -69,7 +69,7 @@ func (a *X_DV_ENCAPSULATED) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	t := extractor.MetaType
+	t := extractor.Type_
 	switch t {
 	case DV_MULTIMEDIA_MODEL_NAME:
 		a.Value = new(DV_MULTIMEDIA)

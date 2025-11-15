@@ -17,10 +17,12 @@ import (
 )
 
 var (
-	ErrEHRNotFound            = fmt.Errorf("EHR not found")
-	ErrEHRAlreadyExists       = fmt.Errorf("EHR already exists")
-	ErrEHRStatusNotFound      = fmt.Errorf("EHR Status not found")
-	ErrEHRStatusAlreadyExists = fmt.Errorf("EHR Status already exists")
+	ErrEHRNotFound              = fmt.Errorf("EHR not found")
+	ErrEHRAlreadyExists         = fmt.Errorf("EHR already exists")
+	ErrEHRStatusNotFound        = fmt.Errorf("EHR Status not found")
+	ErrEHRStatusAlreadyExists   = fmt.Errorf("EHR Status already exists")
+	ErrCompositionAlreadyExists = fmt.Errorf("composition already exists")
+	ErrCompositionNotFound      = fmt.Errorf("composition not found")
 )
 
 type EHRService struct {
@@ -54,8 +56,8 @@ func (s *EHRService) CreateEHRWithID(ctx context.Context, ehrStatus util.Optiona
 		}
 
 		// Check if EHR Status UID is already exists
-		var exists bool
-		if err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM tbl_openehr_ehr_status WHERE id = $1)", ehrStatusID).Scan(&exists); err != nil {
+		exists, err := s.EhrStatusExists(ctx, ehrStatusID)
+		if err != nil {
 			return openehr.EHR{}, fmt.Errorf("failed to check if EHR Status UID exists: %w", err)
 		}
 		if exists {
@@ -448,6 +450,16 @@ func (s *EHRService) DeleteMultipleEHRs(ctx context.Context, ids []string) error
 	return nil
 }
 
+func (s *EHRService) EhrStatusExists(ctx context.Context, id string) (bool, error) {
+	query := `SELECT EXISTS (SELECT 1 FROM tbl_openehr_ehr_status WHERE id = $1)`
+	args := []any{id}
+	var exists bool
+	if err := s.DB.QueryRow(ctx, query, args...).Scan(&exists); err != nil {
+		return false, fmt.Errorf("failed to check if EHR Status exists in database: %w", err)
+	}
+	return exists, nil
+}
+
 func (s *EHRService) GetRawEHRStatus(ctx context.Context, ehrID string, filterOnTime time.Time, filterOnVersionID string) ([]byte, error) {
 	// Check if EHR exists
 	exists, err := s.CheckEHRExists(ctx, ehrID)
@@ -542,6 +554,15 @@ func (s *EHRService) UpdateEHRStatus(ctx context.Context, ehrID string, newStatu
 		return fmt.Errorf("EHR Status UID %s does not belong to EHR ID %s", versionedEhrStatusId, ehrID)
 	}
 
+	// Check if EHR Status exists
+	exists, err := s.EhrStatusExists(ctx, ehrStatusId)
+	if err != nil {
+		return fmt.Errorf("failed to check existing EHR Status: %w", err)
+	}
+	if !exists {
+		return ErrEHRStatusNotFound
+	}
+
 	// Prepare Original Version of EHR Status
 	newEhrStatusVersion := openehr.ORIGINAL_VERSION{
 		UID: openehr.OBJECT_VERSION_ID{
@@ -634,7 +655,12 @@ func (s *EHRService) GetRawVersionedEHRStatus(ctx context.Context, ehrID string)
 	}
 
 	// Fetch Versioned EHR Status
-	query := `SELECT vo.data FROM tbl_openehr_versioned_object vo WHERE vo.ehr_id = $1 AND vo.data->>'_type' = $2`
+	query := `
+		SELECT vo.data 
+		FROM tbl_openehr_versioned_object vo 
+		WHERE vo.ehr_id = $1 AND vo.data->>'_type' = $2
+		LIMIT 1
+	`
 	args := []any{ehrID, openehr.VERSIONED_EHR_STATUS_MODEL_NAME}
 	row := s.DB.QueryRow(ctx, query, args...)
 
@@ -760,4 +786,660 @@ func (s *EHRService) GetRawVersionedEHRStatusByVersionID(ctx context.Context, eh
 	}
 
 	return rawEhrStatusJSON, nil
+}
+
+func (s *EHRService) ExistsEHRComposition(ctx context.Context, compositionID string) (bool, error) {
+	// Check if Composition Exists
+	var existsComp bool
+	if err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM tbl_openehr_composition WHERE id = $1)", compositionID).Scan(&existsComp); err != nil {
+		return false, fmt.Errorf("failed to check if Composition UID exists: %w", err)
+	}
+
+	return existsComp, nil
+}
+
+func (s *EHRService) CreateComposition(ctx context.Context, ehrID string, composition openehr.COMPOSITION) (openehr.COMPOSITION, error) {
+	// Check if EHR exists
+	exists, err := s.CheckEHRExists(ctx, ehrID)
+	if err != nil {
+		return openehr.COMPOSITION{}, fmt.Errorf("failed to check existing EHR: %w", err)
+	}
+	if !exists {
+		return openehr.COMPOSITION{}, ErrEHRNotFound
+	}
+
+	if !composition.UID.E {
+		composition.UID = util.Some(openehr.X_UID_BASED_ID{
+			Value: &openehr.OBJECT_VERSION_ID{
+				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
+				Value: fmt.Sprintf("%s::gopenehr::1", uuid.NewString()),
+			},
+		})
+	} else {
+		switch v := composition.UID.V.Value.(type) {
+		case *openehr.OBJECT_VERSION_ID:
+			// OK
+		default:
+			return openehr.COMPOSITION{}, fmt.Errorf("composition UID must be of type OBJECT_VERSION_ID, got %T", v)
+		}
+
+		// Check if Composition Exists
+		existsComp, err := s.ExistsEHRComposition(ctx, composition.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value)
+		if err != nil {
+			return openehr.COMPOSITION{}, fmt.Errorf("failed to check if Composition exists: %w", err)
+		}
+		if existsComp {
+			return openehr.COMPOSITION{}, ErrCompositionAlreadyExists
+		}
+	}
+
+	// Prepare Versioned Composition
+	versionedComposition := openehr.VERSIONED_COMPOSITION{
+		UID: openehr.HIER_OBJECT_ID{
+			Value: strings.Split(composition.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, "::")[0],
+		},
+		OwnerID: openehr.OBJECT_REF{
+			Namespace: config.NAMESPACE_LOCAL,
+			Type:      openehr.EHR_MODEL_NAME,
+			ID: openehr.X_OBJECT_ID{
+				Value: &openehr.HIER_OBJECT_ID{
+					Type_: util.Some(openehr.HIER_OBJECT_ID_MODEL_NAME),
+					Value: ehrID,
+				},
+			},
+		},
+		TimeCreated: openehr.DV_DATE_TIME{
+			Value: time.Now().UTC().Format(time.RFC3339),
+		},
+	}
+
+	if errs := versionedComposition.Validate("$"); len(errs) > 0 {
+		return openehr.COMPOSITION{}, fmt.Errorf("validation errors for new Versioned Composition: %v", errs)
+	}
+
+	versionedComposition.SetModelName()
+
+	// Prepare Original Version of Composition
+	compositionVersion := openehr.ORIGINAL_VERSION{
+		UID: openehr.OBJECT_VERSION_ID{
+			Value: composition.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value,
+		},
+		LifecycleState: openehr.DV_CODED_TEXT{
+			Value: terminology.VersionLifecycleStateNames[terminology.VERSION_LIFECYCLE_STATE_CODE_COMPLETE],
+			DefiningCode: openehr.CODE_PHRASE{
+				CodeString: terminology.VERSION_LIFECYCLE_STATE_CODE_COMPLETE,
+				TerminologyID: openehr.TERMINOLOGY_ID{
+					Value: terminology.VERSION_LIFECYCLE_STATE_TERMINOLOGY_ID_OPENEHR,
+				},
+			},
+		},
+		Data: &composition,
+	}
+
+	if errs := compositionVersion.Validate("$"); len(errs) > 0 {
+		return openehr.COMPOSITION{}, fmt.Errorf("validation errors for new Composition Version: %v", errs)
+	}
+
+	compositionVersion.SetModelName()
+
+	// Prepare Contribution
+	contribution := openehr.CONTRIBUTION{
+		UID: openehr.HIER_OBJECT_ID{
+			Value: uuid.NewString(),
+		},
+		Versions: []openehr.OBJECT_REF{
+			{
+				Namespace: config.NAMESPACE_LOCAL,
+				Type:      openehr.COMPOSITION_MODEL_NAME,
+				ID: openehr.X_OBJECT_ID{
+					Value: &compositionVersion.UID,
+				},
+			},
+		},
+		Audit: openehr.AUDIT_DETAILS{
+			SystemID:      config.SYSTEM_ID_GOPENEHR,
+			TimeCommitted: openehr.DV_DATE_TIME{Value: time.Now().UTC().Format(time.RFC3339)},
+			ChangeType: openehr.DV_CODED_TEXT{
+				Value: terminology.GetAuditChangeTypeName(terminology.AUDIT_CHANGE_TYPE_CODE_CREATION),
+				DefiningCode: openehr.CODE_PHRASE{
+					CodeString: terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
+					TerminologyID: openehr.TERMINOLOGY_ID{
+						Value: terminology.AUDIT_CHANGE_TYPE_TERMINOLOGY_ID_OPENEHR,
+					},
+				},
+			},
+			Description: util.Some(openehr.DV_TEXT{
+				Value: "Composition created",
+			}),
+			Committer: openehr.X_PARTY_PROXY{
+				Value: &openehr.PARTY_SELF{
+					Type_: util.Some(openehr.PARTY_SELF_MODEL_NAME),
+				}, // TODO make this configurable, could also be set to internal person
+			},
+		},
+	}
+
+	if errs := contribution.Validate("$"); len(errs) > 0 {
+		return openehr.COMPOSITION{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
+	}
+
+	contribution.SetModelName()
+
+	// Begin transaction
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return openehr.COMPOSITION{}, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if err := tx.Rollback(ctx); err != nil && err != database.ErrTxClosed {
+			s.Logger.ErrorContext(ctx, "Failed to rollback transaction", "error", err)
+		}
+	}()
+
+	// Insert Versioned Composition
+	query := `INSERT INTO tbl_openehr_versioned_object (id, ehr_id, data) VALUES ($1, $2, $3)`
+	args := []any{versionedComposition.UID.Value, ehrID, versionedComposition}
+	if _, err := tx.Exec(ctx, query, args...); err != nil {
+		return openehr.COMPOSITION{}, fmt.Errorf("failed to insert versioned composition into the database: %w", err)
+	}
+
+	// Insert Composition Version
+	query = `INSERT INTO tbl_openehr_composition (id, versioned_object_id, ehr_id, data) 
+		 VALUES ($1, $2, $3, $4)`
+	args = []any{compositionVersion.UID.Value, versionedComposition.UID.Value, ehrID, compositionVersion}
+	if _, err := tx.Exec(ctx, query, args...); err != nil {
+		return openehr.COMPOSITION{}, fmt.Errorf("failed to insert composition into the database: %w", err)
+	}
+
+	// Insert Contribution
+	query = `INSERT INTO tbl_openehr_contribution (id, ehr_id, data) VALUES ($1, $2, $3)`
+	args = []any{contribution.UID.Value, ehrID, contribution}
+	if _, err := tx.Exec(ctx, query, args...); err != nil {
+		return openehr.COMPOSITION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
+	}
+
+	// Update EHR
+	query = `UPDATE tbl_openehr_ehr 
+			SET data = jsonb_set(data, '{compositions}', 
+				COALESCE(data->'compositions', '[]'::jsonb) || to_jsonb($1::jsonb)
+			) 
+			WHERE id = $2`
+	compositionRef := openehr.OBJECT_REF{
+		Namespace: config.NAMESPACE_LOCAL,
+		Type:      openehr.VERSIONED_COMPOSITION_MODEL_NAME,
+		ID: openehr.X_OBJECT_ID{
+			Value: &openehr.HIER_OBJECT_ID{
+				Type_: util.Some(openehr.HIER_OBJECT_ID_MODEL_NAME),
+				Value: versionedComposition.UID.Value,
+			},
+		},
+	}
+	args = []any{compositionRef, ehrID}
+	if _, err := tx.Exec(ctx, query, args...); err != nil {
+		return openehr.COMPOSITION{}, fmt.Errorf("failed to update EHR with new composition reference: %w", err)
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		return openehr.COMPOSITION{}, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return composition, nil
+}
+
+func (s *EHRService) GetRawCompositionByID(ctx context.Context, ehrID, compositionID string) ([]byte, error) {
+	// Check if EHR exists
+	exists, err := s.CheckEHRExists(ctx, ehrID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing EHR: %w", err)
+	}
+	if !exists {
+		return nil, ErrEHRNotFound
+	}
+
+	// Fetch Composition by ID
+	query := `
+		SELECT c.data 
+		FROM tbl_openehr_composition c
+		WHERE c.ehr_id = $1 AND c.id = $2
+		LIMIT 1
+	`
+	args := []any{ehrID, compositionID}
+	row := s.DB.QueryRow(ctx, query, args...)
+
+	var rawCompositionJSON []byte
+	if err := row.Scan(&rawCompositionJSON); err != nil {
+		if err == database.ErrNoRows {
+			return nil, ErrCompositionNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch Composition by ID from database: %w", err)
+	}
+
+	return rawCompositionJSON, nil
+}
+
+func (s *EHRService) GetRawCurrentCompositionByVersionedObjectID(ctx context.Context, ehrID, versionedObjectID string) ([]byte, error) {
+	// Check if EHR exists
+	exists, err := s.CheckEHRExists(ctx, ehrID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing EHR: %w", err)
+	}
+	if !exists {
+		return nil, ErrEHRNotFound
+	}
+
+	// Fetch Composition by Versioned Object ID
+	query := `
+		SELECT c.data 
+		FROM tbl_openehr_composition c
+		WHERE c.ehr_id = $1 AND c.versioned_object_id = $2
+		ORDER BY c.created_at DESC
+		LIMIT 1
+	`
+	args := []any{ehrID, versionedObjectID}
+	row := s.DB.QueryRow(ctx, query, args...)
+
+	var rawCompositionJSON []byte
+	if err := row.Scan(&rawCompositionJSON); err != nil {
+		if err == database.ErrNoRows {
+			return nil, ErrCompositionNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch Composition by Versioned Object ID from database: %w", err)
+	}
+
+	return rawCompositionJSON, nil
+}
+
+func (s *EHRService) UpdateCompositionByID(ctx context.Context, ehrID string, updatedComposition openehr.COMPOSITION) error {
+	// Check if EHR exists
+	exists, err := s.CheckEHRExists(ctx, ehrID)
+	if err != nil {
+		return fmt.Errorf("failed to check existing EHR: %w", err)
+	}
+	if !exists {
+		return ErrEHRNotFound
+	}
+
+	// Validate updated Composition UID
+	if errs := updatedComposition.Validate("$"); len(errs) > 0 {
+		return fmt.Errorf("validation errors for updated Composition UID: %v", errs)
+	}
+
+	if !updatedComposition.UID.E {
+		return fmt.Errorf("composition UID must be set for update")
+	}
+
+	// Check if Composition exists
+	existsComp, err := s.ExistsEHRComposition(ctx, updatedComposition.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value)
+	if err != nil {
+		return fmt.Errorf("failed to check if Composition exists: %w", err)
+	}
+	if existsComp {
+		return ErrCompositionAlreadyExists
+	}
+
+	if errs := updatedComposition.Validate("$"); len(errs) > 0 {
+		return fmt.Errorf("validation errors for updated Composition: %v", errs)
+	}
+
+	// Prepare Original Version of Composition
+	compositionVersion := openehr.ORIGINAL_VERSION{
+		UID: *updatedComposition.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
+		LifecycleState: openehr.DV_CODED_TEXT{
+			Value: terminology.VersionLifecycleStateNames[terminology.VERSION_LIFECYCLE_STATE_CODE_COMPLETE],
+			DefiningCode: openehr.CODE_PHRASE{
+				CodeString: terminology.VERSION_LIFECYCLE_STATE_CODE_COMPLETE,
+				TerminologyID: openehr.TERMINOLOGY_ID{
+					Value: terminology.VERSION_LIFECYCLE_STATE_TERMINOLOGY_ID_OPENEHR,
+				},
+			},
+		},
+		Data: &updatedComposition,
+	}
+	compositionVersion.SetModelName()
+
+	// Just for ensurance that models are valid
+	if errs := compositionVersion.Validate("$"); len(errs) > 0 {
+		return fmt.Errorf("validation errors for new Composition Version: %v", errs)
+	}
+
+	// Prepare contribution
+	contribution := openehr.CONTRIBUTION{
+		UID: openehr.HIER_OBJECT_ID{
+			Value: uuid.NewString(),
+		},
+		Versions: []openehr.OBJECT_REF{
+			{
+				Namespace: config.NAMESPACE_LOCAL,
+				Type:      openehr.COMPOSITION_MODEL_NAME,
+				ID: openehr.X_OBJECT_ID{
+					Value: &compositionVersion.UID,
+				},
+			},
+		},
+		Audit: openehr.AUDIT_DETAILS{
+			SystemID:      config.SYSTEM_ID_GOPENEHR,
+			TimeCommitted: openehr.DV_DATE_TIME{Value: time.Now().UTC().Format(time.RFC3339)},
+			ChangeType: openehr.DV_CODED_TEXT{
+				Value: terminology.GetAuditChangeTypeName(terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION),
+				DefiningCode: openehr.CODE_PHRASE{
+					CodeString: terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
+					TerminologyID: openehr.TERMINOLOGY_ID{
+						Value: terminology.AUDIT_CHANGE_TYPE_TERMINOLOGY_ID_OPENEHR,
+					},
+				},
+			},
+			Description: util.Some(openehr.DV_TEXT{
+				Value: "Composition updated",
+			}),
+			Committer: openehr.X_PARTY_PROXY{
+				Value: &openehr.PARTY_SELF{
+					Type_: util.Some(openehr.PARTY_SELF_MODEL_NAME),
+				}, // TODO make this configurable, could also be set to internal person
+			},
+		},
+	}
+	contribution.SetModelName()
+
+	if errs := contribution.Validate("$"); len(errs) > 0 {
+		return fmt.Errorf("validation errors for new Contribution: %v", errs)
+	}
+
+	// Insert Composition Version
+	query := `INSERT INTO tbl_openehr_composition (id, versioned_object_id, ehr_id, data) 
+		 VALUES ($1, $2, $3, $4)`
+	args := []any{compositionVersion.UID.Value, strings.Split(compositionVersion.UID.Value, "::")[0], ehrID, compositionVersion}
+	if _, err := s.DB.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("failed to insert updated composition into the database: %w", err)
+	}
+
+	// Insert Contribution
+	query = `INSERT INTO tbl_openehr_contribution (id, ehr_id, data) VALUES ($1, $2, $3)`
+	args = []any{contribution.UID.Value, ehrID, contribution}
+	if _, err := s.DB.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("failed to insert contribution into the database: %w", err)
+	}
+
+	return nil
+}
+
+func (s *EHRService) DeleteCompositionByID(ctx context.Context, ehrID, compositionID string) error {
+	// Check if EHR exists
+	exists, err := s.CheckEHRExists(ctx, ehrID)
+	if err != nil {
+		return fmt.Errorf("failed to check existing EHR: %w", err)
+	}
+	if !exists {
+		return ErrEHRNotFound
+	}
+
+	// Check if Composition Exists
+	existsComp, err := s.ExistsEHRComposition(ctx, compositionID)
+	if err != nil {
+		return fmt.Errorf("failed to check if Composition exists: %w", err)
+	}
+	if !existsComp {
+		return ErrCompositionNotFound
+	}
+
+	// Create contribution for deletion
+	contribution := openehr.CONTRIBUTION{
+		UID: openehr.HIER_OBJECT_ID{
+			Value: uuid.NewString(),
+		},
+		Versions: []openehr.OBJECT_REF{
+			{
+				Namespace: config.NAMESPACE_LOCAL,
+				Type:      openehr.COMPOSITION_MODEL_NAME,
+				ID: openehr.X_OBJECT_ID{
+					Value: &openehr.OBJECT_VERSION_ID{
+						Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
+						Value: compositionID,
+					},
+				},
+			},
+		},
+		Audit: openehr.AUDIT_DETAILS{
+			SystemID:      config.SYSTEM_ID_GOPENEHR,
+			TimeCommitted: openehr.DV_DATE_TIME{Value: time.Now().UTC().Format(time.RFC3339)},
+			ChangeType: openehr.DV_CODED_TEXT{
+				Value: terminology.GetAuditChangeTypeName(terminology.AUDIT_CHANGE_TYPE_CODE_DELETED),
+				DefiningCode: openehr.CODE_PHRASE{
+					CodeString: terminology.AUDIT_CHANGE_TYPE_CODE_DELETED,
+					TerminologyID: openehr.TERMINOLOGY_ID{
+						Value: terminology.AUDIT_CHANGE_TYPE_TERMINOLOGY_ID_OPENEHR,
+					},
+				},
+			},
+			Description: util.Some(openehr.DV_TEXT{
+				Value: "Composition deleted",
+			}),
+			Committer: openehr.X_PARTY_PROXY{
+				Value: &openehr.PARTY_SELF{
+					Type_: util.Some(openehr.PARTY_SELF_MODEL_NAME),
+				}, // TODO make this configurable, could also be set to internal person
+			},
+		},
+	}
+	contribution.SetModelName()
+
+	if errs := contribution.Validate("$"); len(errs) > 0 {
+		return fmt.Errorf("validation errors for new Contribution: %v", errs)
+	}
+
+	// Start transaction
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if rbErr := tx.Rollback(ctx); rbErr != nil && rbErr != database.ErrTxClosed {
+			s.Logger.ErrorContext(ctx, "failed to rollback transaction", "error", rbErr)
+		}
+	}()
+
+	// Delete Composition
+	query := `DELETE FROM tbl_openehr_composition WHERE ehr_id = $1 AND id = $2`
+	args := []any{ehrID, compositionID}
+	if _, err := tx.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("failed to delete Composition from database: %w", err)
+	}
+
+	// Insert Contribution
+	query = `INSERT INTO tbl_openehr_contribution (id, ehr_id, data) VALUES ($1, $2, $3)`
+	args = []any{contribution.UID.Value, ehrID, contribution}
+	if _, err := tx.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("failed to insert contribution into the database: %w", err)
+	}
+
+	// Cleanup if there are no more versions of the Versioned Composition
+	var existsVersions bool
+	query = `
+		SELECT EXISTS (
+			SELECT 1 FROM tbl_openehr_composition c
+			WHERE c.versioned_object_id = $1
+		)
+	`
+	versionedObjectID := strings.Split(compositionID, "::")[0]
+	args = []any{versionedObjectID}
+	if err := tx.QueryRow(ctx, query, args...).Scan(&existsVersions); err != nil {
+		return fmt.Errorf("failed to check for existing Composition versions: %w", err)
+	}
+
+	if !existsVersions {
+		// Delete Versioned Composition
+		query = `DELETE FROM tbl_openehr_versioned_object WHERE ehr_id = $1 AND id = $2`
+		args = []any{ehrID, versionedObjectID}
+		if _, err := tx.Exec(ctx, query, args...); err != nil {
+			return fmt.Errorf("failed to delete Versioned Composition from database: %w", err)
+		}
+
+		// Also remove reference from EHR
+		query = `UPDATE tbl_openehr_ehr 
+			SET data = jsonb_set(data, '{compositions}', 
+				COALESCE(
+					(
+						SELECT jsonb_agg(comp) 
+						FROM jsonb_array_elements(data->'compositions') AS comp
+						WHERE comp->'id'->>'value' != $1
+					), '[]'::jsonb
+				)
+			) 
+			WHERE id = $2`
+		args = []any{versionedObjectID, ehrID}
+		if _, err := s.DB.Exec(ctx, query, args...); err != nil {
+			return fmt.Errorf("failed to update EHR to remove composition reference: %w", err)
+		}
+	}
+
+	// Commit transaction
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (s *EHRService) GetRawVersionedCompositionByID(ctx context.Context, ehrID, versionedObjectID string) ([]byte, error) {
+	// Check if EHR exists
+	exists, err := s.CheckEHRExists(ctx, ehrID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing EHR: %w", err)
+	}
+	if !exists {
+		return nil, ErrEHRNotFound
+	}
+
+	// Fetch Versioned Composition by ID
+	query := `
+		SELECT vo.data 
+		FROM tbl_openehr_versioned_object vo
+		WHERE vo.ehr_id = $1 AND vo.id = $2 AND vo.data->>'_type' = $3
+		LIMIT 1
+	`
+	args := []any{ehrID, versionedObjectID, openehr.VERSIONED_COMPOSITION_MODEL_NAME}
+	row := s.DB.QueryRow(ctx, query, args...)
+
+	var rawVersionedCompositionJSON []byte
+	if err := row.Scan(&rawVersionedCompositionJSON); err != nil {
+		if err == database.ErrNoRows {
+			return nil, ErrCompositionNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch Versioned Composition by ID from database: %w", err)
+	}
+
+	return rawVersionedCompositionJSON, nil
+}
+
+func (s *EHRService) GetRawVersionedCompositionRevisionHistory(ctx context.Context, ehrID, versionedObjectID string) ([]byte, error) {
+	// Check if EHR exists
+	exists, err := s.CheckEHRExists(ctx, ehrID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing EHR: %w", err)
+	}
+	if !exists {
+		return nil, ErrEHRNotFound
+	}
+
+	// Fetch Revision History
+	// Build array of REVISION_HISTORY_ITEM objects
+	query := `
+		SELECT jsonb_build_object(
+			'items', jsonb_agg(
+				jsonb_build_object(
+					'version_id', jsonb_build_object(
+						'value', version_id
+					),
+					'audits', audits
+				)
+				ORDER BY version_id
+			)
+		)
+		FROM (
+			SELECT 
+				version->'id'->>'value' as version_id,
+				jsonb_agg(c.data->'audit' ORDER BY c.data->'audit'->'time_committed'->>'value') as audits
+			FROM tbl_openehr_contribution c,
+				jsonb_array_elements(c.data->'versions') as version
+			WHERE c.ehr_id = $1
+				AND version->>'type' = 'COMPOSITION'
+				AND version->'id'->>'value' LIKE $2 || '::%'
+			GROUP BY version->'id'->>'value'
+		) grouped
+	`
+	args := []any{ehrID, versionedObjectID}
+	row := s.DB.QueryRow(ctx, query, args...)
+
+	var rawRevisionHistoryDataJSON []byte
+	if err := row.Scan(&rawRevisionHistoryDataJSON); err != nil {
+		if err == database.ErrNoRows {
+			return nil, ErrCompositionNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch Revision History from database: %w", err)
+	}
+
+	return rawRevisionHistoryDataJSON, nil
+}
+
+func (s *EHRService) GetRawVersionedCompositionVersionAtTime(ctx context.Context, ehrID, versionedObjectID string, atTime time.Time) ([]byte, error) {
+	// Check if EHR exists
+	exists, err := s.CheckEHRExists(ctx, ehrID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing EHR: %w", err)
+	}
+	if !exists {
+		return nil, ErrEHRNotFound
+	}
+
+	// Fetch Composition at given time
+	var query strings.Builder
+	var args []any
+	argNum := 1
+
+	query.WriteString(`SELECT data FROM tbl_openehr_composition WHERE ehr_id = $1 AND versioned_object_id = $2 `)
+	args = []any{ehrID, versionedObjectID}
+	argNum += 2
+
+	if !atTime.IsZero() {
+		query.WriteString(fmt.Sprintf(` AND created_at <= $%d`, argNum))
+		args = append(args, atTime)
+	}
+
+	query.WriteString(` ORDER BY created_at DESC LIMIT 1`)
+	row := s.DB.QueryRow(ctx, query.String(), args...)
+
+	var rawCompositionJSON []byte
+	if err := row.Scan(&rawCompositionJSON); err != nil {
+		if err == database.ErrNoRows {
+			return nil, ErrCompositionNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch Composition at time from database: %w", err)
+	}
+
+	return rawCompositionJSON, nil
+}
+
+func (s *EHRService) GetRawVersionedCompositionByVersionID(ctx context.Context, ehrID, versionID string) ([]byte, error) {
+	// Check if EHR exists
+	exists, err := s.CheckEHRExists(ctx, ehrID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing EHR: %w", err)
+	}
+	if !exists {
+		return nil, ErrEHRNotFound
+	}
+
+	// Fetch Composition by version ID
+	query := `SELECT data FROM tbl_openehr_composition WHERE ehr_id = $1 AND id = $2`
+	args := []any{ehrID, versionID}
+	row := s.DB.QueryRow(ctx, query, args...)
+
+	var rawCompositionJSON []byte
+	if err := row.Scan(&rawCompositionJSON); err != nil {
+		if err == database.ErrNoRows {
+			return nil, ErrCompositionNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch Composition by version ID from database: %w", err)
+	}
+
+	return rawCompositionJSON, nil
 }

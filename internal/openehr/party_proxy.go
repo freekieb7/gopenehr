@@ -67,7 +67,7 @@ func (x *X_PARTY_PROXY) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	t := extractor.MetaType
+	t := extractor.Type_
 	switch t {
 	case PARTY_SELF_MODEL_NAME:
 		x.Value = new(PARTY_SELF)

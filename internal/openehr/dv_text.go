@@ -191,7 +191,7 @@ func (a *X_DV_TEXT) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	t := extractor.MetaType
+	t := extractor.Type_
 	switch t {
 	case DV_TEXT_MODEL_NAME, "":
 		a.Value = new(DV_TEXT)

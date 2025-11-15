@@ -1,0 +1,170 @@
+package openehr
+
+import (
+	"fmt"
+
+	"github.com/freekieb7/gopenehr/internal/openehr/util"
+)
+
+const EVALUATION_MODEL_NAME string = "EVALUATION"
+
+type EVALUATION struct {
+	Type_               util.Optional[string]           `json:"_type,omitzero"`
+	Name                X_DV_TEXT                       `json:"name"`
+	ArchetypeNodeID     string                          `json:"archetype_node_id"`
+	UID                 util.Optional[X_UID_BASED_ID]   `json:"uid,omitzero"`
+	Links               util.Optional[[]LINK]           `json:"links,omitzero"`
+	ArchetypeDetails    util.Optional[ARCHETYPED]       `json:"archetype_details,omitzero"`
+	FeederAudit         util.Optional[FEEDER_AUDIT]     `json:"feeder_audit,omitzero"`
+	Language            CODE_PHRASE                     `json:"language"`
+	Encoding            CODE_PHRASE                     `json:"encoding"`
+	OtherParticipations util.Optional[[]PARTICIPATION]  `json:"other_participations,omitzero"`
+	WorkflowID          util.Optional[OBJECT_REF]       `json:"workflow_id,omitzero"`
+	Subject             X_PARTY_PROXY                   `json:"subject"`
+	Provider            util.Optional[X_PARTY_PROXY]    `json:"provider,omitzero"`
+	Protocol            util.Optional[X_ITEM_STRUCTURE] `json:"protocol,omitzero"`
+	GuidelineID         util.Optional[OBJECT_REF]       `json:"guideline_id,omitzero"`
+	Data                X_ITEM_STRUCTURE                `json:"data"`
+}
+
+func (e EVALUATION) isContentItemModel() {}
+
+func (e EVALUATION) HasModelName() bool {
+	return e.Type_.E
+}
+
+func (e *EVALUATION) SetModelName() {
+	e.Type_ = util.Some(EVALUATION_MODEL_NAME)
+	e.Name.SetModelName()
+	if e.UID.E {
+		e.UID.V.SetModelName()
+	}
+	if e.Links.E {
+		for i := range e.Links.V {
+			e.Links.V[i].SetModelName()
+		}
+	}
+	if e.ArchetypeDetails.E {
+		e.ArchetypeDetails.V.SetModelName()
+	}
+	if e.FeederAudit.E {
+		e.FeederAudit.V.SetModelName()
+	}
+	e.Language.SetModelName()
+	e.Encoding.SetModelName()
+	if e.OtherParticipations.E {
+		for i := range e.OtherParticipations.V {
+			e.OtherParticipations.V[i].SetModelName()
+		}
+	}
+	if e.WorkflowID.E {
+		e.WorkflowID.V.SetModelName()
+	}
+	e.Subject.SetModelName()
+	if e.Provider.E {
+		e.Provider.V.SetModelName()
+	}
+	if e.Protocol.E {
+		e.Protocol.V.SetModelName()
+	}
+	if e.GuidelineID.E {
+		e.GuidelineID.V.SetModelName()
+	}
+	e.Data.SetModelName()
+}
+
+func (e *EVALUATION) Validate(path string) []util.ValidationError {
+	var errs []util.ValidationError
+	var attrPath string
+
+	// Validate _type
+	if e.Type_.E && e.Type_.V != EVALUATION_MODEL_NAME {
+		attrPath = path + "._type"
+		errs = append(errs, util.ValidationError{
+			Model:          EVALUATION_MODEL_NAME,
+			Path:           attrPath,
+			Message:        "_type must be " + EVALUATION_MODEL_NAME,
+			Recommendation: "Set _type to " + EVALUATION_MODEL_NAME,
+		})
+	}
+
+	// Validate name
+	attrPath = path + ".name"
+	errs = append(errs, e.Name.Validate(attrPath)...)
+
+	// Validate uid
+	if e.UID.E {
+		attrPath = path + ".uid"
+		errs = append(errs, e.UID.V.Validate(attrPath)...)
+	}
+
+	// Validate links
+	if e.Links.E {
+		for i := range e.Links.V {
+			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
+			errs = append(errs, e.Links.V[i].Validate(attrPath)...)
+		}
+	}
+
+	// Validate archetype_details
+	if e.ArchetypeDetails.E {
+		attrPath = path + ".archetype_details"
+		errs = append(errs, e.ArchetypeDetails.V.Validate(attrPath)...)
+	}
+
+	// Validate feeder_audit
+	if e.FeederAudit.E {
+		attrPath = path + ".feeder_audit"
+		errs = append(errs, e.FeederAudit.V.Validate(attrPath)...)
+	}
+
+	// Validate language
+	attrPath = path + ".language"
+	errs = append(errs, e.Language.Validate(attrPath)...)
+
+	// Validate encoding
+	attrPath = path + ".encoding"
+	errs = append(errs, e.Encoding.Validate(attrPath)...)
+
+	// Validate other_participations
+	if e.OtherParticipations.E {
+		for i := range e.OtherParticipations.V {
+			attrPath = fmt.Sprintf("%s.other_participations[%d]", path, i)
+			errs = append(errs, e.OtherParticipations.V[i].Validate(attrPath)...)
+		}
+	}
+
+	// Validate workflow_id
+	if e.WorkflowID.E {
+		attrPath = path + ".workflow_id"
+		errs = append(errs, e.WorkflowID.V.Validate(attrPath)...)
+	}
+
+	// Validate subject
+	attrPath = path + ".subject"
+	errs = append(errs, e.Subject.Validate(attrPath)...)
+
+	// Validate provider
+	if e.Provider.E {
+		attrPath = path + ".provider"
+		errs = append(errs, e.Provider.V.Validate(attrPath)...)
+	}
+
+	// Validate protocol
+	if e.Protocol.E {
+		attrPath = path + ".protocol"
+		errs = append(errs, e.Protocol.V.Validate(attrPath)...)
+	}
+
+	// Validate guideline_id
+	if e.GuidelineID.E {
+		attrPath = path + ".guideline_id"
+		errs = append(errs, e.GuidelineID.V.Validate(attrPath)...)
+	}
+
+	// Validate data
+	attrPath = path + ".data"
+	errs = append(errs, e.Data.Validate(attrPath)...)
+
+	return errs
+}

@@ -1744,7 +1744,6 @@ func (s *EHRService) GetFolderInDirectoryVersionAsJSON(ctx context.Context, ehrI
 	if filterVersionID != "" {
 		query.WriteString(fmt.Sprintf(` AND id = $%d`, argNum))
 		args = append(args, filterVersionID)
-		argNum++
 	}
 
 	query.WriteString(` ORDER BY created_at DESC LIMIT 1`)

@@ -7,10 +7,6 @@ ARG VERSION=dev
 ARG GIT_COMMIT=unknown
 ARG BUILD_TIME=unknown
 
-# Cache deps
-COPY go.mod go.sum ./
-RUN go mod download
-
 # Copy source
 COPY . .
 

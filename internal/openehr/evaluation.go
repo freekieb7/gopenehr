@@ -27,9 +27,9 @@ type EVALUATION struct {
 	Data                X_ITEM_STRUCTURE                `json:"data"`
 }
 
-func (e EVALUATION) isContentItemModel() {}
+func (e *EVALUATION) isContentItemModel() {}
 
-func (e EVALUATION) HasModelName() bool {
+func (e *EVALUATION) HasModelName() bool {
 	return e.Type_.E
 }
 

@@ -14,9 +14,9 @@ type GENERIC_ID struct {
 	Scheme string                `json:"scheme"`
 }
 
-func (g GENERIC_ID) isObjectIDModel() {}
+func (g *GENERIC_ID) isObjectIDModel() {}
 
-func (g GENERIC_ID) HasModelName() bool {
+func (g *GENERIC_ID) HasModelName() bool {
 	return g.Type_.E
 }
 
@@ -24,7 +24,7 @@ func (g *GENERIC_ID) SetModelName() {
 	g.Type_ = util.Some(GENERIC_ID_MODEL_NAME)
 }
 
-func (g GENERIC_ID) Validate(path string) []util.ValidationError {
+func (g *GENERIC_ID) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

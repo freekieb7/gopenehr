@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-const SYSTEM_ID_GOPENEHR = "gopenehr-system"
+const SYSTEM_ID_GOPENEHR = "gopenehr"
 const NAMESPACE_LOCAL = "local"
 
 var (
@@ -26,6 +26,10 @@ func (e Environment) IsValid() bool {
 	default:
 		return false
 	}
+}
+
+func (e Environment) IsProduction() bool {
+	return e == Production
 }
 
 type Config struct {

@@ -19,9 +19,9 @@ type ITEM_TREE struct {
 	Items            util.Optional[[]X_ITEM]       `json:"items,omitzero"`
 }
 
-func (i ITEM_TREE) isItemStructureModel() {}
+func (i *ITEM_TREE) isItemStructureModel() {}
 
-func (i ITEM_TREE) HasModelName() bool {
+func (i *ITEM_TREE) HasModelName() bool {
 	return i.Type_.E
 }
 
@@ -49,7 +49,7 @@ func (i *ITEM_TREE) SetModelName() {
 	}
 }
 
-func (i ITEM_TREE) Validate(path string) []util.ValidationError {
+func (i *ITEM_TREE) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

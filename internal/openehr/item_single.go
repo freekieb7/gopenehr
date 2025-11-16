@@ -15,9 +15,9 @@ type ITEM_SINGLE struct {
 	Item             ELEMENT                       `json:"item"`
 }
 
-func (i ITEM_SINGLE) isItemStructureModel() {}
+func (i *ITEM_SINGLE) isItemStructureModel() {}
 
-func (i ITEM_SINGLE) HasModelName() bool {
+func (i *ITEM_SINGLE) HasModelName() bool {
 	return i.Type_.E
 }
 

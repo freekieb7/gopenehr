@@ -19,9 +19,9 @@ type ITEM_LIST struct {
 	Items            util.Optional[[]ELEMENT]      `json:"items,omitzero"`
 }
 
-func (i ITEM_LIST) isItemStructureModel() {}
+func (i *ITEM_LIST) isItemStructureModel() {}
 
-func (i ITEM_LIST) HasModelName() bool {
+func (i *ITEM_LIST) HasModelName() bool {
 	return i.Type_.E
 }
 

@@ -35,22 +35,24 @@ CREATE INDEX idx_openehr_contribution_data_type ON tbl_openehr_contribution USIN
     jsonb_path_query_array(data, '$.**._type')
 );
 
-CREATE TABLE tbl_openehr_contribution_version (
-    contribution_id TEXT REFERENCES tbl_openehr_contribution(id) ON DELETE CASCADE,
-    object_id TEXT NOT NULL
-);
+-- CREATE TABLE tbl_openehr_contribution_version (
+--     contribution_id TEXT REFERENCES tbl_openehr_contribution(id) ON DELETE CASCADE,
+--     object_id TEXT NOT NULL
+-- );
 
-CREATE INDEX idx_openehr_contribution_version_contribution_id ON tbl_openehr_contribution_version(contribution_id);
-CREATE INDEX idx_openehr_contribution_version_object_id ON tbl_openehr_contribution_version(object_id);
+-- CREATE INDEX idx_openehr_contribution_version_contribution_id ON tbl_openehr_contribution_version(contribution_id);
+-- CREATE INDEX idx_openehr_contribution_version_object_id ON tbl_openehr_contribution_version(object_id);
 
 CREATE TABLE tbl_openehr_versioned_object (
     id TEXT PRIMARY KEY,
     ehr_id TEXT REFERENCES tbl_openehr_ehr(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
     data JSONB NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_openehr_versioned_object_ehr_id ON tbl_openehr_versioned_object(ehr_id);
+CREATE INDEX idx_openehr_versioned_object_type ON tbl_openehr_versioned_object(type);
 CREATE INDEX idx_openehr_versioned_object_data ON tbl_openehr_versioned_object USING GIN (data);
 CREATE INDEX idx_openehr_versioned_object_created_at ON tbl_openehr_versioned_object(created_at);
 CREATE INDEX idx_openehr_versioned_object_data_type ON tbl_openehr_versioned_object USING GIN (
@@ -121,13 +123,13 @@ CREATE INDEX idx_openehr_folder_data_type ON tbl_openehr_folder USING GIN (
     jsonb_path_query_array(data, '$.**._type')
 );
 
-CREATE TABLE tbl_openehr_folder_item (
-    folder_id TEXT NOT NULL REFERENCES tbl_openehr_folder(id) ON DELETE CASCADE,
-    object_id TEXT NOT NULL
-);
+-- CREATE TABLE tbl_openehr_folder_item (
+--     folder_id TEXT NOT NULL REFERENCES tbl_openehr_folder(id) ON DELETE CASCADE,
+--     object_id TEXT NOT NULL
+-- );
 
-CREATE INDEX idx_openehr_folder_item_folder_id ON tbl_openehr_folder_item(folder_id);
-CREATE INDEX idx_openehr_folder_item_object_id ON tbl_openehr_folder_item(object_id);
+-- CREATE INDEX idx_openehr_folder_item_folder_id ON tbl_openehr_folder_item(folder_id);
+-- CREATE INDEX idx_openehr_folder_item_object_id ON tbl_openehr_folder_item(object_id);
 
 CREATE TABLE tbl_openehr_role (
     id TEXT PRIMARY KEY,
@@ -199,8 +201,8 @@ CREATE INDEX idx_openehr_organisation_data_type ON tbl_openehr_organisation USIN
     jsonb_path_query_array(data, '$.**._type')
 );
 
-CREATE TABLE tbl_patient_ehr_link (
-    patient_id TEXT NOT NULL REFERENCES tbl_openehr_person(id) ON DELETE CASCADE,
-    ehr_id TEXT NOT NULL REFERENCES tbl_openehr_ehr(id) ON DELETE CASCADE,
-    PRIMARY KEY (patient_id, ehr_id)
-);
+-- CREATE TABLE tbl_patient_ehr_link (
+--     patient_id TEXT NOT NULL REFERENCES tbl_openehr_person(id) ON DELETE CASCADE,
+--     ehr_id TEXT NOT NULL REFERENCES tbl_openehr_ehr(id) ON DELETE CASCADE,
+--     PRIMARY KEY (patient_id, ehr_id)
+-- );

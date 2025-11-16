@@ -19,9 +19,9 @@ type ITEM_TABLE struct {
 	Rows             util.Optional[[]CLUSTER]      `json:"rows,omitzero"`
 }
 
-func (i ITEM_TABLE) isItemStructureModel() {}
+func (i *ITEM_TABLE) isItemStructureModel() {}
 
-func (i ITEM_TABLE) HasModelName() bool {
+func (i *ITEM_TABLE) HasModelName() bool {
 	return i.Type_.E
 }
 
@@ -49,7 +49,7 @@ func (i *ITEM_TABLE) SetModelName() {
 	}
 }
 
-func (i ITEM_TABLE) Validate(path string) []util.ValidationError {
+func (i *ITEM_TABLE) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

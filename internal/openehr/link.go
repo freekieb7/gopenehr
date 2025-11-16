@@ -18,7 +18,7 @@ func (l *LINK) SetModelName() {
 	l.Target.SetModelName()
 }
 
-func (l LINK) Validate(path string) []util.ValidationError {
+func (l *LINK) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

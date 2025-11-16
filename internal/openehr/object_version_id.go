@@ -14,11 +14,11 @@ type OBJECT_VERSION_ID struct {
 	Value string                `json:"value"`
 }
 
-func (o OBJECT_VERSION_ID) isUidBasedIDModel() {}
+func (o *OBJECT_VERSION_ID) isUidBasedIDModel() {}
 
-func (o OBJECT_VERSION_ID) isObjectIDModel() {}
+func (o *OBJECT_VERSION_ID) isObjectIDModel() {}
 
-func (o OBJECT_VERSION_ID) HasModelName() bool {
+func (o *OBJECT_VERSION_ID) HasModelName() bool {
 	return o.Type_.E
 }
 
@@ -26,7 +26,7 @@ func (o *OBJECT_VERSION_ID) SetModelName() {
 	o.Type_ = util.Some(OBJECT_VERSION_ID_MODEL_NAME)
 }
 
-func (o OBJECT_VERSION_ID) Validate(path string) []util.ValidationError {
+func (o *OBJECT_VERSION_ID) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 
@@ -109,4 +109,12 @@ func (o OBJECT_VERSION_ID) Validate(path string) []util.ValidationError {
 
 func (o OBJECT_VERSION_ID) UID() string {
 	return strings.Split(o.Value, "::")[0]
+}
+
+func (o OBJECT_VERSION_ID) SystemID() string {
+	return strings.Split(o.Value, "::")[1]
+}
+
+func (o OBJECT_VERSION_ID) VersionTreeID() string {
+	return strings.Split(o.Value, "::")[2]
 }

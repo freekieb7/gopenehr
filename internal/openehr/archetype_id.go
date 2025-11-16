@@ -13,9 +13,9 @@ type ARCHETYPE_ID struct {
 	Value string                `json:"value"`
 }
 
-func (a ARCHETYPE_ID) isObjectIDModel() {}
+func (a *ARCHETYPE_ID) isObjectIDModel() {}
 
-func (a ARCHETYPE_ID) HasModelName() bool {
+func (a *ARCHETYPE_ID) HasModelName() bool {
 	return a.Type_.E
 }
 
@@ -23,7 +23,7 @@ func (a *ARCHETYPE_ID) SetModelName() {
 	a.Type_ = util.Some(ARCHETYPE_ID_MODEL_NAME)
 }
 
-func (a ARCHETYPE_ID) Validate(path string) []util.ValidationError {
+func (a *ARCHETYPE_ID) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

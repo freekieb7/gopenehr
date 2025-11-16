@@ -2,34 +2,34 @@ package openehr
 
 import "github.com/freekieb7/gopenehr/internal/openehr/util"
 
-const VERSIONED_EHR_ACCESS_MODEL_NAME string = "VERSIONED_EHR_ACCESS"
+const VERSIONED_PARTY_MODEL_NAME string = "VERSIONED_PARTY"
 
-type VERSIONED_EHR_ACCESS struct {
+type VERSIONED_PARTY struct {
 	Type_       util.Optional[string] `json:"_type,omitzero"`
 	UID         HIER_OBJECT_ID        `json:"uid"`
 	OwnerID     OBJECT_REF            `json:"owner_id"`
 	TimeCreated DV_DATE_TIME          `json:"time_created"`
 }
 
-func (v *VERSIONED_EHR_ACCESS) SetModelName() {
-	v.Type_ = util.Some(VERSIONED_EHR_ACCESS_MODEL_NAME)
+func (v *VERSIONED_PARTY) SetModelName() {
+	v.Type_ = util.Some(VERSIONED_PARTY_MODEL_NAME)
 	v.UID.SetModelName()
 	v.OwnerID.SetModelName()
 	v.TimeCreated.SetModelName()
 }
 
-func (v *VERSIONED_EHR_ACCESS) Validate(path string) []util.ValidationError {
+func (v *VERSIONED_PARTY) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 
 	// Validate _type
-	if v.Type_.E && v.Type_.V != VERSIONED_EHR_ACCESS_MODEL_NAME {
+	if v.Type_.E && v.Type_.V != VERSIONED_PARTY_MODEL_NAME {
 		attrPath = path + "._type"
 		errors = append(errors, util.ValidationError{
-			Model:          VERSIONED_EHR_ACCESS_MODEL_NAME,
+			Model:          VERSIONED_PARTY_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
-			Recommendation: "Ensure _type field is set to " + VERSIONED_EHR_ACCESS_MODEL_NAME,
+			Recommendation: "Ensure _type field is set to " + VERSIONED_PARTY_MODEL_NAME,
 		})
 	}
 

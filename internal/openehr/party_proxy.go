@@ -40,7 +40,7 @@ func (x *X_PARTY_PROXY) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x X_PARTY_PROXY) Validate(path string) []util.ValidationError {
+func (x *X_PARTY_PROXY) Validate(path string) []util.ValidationError {
 	var errs []util.ValidationError
 	var attrPath string
 

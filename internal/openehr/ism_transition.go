@@ -12,7 +12,7 @@ type ISM_TRANSITION struct {
 	Reason       util.Optional[X_DV_TEXT]     `json:"reason,omitzero"`
 }
 
-func (i ISM_TRANSITION) HasModelName() bool {
+func (i *ISM_TRANSITION) HasModelName() bool {
 	return i.Type_.E
 }
 

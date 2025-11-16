@@ -18,9 +18,9 @@ type DV_INTERVAL struct {
 	UpperIncluded  bool                  `json:"upper_included"`
 }
 
-func (d DV_INTERVAL) isDataValueModel() {}
+func (d *DV_INTERVAL) isDataValueModel() {}
 
-func (d DV_INTERVAL) HasModelName() bool {
+func (d *DV_INTERVAL) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -28,7 +28,7 @@ func (d *DV_INTERVAL) SetModelName() {
 	d.Type_ = util.Some(DV_INTERVAL_MODEL_NAME)
 }
 
-func (d DV_INTERVAL) Validate(path string) []util.ValidationError {
+func (d *DV_INTERVAL) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

@@ -21,9 +21,9 @@ type ACTIVITY struct {
 	Description       X_ITEM_STRUCTURE              `json:"description"`
 }
 
-func (a ACTIVITY) isContentItemModel() {}
+func (a *ACTIVITY) isContentItemModel() {}
 
-func (a ACTIVITY) HasModelName() bool {
+func (a *ACTIVITY) HasModelName() bool {
 	return a.Type_.E
 }
 

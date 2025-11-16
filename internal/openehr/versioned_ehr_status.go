@@ -18,7 +18,7 @@ func (v *VERSIONED_EHR_STATUS) SetModelName() {
 	v.TimeCreated.SetModelName()
 }
 
-func (v VERSIONED_EHR_STATUS) Validate(path string) []util.ValidationError {
+func (v *VERSIONED_EHR_STATUS) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

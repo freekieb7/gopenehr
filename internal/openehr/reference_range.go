@@ -14,7 +14,7 @@ type REFERENCE_RANGE struct {
 	Range   DV_INTERVAL           `json:"range"`
 }
 
-func (r REFERENCE_RANGE) HasModelName() bool {
+func (r *REFERENCE_RANGE) HasModelName() bool {
 	return r.Type_.E
 }
 
@@ -24,7 +24,7 @@ func (r *REFERENCE_RANGE) SetModelName() {
 	r.Range.SetModelName()
 }
 
-func (r REFERENCE_RANGE) Validate(path string) []util.ValidationError {
+func (r *REFERENCE_RANGE) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 
 	// Validate _type

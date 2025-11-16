@@ -22,9 +22,9 @@ type DV_MULTIMEDIA struct {
 	Size                    int64                         `json:"size"`
 }
 
-func (d DV_MULTIMEDIA) isDataValueModel() {}
+func (d *DV_MULTIMEDIA) isDataValueModel() {}
 
-func (d DV_MULTIMEDIA) HasModelName() bool {
+func (d *DV_MULTIMEDIA) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -50,7 +50,7 @@ func (d *DV_MULTIMEDIA) SetModelName() {
 	}
 }
 
-func (d DV_MULTIMEDIA) Validate(path string) []util.ValidationError {
+func (d *DV_MULTIMEDIA) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

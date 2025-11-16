@@ -21,11 +21,11 @@ type DV_TEXT struct {
 	Encoding   util.Optional[CODE_PHRASE]    `json:"encoding,omitzero"`
 }
 
-func (d DV_TEXT) isDataValueModel() {}
+func (d *DV_TEXT) isDataValueModel() {}
 
-func (d DV_TEXT) isDvTextModel() {}
+func (d *DV_TEXT) isDvTextModel() {}
 
-func (d DV_TEXT) HasModelName() bool {
+func (d *DV_TEXT) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -44,7 +44,7 @@ func (d *DV_TEXT) SetModelName() {
 	}
 }
 
-func (d DV_TEXT) Validate(path string) []util.ValidationError {
+func (d *DV_TEXT) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 
@@ -178,6 +178,17 @@ func (x X_DV_TEXT) SetModelName() {
 }
 
 func (x X_DV_TEXT) Validate(path string) []util.ValidationError {
+	if x.Value == nil {
+		return []util.ValidationError{
+			{
+				Model:          DV_TEXT_MODEL_NAME,
+				Path:           path,
+				Message:        "value is not known DV_TEXT subtype",
+				Recommendation: "Ensure value is properly set",
+			},
+		}
+	}
+
 	return x.Value.Validate(path)
 }
 

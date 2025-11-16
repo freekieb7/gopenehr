@@ -14,9 +14,19 @@ import (
 )
 
 type Handler struct {
-	Version    string
-	Logger     *slog.Logger
-	EHRService *service.EHRService
+	Version            string
+	Logger             *slog.Logger
+	EHRService         *service.EHRService
+	DemographicService *service.DemographicService
+}
+
+func NewHandler(version string, logger *slog.Logger, ehrService *service.EHRService, demographicService *service.DemographicService) Handler {
+	return Handler{
+		Version:            version,
+		Logger:             logger,
+		EHRService:         ehrService,
+		DemographicService: demographicService,
+	}
 }
 
 func (h *Handler) RegisterRoutes(app *fiber.App) {
@@ -26,7 +36,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 
 	v1.Get("/ehr", h.GetEHRBySubject)
 	v1.Post("/ehr", h.CreateEHR)
-	v1.Get("/ehr/:ehr_id", h.GetEHRByID)
+	v1.Get("/ehr/:ehr_id", h.GetEHR)
 	v1.Put("/ehr/:ehr_id", h.CreateEHRWithID)
 
 	v1.Get("/ehr/:ehr_id/ehr_status", h.GetEHRStatus)
@@ -35,13 +45,13 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 
 	v1.Get("/ehr/:ehr_id/versioned_ehr_status", h.GetVersionedEHRStatus)
 	v1.Get("/ehr/:ehr_id/versioned_ehr_status/revision_history", h.GetVersionedEHRStatusRevisionHistory)
-	v1.Get("/ehr/:ehr_id/versioned_ehr_status/version", h.GetVersionedEHRStatusVersionAtTime)
+	v1.Get("/ehr/:ehr_id/versioned_ehr_status/version", h.GetVersionedEHRStatusVersion)
 	v1.Get("/ehr/:ehr_id/versioned_ehr_status/version/:version_uid", h.GetVersionedEHRStatusVersionByID)
 
 	v1.Post("/ehr/:ehr_id/composition", h.CreateComposition)
-	v1.Get("/ehr/:ehr_id/composition/:uid_based_id", h.GetCompositionByID)
-	v1.Put("/ehr/:ehr_id/composition/:uid_based_id", h.UpdateCompositionByID)
-	v1.Delete("/ehr/:ehr_id/composition/:uid_based_id", h.DeleteCompositionByID)
+	v1.Get("/ehr/:ehr_id/composition/:uid_based_id", h.GetComposition)
+	v1.Put("/ehr/:ehr_id/composition/:uid_based_id", h.UpdateComposition)
+	v1.Delete("/ehr/:ehr_id/composition/:uid_based_id", h.DeleteComposition)
 
 	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id", h.GetVersionedCompositionByID)
 	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/revision_history", h.GetVersionedCompositionRevisionHistory)
@@ -55,7 +65,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	v1.Get("/ehr/:ehr_id/directory/:version_uid", h.GetFolderInDirectoryVersion)
 
 	v1.Post("/ehr/:ehr_id/contribution", h.CreateContribution)
-	v1.Get("/ehr/:ehr_id/contribution/:contribution_uid", h.GetContributionByID)
+	v1.Get("/ehr/:ehr_id/contribution/:contribution_uid", h.GetContribution)
 
 	v1.Get("/ehr/:ehr_id/tags", h.GetEHRTags)
 	v1.Get("/ehr/:ehr_id/composition/:uid_based_id/tags", h.GetCompositionTags)
@@ -67,37 +77,37 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	v1.Delete("/ehr/:ehr_id/ehr_status/:version_uid/tags/:key", h.DeleteEHRStatusVersionTagByKey)
 
 	v1.Post("/demographic/agent", h.CreateAgent)
-	v1.Get("/demographic/agent/:uid_based_id", h.GetAgentByID)
-	v1.Put("/demographic/agent/:uid_based_id", h.UpdateAgentByID)
-	v1.Delete("/demographic/agent/:uid_based_id", h.DeleteAgentByID)
+	v1.Get("/demographic/agent/:uid_based_id", h.GetAgent)
+	v1.Put("/demographic/agent/:uid_based_id", h.UpdateAgent)
+	v1.Delete("/demographic/agent/:uid_based_id", h.DeleteAgent)
 
 	v1.Post("/demographic/group", h.CreateGroup)
-	v1.Get("/demographic/group/:uid_based_id", h.GetGroupByID)
-	v1.Put("/demographic/group/:uid_based_id", h.UpdateGroupByID)
-	v1.Delete("/demographic/group/:uid_based_id", h.DeleteGroupByID)
+	v1.Get("/demographic/group/:uid_based_id", h.GetGroup)
+	v1.Put("/demographic/group/:uid_based_id", h.UpdateGroup)
+	v1.Delete("/demographic/group/:uid_based_id", h.DeleteGroup)
 
 	v1.Post("/demographic/person", h.CreatePerson)
-	v1.Get("/demographic/person/:uid_based_id", h.GetPersonByID)
-	v1.Put("/demographic/person/:uid_based_id", h.UpdatePersonByID)
-	v1.Delete("/demographic/person/:uid_based_id", h.DeletePersonByID)
+	v1.Get("/demographic/person/:uid_based_id", h.GetPerson)
+	v1.Put("/demographic/person/:uid_based_id", h.UpdatePerson)
+	v1.Delete("/demographic/person/:uid_based_id", h.DeletePerson)
 
 	v1.Post("/demographic/organisation", h.CreateOrganisation)
-	v1.Get("/demographic/organisation/:uid_based_id", h.GetOrganisationByID)
-	v1.Put("/demographic/organisation/:uid_based_id", h.UpdateOrganisationByID)
-	v1.Delete("/demographic/organisation/:uid_based_id", h.DeleteOrganisationByID)
+	v1.Get("/demographic/organisation/:uid_based_id", h.GetOrganisation)
+	v1.Put("/demographic/organisation/:uid_based_id", h.UpdateOrganisation)
+	v1.Delete("/demographic/organisation/:uid_based_id", h.DeleteOrganisation)
 
 	v1.Post("/demographic/role", h.CreateRole)
-	v1.Get("/demographic/role/:uid_based_id", h.GetRoleByID)
-	v1.Put("/demographic/role/:uid_based_id", h.UpdateRoleByID)
-	v1.Delete("/demographic/role/:uid_based_id", h.DeleteRoleByID)
+	v1.Get("/demographic/role/:uid_based_id", h.GetRole)
+	v1.Put("/demographic/role/:uid_based_id", h.UpdateRole)
+	v1.Delete("/demographic/role/:uid_based_id", h.DeleteRole)
 
-	v1.Get("/demographic/versioned_party/:versioned_object_uid", h.GetVersionedPartyByID)
-	v1.Get("/demographic/versioned_party/:versioned_object_uid/revision_history", h.GetVersionedPartyRevisionHistory)
-	v1.Get("/demographic/versioned_party/:versioned_object_uid/version", h.GetVersionedPartyVersionAtTime)
-	v1.Get("/demographic/versioned_party/:versioned_object_uid/version/:version_uid", h.GetVersionedPartyVersionByID)
+	v1.Get("/demographic/versioned_party/:versioned_object_id", h.GetVersionedParty)
+	v1.Get("/demographic/versioned_party/:versioned_object_id/revision_history", h.GetVersionedPartyRevisionHistory)
+	v1.Get("/demographic/versioned_party/:versioned_object_id/version", h.GetVersionedPartyVersionAtTime)
+	v1.Get("/demographic/versioned_party/:versioned_object_id/version/:version_id", h.GetVersionedPartyVersion)
 
 	v1.Post("/demographic/contribution", h.CreateDemographicContribution)
-	v1.Get("/demographic/contribution/:contribution_uid", h.GetDemographicContributionByID)
+	v1.Get("/demographic/contribution/:contribution_uid", h.GetDemographicContribution)
 
 	v1.Get("/demographic/tags", h.GetDemographicTags)
 	v1.Get("/demographic/agent/:uid_based_id/tags", h.GetAgentTags)
@@ -173,7 +183,7 @@ func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("subject_namespace query parameters are required")
 	}
 
-	rawEHRJSON, err := h.EHRService.GetRawEHRBySubject(ctx, subjectID, subjectNamespace)
+	ehrJSON, err := h.EHRService.GetEHRBySubjectAsJSON(ctx, subjectID, subjectNamespace)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given subject")
@@ -184,7 +194,7 @@ func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawEHRJSON)
+	return c.Status(fiber.StatusOK).Send(ehrJSON)
 }
 
 func (h *Handler) CreateEHR(c *fiber.Ctx) error {
@@ -201,6 +211,7 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 		newEhrStatus.E = true
 	}
 
+	// Create EHR
 	ehr, err := h.EHRService.CreateEHR(ctx, newEhrStatus)
 	if err != nil {
 		if newEhrStatus.E && err == service.ErrEHRStatusAlreadyExists {
@@ -215,7 +226,7 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(ehr)
 }
 
-func (h *Handler) GetEHRByID(c *fiber.Ctx) error {
+func (h *Handler) GetEHR(c *fiber.Ctx) error {
 	ctx := c.Context()
 
 	ehrID := c.Params("ehr_id")
@@ -223,7 +234,7 @@ func (h *Handler) GetEHRByID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
 
-	rawEHRJSON, err := h.EHRService.GetRawEHRByID(ctx, ehrID)
+	ehrJSON, err := h.EHRService.GetEHRAsJSON(ctx, ehrID)
 	if err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to get EHR by ID", "error", err)
 		c.Status(http.StatusInternalServerError)
@@ -231,7 +242,7 @@ func (h *Handler) GetEHRByID(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawEHRJSON)
+	return c.Status(fiber.StatusOK).Send(ehrJSON)
 }
 
 func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
@@ -288,7 +299,7 @@ func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
 		filterAtTime = parsedTime
 	}
 
-	rawEHRStatusJSON, err := h.EHRService.GetRawEHRStatus(ctx, ehrID, filterAtTime, "")
+	ehrStatusJSON, err := h.EHRService.GetEHRStatusAsJSON(ctx, ehrID, filterAtTime, "")
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR Status not found for the given EHR ID at the specified time")
@@ -299,7 +310,7 @@ func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawEHRStatusJSON)
+	return c.Status(fiber.StatusOK).Send(ehrStatusJSON)
 }
 
 func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
@@ -323,24 +334,18 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 	}
 
 	// Check collision using If-Match header
-	rawCurrentEhrStatus, err := h.EHRService.GetRawEHRStatus(ctx, ehrID, time.Time{}, "")
+	currentEHRStatus, err := h.EHRService.GetEHRStatus(ctx, ehrID)
 	if err != nil {
-		if err == service.ErrEHRNotFound {
+		if err == service.ErrEHRStatusNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR Status not found for the given EHR ID")
 		}
 		h.Logger.ErrorContext(ctx, "Failed to get current EHR Status", "error", err)
 		c.Status(http.StatusInternalServerError)
 		return nil
 	}
-	var currentEhrStatus openehr.EHR_STATUS
-	if err := json.Unmarshal(rawCurrentEhrStatus, &currentEhrStatus); err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to unmarshal current EHR Status", "error", err)
-		c.Status(http.StatusInternalServerError)
-		return nil
-	}
 
 	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing EHR Status
-	if currentEhrStatus.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
+	if currentEHRStatus.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
 		return c.Status(fiber.StatusPreconditionFailed).SendString("EHR Status has been modified since the provided version")
 	}
 
@@ -374,7 +379,7 @@ func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("version_uid parameter is required")
 	}
 
-	rawEHRStatusJSON, err := h.EHRService.GetRawEHRStatus(ctx, ehrID, time.Time{}, versionUID)
+	ehrStatusJSON, err := h.EHRService.GetEHRStatusAsJSON(ctx, ehrID, time.Time{}, versionUID)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR Status not found for the given EHR ID and version UID")
@@ -385,7 +390,7 @@ func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawEHRStatusJSON)
+	return c.Status(fiber.StatusOK).Send(ehrStatusJSON)
 }
 
 func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
@@ -396,7 +401,7 @@ func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
 
-	rawVersionedStatusJSON, err := h.EHRService.GetRawVersionedEHRStatus(ctx, ehrID)
+	versionedStatusJSON, err := h.EHRService.GetVersionedEHRStatusAsJSON(ctx, ehrID)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Versioned EHR Status not found for the given EHR ID")
@@ -407,7 +412,7 @@ func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawVersionedStatusJSON)
+	return c.Status(fiber.StatusOK).Send(versionedStatusJSON)
 }
 
 func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
@@ -418,7 +423,7 @@ func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
 
-	rawRevisionHistoryData, err := h.EHRService.GetRawVersionedEHRStatusRevisionHistory(ctx, ehrID)
+	revisionHistoryJSON, err := h.EHRService.GetVersionedEHRStatusRevisionHistoryAsJSON(ctx, ehrID)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Versioned EHR Status revision history not found for the given EHR ID")
@@ -429,10 +434,10 @@ func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawRevisionHistoryData)
+	return c.Status(fiber.StatusOK).Send(revisionHistoryJSON)
 }
 
-func (h *Handler) GetVersionedEHRStatusVersionAtTime(c *fiber.Ctx) error {
+func (h *Handler) GetVersionedEHRStatusVersion(c *fiber.Ctx) error {
 	ctx := c.Context()
 
 	c.Accepts("application/json")
@@ -452,7 +457,7 @@ func (h *Handler) GetVersionedEHRStatusVersionAtTime(c *fiber.Ctx) error {
 		filterAtTime = parsedTime
 	}
 
-	rawVersionData, err := h.EHRService.GetRawVersionedEHRStatusVersionAtTime(ctx, ehrID, filterAtTime)
+	ehrStatusVersionJSON, err := h.EHRService.GetVersionedEHRStatusVersionAsJSON(ctx, ehrID, filterAtTime, "")
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Versioned EHR Status version not found for the given EHR ID at the specified time")
@@ -463,7 +468,7 @@ func (h *Handler) GetVersionedEHRStatusVersionAtTime(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawVersionData)
+	return c.Status(fiber.StatusOK).Send(ehrStatusVersionJSON)
 }
 
 func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
@@ -479,7 +484,7 @@ func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("version_uid parameter is required")
 	}
 
-	rawVersionData, err := h.EHRService.GetRawVersionedEHRStatusByVersionID(ctx, ehrID, versionUID)
+	ehrStatusVersionJSON, err := h.EHRService.GetVersionedEHRStatusVersionAsJSON(ctx, ehrID, time.Time{}, versionUID)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Versioned EHR Status version not found for the given EHR ID and version UID")
@@ -490,7 +495,7 @@ func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawVersionData)
+	return c.Status(fiber.StatusOK).Send(ehrStatusVersionJSON)
 }
 
 func (h *Handler) CreateComposition(c *fiber.Ctx) error {
@@ -525,7 +530,7 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(composition)
 }
 
-func (h *Handler) GetCompositionByID(c *fiber.Ctx) error {
+func (h *Handler) GetComposition(c *fiber.Ctx) error {
 	ctx := c.Context()
 
 	c.Accepts("application/json")
@@ -540,18 +545,7 @@ func (h *Handler) GetCompositionByID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
-	var (
-		rawCompositionJSON []byte
-		err                error
-	)
-
-	if isVersionID := strings.Contains(uidBasedID, "::"); isVersionID {
-		// Fetch by version ID
-		rawCompositionJSON, err = h.EHRService.GetRawCompositionByID(ctx, ehrID, uidBasedID)
-	} else {
-		// Fetch by versioned object ID
-		rawCompositionJSON, err = h.EHRService.GetRawCurrentCompositionByVersionedObjectID(ctx, ehrID, uidBasedID)
-	}
+	compositionJSON, err := h.EHRService.GetCompositionAsJSON(ctx, ehrID, uidBasedID)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
@@ -565,10 +559,10 @@ func (h *Handler) GetCompositionByID(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawCompositionJSON)
+	return c.Status(fiber.StatusOK).Send(compositionJSON)
 }
 
-func (h *Handler) UpdateCompositionByID(c *fiber.Ctx) error {
+func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 	ctx := c.Context()
 
 	c.Accepts("application/json")
@@ -588,45 +582,18 @@ func (h *Handler) UpdateCompositionByID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
 	}
 
-	var currentComposition openehr.COMPOSITION
-	if isVersionID := strings.Contains(uidBasedID, "::"); isVersionID {
-		// Fetch by version ID
-		rawCurrentComposition, err := h.EHRService.GetRawCompositionByID(ctx, ehrID, uidBasedID)
-		if err != nil {
-			if err == service.ErrEHRNotFound {
-				return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
-			}
-			if err == service.ErrCompositionNotFound {
-				return c.Status(fiber.StatusNotFound).SendString("Composition not found for the given UID")
-			}
-			h.Logger.ErrorContext(ctx, "Failed to get current Composition by ID", "error", err)
-			c.Status(http.StatusInternalServerError)
-			return nil
+	// Check collision using If-Match header
+	currentComposition, err := h.EHRService.GetComposition(ctx, uidBasedID, ehrID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
 		}
-		if err := json.Unmarshal(rawCurrentComposition, &currentComposition); err != nil {
-			h.Logger.ErrorContext(ctx, "Failed to unmarshal current Composition", "error", err)
-			c.Status(http.StatusInternalServerError)
-			return nil
+		if err == service.ErrCompositionNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Composition not found for the given UID")
 		}
-	} else {
-		// Fetch by versioned object ID
-		rawCurrentComposition, err := h.EHRService.GetRawCurrentCompositionByVersionedObjectID(ctx, ehrID, uidBasedID)
-		if err != nil {
-			if err == service.ErrEHRNotFound {
-				return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
-			}
-			if err == service.ErrCompositionNotFound {
-				return c.Status(fiber.StatusNotFound).SendString("Composition not found for the given UID")
-			}
-			h.Logger.ErrorContext(ctx, "Failed to get current Composition by versioned object ID", "error", err)
-			c.Status(http.StatusInternalServerError)
-			return nil
-		}
-		if err := json.Unmarshal(rawCurrentComposition, &currentComposition); err != nil {
-			h.Logger.ErrorContext(ctx, "Failed to unmarshal current Composition", "error", err)
-			c.Status(http.StatusInternalServerError)
-			return nil
-		}
+		h.Logger.ErrorContext(ctx, "Failed to get current Composition", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
 	}
 
 	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Composition
@@ -660,7 +627,7 @@ func (h *Handler) UpdateCompositionByID(c *fiber.Ctx) error {
 	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (h *Handler) DeleteCompositionByID(c *fiber.Ctx) error {
+func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 	ctx := c.Context()
 
 	ehrID := c.Params("ehr_id")
@@ -673,7 +640,30 @@ func (h *Handler) DeleteCompositionByID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
-	if err := h.EHRService.DeleteCompositionByID(ctx, ehrID, uidBasedID); err != nil {
+	if !strings.Contains(uidBasedID, "::") {
+		return c.Status(fiber.StatusBadRequest).SendString("Cannot delete Composition by versioned object ID. Please provide the object version ID.")
+	}
+
+	// Check existence before deletion
+	versionedObjectID := strings.Split(uidBasedID, "::")[0]
+	currentComposition, err := h.EHRService.GetComposition(ctx, versionedObjectID, ehrID)
+	if err != nil {
+		if err == service.ErrCompositionNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Composition not found for the given UID and EHR ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Composition by ID before deletion", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Check if provided version matches current version
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Composition
+	if currentComposition.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != uidBasedID {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Composition has been modified since the provided version")
+	}
+
+	// Proceed to delete Composition
+	if err := h.EHRService.DeleteComposition(ctx, versionedObjectID); err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
 		}
@@ -702,7 +692,7 @@ func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
 	}
 
-	rawVersionedCompositionJSON, err := h.EHRService.GetRawVersionedCompositionByID(ctx, ehrID, versionedObjectID)
+	versionedCompositionJSON, err := h.EHRService.GetVersionedCompositionByIDAsJSON(ctx, ehrID, versionedObjectID)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
@@ -716,7 +706,7 @@ func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawVersionedCompositionJSON)
+	return c.Status(fiber.StatusOK).Send(versionedCompositionJSON)
 }
 
 func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
@@ -732,7 +722,7 @@ func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
 	}
 
-	rawRevisionHistoryData, err := h.EHRService.GetRawVersionedCompositionRevisionHistory(ctx, ehrID, versionedObjectID)
+	revisionHistoryJSON, err := h.EHRService.GetVersionedCompositionRevisionHistoryAsJSON(ctx, ehrID, versionedObjectID)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
@@ -746,7 +736,7 @@ func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawRevisionHistoryData)
+	return c.Status(fiber.StatusOK).Send(revisionHistoryJSON)
 }
 
 func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
@@ -772,7 +762,7 @@ func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 		filterAtTime = parsedTime
 	}
 
-	rawVersionData, err := h.EHRService.GetRawVersionedCompositionVersionAtTime(ctx, ehrID, versionedObjectID, filterAtTime)
+	versionAsJSON, err := h.EHRService.GetVersionedCompositionVersionAsJSON(ctx, ehrID, versionedObjectID, filterAtTime, "")
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
@@ -786,7 +776,7 @@ func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawVersionData)
+	return c.Status(fiber.StatusOK).Send(versionAsJSON)
 }
 
 func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
@@ -811,7 +801,7 @@ func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("version_uid does not match the versioned_object_id")
 	}
 
-	rawVersionData, err := h.EHRService.GetRawVersionedCompositionByVersionID(ctx, ehrID, versionUID)
+	versionAsJSON, err := h.EHRService.GetVersionedCompositionVersionAsJSON(ctx, ehrID, versionedObjectID, time.Time{}, versionUID)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
@@ -825,302 +815,1349 @@ func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(rawVersionData)
+	return c.Status(fiber.StatusOK).Send(versionAsJSON)
 }
 
 func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("CreateDirectory not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	directory, err := h.EHRService.CreateDirectory(ctx, ehrID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrDirectoryAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Directory with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to create Directory", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(directory)
 }
 
 func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateDirectory not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	ifMatch := c.Get("If-Match")
+	if ifMatch == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
+	}
+
+	var currentDirectory openehr.FOLDER
+	rawCurrentDirectory, err := h.EHRService.GetRawDirectory(ctx, ehrID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrDirectoryNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Directory not found for the given EHR ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get current Directory", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+	if err := json.Unmarshal(rawCurrentDirectory, &currentDirectory); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to unmarshal current Directory", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Directory
+	if currentDirectory.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Directory has been modified since the provided version")
+	}
+
+	// Parse updated directory from request body
+	var updatedDirectory openehr.FOLDER
+	if err := c.BodyParser(&updatedDirectory); err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	// Check collision using If-Match header
+
+	if err := h.EHRService.UpdateDirectory(ctx, ehrID, updatedDirectory); err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrDirectoryNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Directory not found for the given EHR ID")
+		}
+		if err == service.ErrDirectoryAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Directory with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to update Directory", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeleteDirectory not implemented yet")
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	ifMatch := c.Get("If-Match")
+	if ifMatch == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
+	}
+
+	var currentDirectory openehr.FOLDER
+	rawCurrentDirectory, err := h.EHRService.GetRawDirectory(ctx, ehrID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrDirectoryNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Directory not found for the given EHR ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get current Directory", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+	if err := json.Unmarshal(rawCurrentDirectory, &currentDirectory); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to unmarshal current Directory", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Directory
+	if currentDirectory.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Directory has been modified since the provided version")
+	}
+
+	if err := h.EHRService.DeleteDirectory(ctx, ehrID); err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		if err == service.ErrDirectoryNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Directory not found for the given EHR ID")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to delete Directory", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetFolderInDirectoryVersionAtTime not implemented yet")
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	var filterAtTime time.Time
+	atTimeStr := c.Query("version_at_time")
+	if atTimeStr != "" {
+		parsedTime, err := time.Parse(time.RFC3339, atTimeStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Invalid version_at_time format. Use RFC3339 format.")
+		}
+		filterAtTime = parsedTime
+	}
+
+	folderAsJSON, err := h.EHRService.GetFolderInDirectoryVersionAsJSON(ctx, ehrID, filterAtTime, "")
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Directory not found for the given EHR ID at the specified time")
+		}
+		if err == service.ErrDirectoryNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Directory version not found at the specified time for the given EHR ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Folder in Directory version at time", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(folderAsJSON)
 }
 
 func (h *Handler) GetFolderInDirectoryVersion(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetFolderInDirectoryVersion not implemented yet")
+	ctx := c.Context()
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	versionUID := c.Params("version_uid")
+	if versionUID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("version_uid parameter is required")
+	}
+
+	path := c.Query("path")
+	if path != "" {
+		return c.Status(fiber.StatusBadRequest).SendString("path query parameter is not supported")
+	}
+
+	folderAsJSON, err := h.EHRService.GetFolderInDirectoryVersionAsJSON(ctx, ehrID, time.Time{}, versionUID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Directory not found for the given EHR ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Folder in Directory version", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(folderAsJSON)
 }
 
 func (h *Handler) CreateContribution(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("CreateContribution not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	var newContribution openehr.CONTRIBUTION
+	if err := c.BodyParser(&newContribution); err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	contribution, err := h.EHRService.CreateContribution(ctx, ehrID, newContribution)
+	if err != nil {
+		if err == service.ErrContributionAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Contribution with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to create Contribution", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(contribution)
 }
 
-func (h *Handler) GetContributionByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetContributionByID not implemented yet")
+func (h *Handler) GetContribution(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	ehrID := c.Params("ehr_id")
+	if ehrID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	}
+
+	contributionUID := c.Params("contribution_uid")
+	if contributionUID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("contribution_uid parameter is required")
+	}
+
+	contributionAsJSON, err := h.EHRService.GetContributionAsJSON(ctx, ehrID, contributionUID)
+	if err != nil {
+		if err == service.ErrContributionNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Contribution not found for the given EHR ID and Contribution UID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Contribution by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(contributionAsJSON)
 }
 
 func (h *Handler) GetEHRTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetEHRTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get EHR Tags not implemented yet")
 }
 
 func (h *Handler) GetCompositionTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetCompositionTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Composition Tags not implemented yet")
 }
 
 func (h *Handler) UpdateCompositionTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateCompositionTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Update Composition Tags not implemented yet")
 }
 
 func (h *Handler) DeleteCompositionTagByKey(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeleteCompositionTagByKey not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Delete Composition Tag By Key not implemented yet")
 }
 
 func (h *Handler) GetEHRStatusTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetEHRStatusTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get EHR Status Tags not implemented yet")
 }
 
 func (h *Handler) GetEHRStatusVersionTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetEHRStatusVersionTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get EHR Status Version Tags not implemented yet")
 }
 
 func (h *Handler) UpdateEHRStatusVersionTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateEHRStatusVersionTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Update EHR Status Version Tags not implemented yet")
 }
 
 func (h *Handler) DeleteEHRStatusVersionTagByKey(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeleteEHRStatusVersionTagByKey not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Delete EHR Status Version Tag By Key not implemented yet")
 }
 
 func (h *Handler) CreateAgent(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("CreateAgent not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	var newAgent openehr.AGENT
+	if err := c.BodyParser(&newAgent); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Agent", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	if errs := newAgent.Validate("$"); len(errs) > 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(errs)
+	}
+
+	agent, err := h.DemographicService.CreateAgent(ctx, newAgent)
+	if err != nil {
+		if err == service.ErrAgentAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Agent with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to create Agent", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(agent)
 }
 
-func (h *Handler) GetAgentByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetAgentByID not implemented yet")
+func (h *Handler) GetAgent(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	agentAsJSON, err := h.DemographicService.GetAgentAsJSON(ctx, uidBasedID)
+	if err != nil {
+		if err == service.ErrAgentNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Agent not found for the given agent ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(agentAsJSON)
 }
 
-func (h *Handler) UpdateAgentByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateAgentByID not implemented yet")
+func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	ifMatch := c.Get("If-Match")
+	if ifMatch == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
+	}
+
+	// Ensure Agent exists before update
+	versionedObjectID := strings.Split(uidBasedID, "::")[0]
+	currentAgent, err := h.DemographicService.GetAgent(ctx, versionedObjectID)
+	if err != nil {
+		if err == service.ErrAgentNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Agent not found for the given agent ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get current Agent by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Agent
+	if currentAgent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Agent has been modified since the provided version")
+	}
+
+	// Parse updated agent from request body
+	var updatedAgent openehr.AGENT
+	if err := c.BodyParser(&updatedAgent); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Agent", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	// Proceed to update Agent
+	if err := h.DemographicService.UpdateAgent(ctx, updatedAgent); err != nil {
+		if err == service.ErrAgentNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Agent not found for the given agent ID")
+		}
+		if err == service.ErrAgentAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Agent with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to update Agent", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (h *Handler) DeleteAgentByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeleteAgentByID not implemented yet")
+func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	if !strings.Contains(uidBasedID, "::") {
+		return c.Status(fiber.StatusBadRequest).SendString("Cannot delete Agent by versioned object ID. Please provide the object version ID.")
+	}
+
+	// Check existence before deletion
+	versionedObjectID := strings.Split(uidBasedID, "::")[0]
+	currentAgent, err := h.DemographicService.GetAgent(ctx, versionedObjectID)
+	if err != nil {
+		if err == service.ErrAgentNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Agent not found for the given agent ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Agent by ID before deletion", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Check if provided version matches current version
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Agent
+	if currentAgent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != uidBasedID {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Agent has been modified since the provided version")
+	}
+
+	// Proceed to delete Agent
+	if err := h.DemographicService.DeleteAgent(ctx, uidBasedID); err != nil {
+		if err == service.ErrAgentNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Agent not found for the given agent ID")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to delete Agent by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (h *Handler) CreateGroup(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("CreateGroup not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	var newGroup openehr.GROUP
+	if err := c.BodyParser(&newGroup); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Group", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	if errs := newGroup.Validate("$"); len(errs) > 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(errs)
+	}
+
+	group, err := h.DemographicService.CreateGroup(ctx, newGroup)
+	if err != nil {
+		if err == service.ErrGroupAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Group with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to create Group", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(group)
 }
 
-func (h *Handler) GetGroupByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetGroupByID not implemented yet")
+func (h *Handler) GetGroup(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	groupAsJSON, err := h.DemographicService.GetGroupAsJSON(ctx, uidBasedID)
+	if err != nil {
+		if err == service.ErrGroupNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Group not found for the given group ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Group by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(groupAsJSON)
 }
 
-func (h *Handler) UpdateGroupByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateGroupByID not implemented yet")
+func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	ifMatch := c.Get("If-Match")
+	if ifMatch == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
+	}
+
+	// Ensure Group exists before update
+	versionedObjectID := strings.Split(uidBasedID, "::")[0]
+	currentGroup, err := h.DemographicService.GetGroup(ctx, versionedObjectID)
+	if err != nil {
+		if err == service.ErrGroupNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Group not found for the given group ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get current Group by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Group
+	if currentGroup.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Group has been modified since the provided version")
+	}
+
+	// Parse updated group from request body
+	var updatedGroup openehr.GROUP
+	if err := c.BodyParser(&updatedGroup); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Group", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	// Proceed to update Group
+	if err := h.DemographicService.UpdateGroup(ctx, updatedGroup); err != nil {
+		if err == service.ErrGroupNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Group not found for the given group ID")
+		}
+		if err == service.ErrGroupAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Group with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to update Group", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (h *Handler) DeleteGroupByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeleteGroupByID not implemented yet")
+func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	if !strings.Contains(uidBasedID, "::") {
+		return c.Status(fiber.StatusBadRequest).SendString("Cannot delete Group by versioned object ID. Please provide the object version ID.")
+	}
+
+	// Check existence before deletion
+	versionedObjectID := strings.Split(uidBasedID, "::")[0]
+	currentGroup, err := h.DemographicService.GetGroup(ctx, versionedObjectID)
+	if err != nil {
+		if err == service.ErrGroupNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Group not found for the given group ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Group by ID before deletion", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Check if provided version matches current version
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Group
+	if currentGroup.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != uidBasedID {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Group has been modified since the provided version")
+	}
+
+	// Proceed to delete Group
+	if err := h.DemographicService.DeleteGroup(ctx, uidBasedID); err != nil {
+		if err == service.ErrGroupNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Group not found for the given group ID")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to delete Group by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (h *Handler) CreatePerson(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("CreatePerson not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	var newPerson openehr.PERSON
+	if err := c.BodyParser(&newPerson); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Person", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	if errs := newPerson.Validate("$"); len(errs) > 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(errs)
+	}
+
+	person, err := h.DemographicService.CreatePerson(ctx, newPerson)
+	if err != nil {
+		if err == service.ErrPersonAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Person with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to create Person", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(person)
 }
 
-func (h *Handler) GetPersonByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetPersonByID not implemented yet")
+func (h *Handler) GetPerson(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	personAsJSON, err := h.DemographicService.GetPersonAsJSON(ctx, uidBasedID)
+	if err != nil {
+		if err == service.ErrPersonNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Person not found for the given person ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Person by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(personAsJSON)
 }
 
-func (h *Handler) UpdatePersonByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdatePersonByID not implemented yet")
+func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	ifMatch := c.Get("If-Match")
+	if ifMatch == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
+	}
+
+	// Ensure Person exists before update
+	versionedObjectID := strings.Split(uidBasedID, "::")[0]
+	currentPerson, err := h.DemographicService.GetPerson(ctx, versionedObjectID)
+	if err != nil {
+		if err == service.ErrPersonNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Person not found for the given person ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get current Person by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Person
+	if currentPerson.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Person has been modified since the provided version")
+	}
+
+	// Parse updated person from request body
+	var updatedPerson openehr.PERSON
+	if err := c.BodyParser(&updatedPerson); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Person", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	// Proceed to update Person
+	if err := h.DemographicService.UpdatePerson(ctx, updatedPerson); err != nil {
+		if err == service.ErrPersonNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Person not found for the given person ID")
+		}
+		if err == service.ErrPersonAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Person with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to update Person", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (h *Handler) DeletePersonByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeletePersonByID not implemented yet")
+func (h *Handler) DeletePerson(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	if !strings.Contains(uidBasedID, "::") {
+		return c.Status(fiber.StatusBadRequest).SendString("Cannot delete Person by versioned object ID. Please provide the object version ID.")
+	}
+
+	// Check existence before deletion
+	versionedObjectID := strings.Split(uidBasedID, "::")[0]
+	currentPerson, err := h.DemographicService.GetPerson(ctx, versionedObjectID)
+	if err != nil {
+		if err == service.ErrPersonNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Person not found for the given person ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Person by ID before deletion", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Check if provided version matches current version
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Person
+	if currentPerson.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != uidBasedID {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Person has been modified since the provided version")
+	}
+
+	// Proceed to delete Person
+	if err := h.DemographicService.DeletePerson(ctx, uidBasedID); err != nil {
+		if err == service.ErrPersonNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Person not found for the given person ID")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to delete Person by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
 func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("CreateOrganisation not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	var newOrganisation openehr.ORGANISATION
+	if err := c.BodyParser(&newOrganisation); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Organisation", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	if errs := newOrganisation.Validate("$"); len(errs) > 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(errs)
+	}
+
+	organisation, err := h.DemographicService.CreateOrganisation(ctx, newOrganisation)
+	if err != nil {
+		if err == service.ErrOrganisationAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Organisation with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to create Organisation", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(organisation)
 }
 
-func (h *Handler) GetOrganisationByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetOrganisationByID not implemented yet")
+func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	organisationAsJSON, err := h.DemographicService.GetOrganisationAsJSON(ctx, uidBasedID)
+	if err != nil {
+		if err == service.ErrOrganisationNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Organisation not found for the given organisation ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Organisation by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(organisationAsJSON)
 }
 
-func (h *Handler) UpdateOrganisationByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateOrganisationByID not implemented yet")
+func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	ifMatch := c.Get("If-Match")
+	if ifMatch == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
+	}
+
+	// Ensure Organisation exists before update
+	versionedObjectID := strings.Split(uidBasedID, "::")[0]
+	currentOrganisation, err := h.DemographicService.GetOrganisation(ctx, versionedObjectID)
+	if err != nil {
+		if err == service.ErrOrganisationNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Organisation not found for the given organisation ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get current Organisation by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Organisation
+	if currentOrganisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Organisation has been modified since the provided version")
+	}
+
+	// Parse updated organisation from request body
+	var updatedOrganisation openehr.ORGANISATION
+	if err := c.BodyParser(&updatedOrganisation); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Organisation", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	// Proceed to update Organisation
+	if err := h.DemographicService.UpdateOrganisation(ctx, updatedOrganisation); err != nil {
+		if err == service.ErrOrganisationNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Organisation not found for the given organisation ID")
+		}
+		if err == service.ErrOrganisationAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Organisation with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to update Organisation", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (h *Handler) DeleteOrganisationByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeleteOrganisationByID not implemented yet")
+func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	if !strings.Contains(uidBasedID, "::") {
+		return c.Status(fiber.StatusBadRequest).SendString("Cannot delete Organisation by versioned object ID. Please provide the object version ID.")
+	}
+
+	// Check existence before deletion
+	versionedObjectID := strings.Split(uidBasedID, "::")[0]
+	currentOrganisation, err := h.DemographicService.GetOrganisation(ctx, versionedObjectID)
+	if err != nil {
+		if err == service.ErrOrganisationNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Organisation not found for the given organisation ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Organisation by ID before deletion", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Check if provided version matches current version
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Organisation
+	if currentOrganisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != uidBasedID {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Organisation has been modified since the provided version")
+	}
+
+	// Proceed to delete Organisation
+	if err := h.DemographicService.DeleteOrganisation(ctx, uidBasedID); err != nil {
+		if err == service.ErrOrganisationNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Organisation not found for the given organisation ID")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to delete Organisation by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
+
 func (h *Handler) CreateRole(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("CreateRole not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	var newRole openehr.ROLE
+	if err := c.BodyParser(&newRole); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Role", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	if errs := newRole.Validate("$"); len(errs) > 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(errs)
+	}
+
+	role, err := h.DemographicService.CreateRole(ctx, newRole)
+	if err != nil {
+		if err == service.ErrRoleAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Role with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to create Role", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(role)
 }
 
-func (h *Handler) GetRoleByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetRoleByID not implemented yet")
+func (h *Handler) GetRole(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	roleAsJSON, err := h.DemographicService.GetRoleAsJSON(ctx, uidBasedID)
+	if err != nil {
+		if err == service.ErrRoleNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Role not found for the given role ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Role by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(roleAsJSON)
 }
 
-func (h *Handler) UpdateRoleByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateRoleByID not implemented yet")
+func (h *Handler) UpdateRole(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	ifMatch := c.Get("If-Match")
+	if ifMatch == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
+	}
+
+	// Ensure Role exists before update
+	versionedObjectID := strings.Split(uidBasedID, "::")[0]
+	currentRole, err := h.DemographicService.GetRole(ctx, versionedObjectID)
+	if err != nil {
+		if err == service.ErrRoleNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Role not found for the given role ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get current Role by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Role
+	if currentRole.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Role has been modified since the provided version")
+	}
+
+	// Parse updated role from request body
+	var updatedRole openehr.ROLE
+	if err := c.BodyParser(&updatedRole); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Role", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	// Proceed to update Role
+	if err := h.DemographicService.UpdateRole(ctx, updatedRole); err != nil {
+		if err == service.ErrRoleNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Role not found for the given role ID")
+		}
+		if err == service.ErrRoleAlreadyExists {
+			return c.Status(fiber.StatusConflict).SendString("Role with the given UID already exists")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to update Role", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (h *Handler) DeleteRoleByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeleteRoleByID not implemented yet")
+func (h *Handler) DeleteRole(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	uidBasedID := c.Params("uid_based_id")
+	if uidBasedID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
+	}
+
+	if !strings.Contains(uidBasedID, "::") {
+		return c.Status(fiber.StatusBadRequest).SendString("Cannot delete Role by versioned object ID. Please provide the object version ID.")
+	}
+
+	// Check existence before deletion
+	versionedObjectID := strings.Split(uidBasedID, "::")[0]
+	currentRole, err := h.DemographicService.GetRole(ctx, versionedObjectID)
+	if err != nil {
+		if err == service.ErrRoleNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Role not found for the given role ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Role by ID before deletion", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Check if provided version matches current version
+	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Role
+	if currentRole.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != uidBasedID {
+		return c.Status(fiber.StatusPreconditionFailed).SendString("Role has been modified since the provided version")
+	}
+
+	// Proceed to delete Role
+	if err := h.DemographicService.DeleteRole(ctx, uidBasedID); err != nil {
+		if err == service.ErrRoleNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Role not found for the given role ID")
+		}
+
+		h.Logger.ErrorContext(ctx, "Failed to delete Role by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
 }
 
-func (h *Handler) GetVersionedPartyByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetVersionedPartyByID not implemented yet")
+func (h *Handler) GetVersionedParty(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	versionedObjectID := c.Params("versioned_object_id")
+	if versionedObjectID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
+	}
+
+	partyAsJSON, err := h.DemographicService.GetVersionedPartyAsJSON(ctx, versionedObjectID)
+	if err != nil {
+		if err == service.ErrVersionedPartyNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Versioned Party not found for the given ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Versioned Party by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(partyAsJSON)
 }
 
 func (h *Handler) GetVersionedPartyRevisionHistory(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetVersionedPartyRevisionHistory not implemented yet")
+	ctx := c.Context()
+
+	versionedObjectID := c.Params("versioned_object_id")
+	if versionedObjectID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
+	}
+
+	historyAsJSON, err := h.DemographicService.GetVersionedPartyRevisionHistoryAsJSON(ctx, versionedObjectID)
+	if err != nil {
+		if err == service.ErrVersionedPartyNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Versioned Party not found for the given ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Versioned Party Revision History by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(historyAsJSON)
 }
 
 func (h *Handler) GetVersionedPartyVersionAtTime(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetVersionedPartyVersionAtTime not implemented yet")
+	ctx := c.Context()
+
+	versionedObjectID := c.Params("versioned_object_id")
+	if versionedObjectID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
+	}
+
+	var filterAtTime time.Time
+	atTimeStr := c.Query("version_at_time")
+	if atTimeStr != "" {
+		parsedTime, err := time.Parse(time.RFC3339, atTimeStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Invalid version_at_time format. Use RFC3339 format.")
+		}
+		filterAtTime = parsedTime
+	}
+
+	partyAsJSON, err := h.DemographicService.GetVersionedPartyVersionAsJSON(ctx, versionedObjectID, filterAtTime, "")
+	if err != nil {
+		if err == service.ErrVersionedPartyNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Versioned Party not found for the given ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Versioned Party Version at Time by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(partyAsJSON)
 }
 
-func (h *Handler) GetVersionedPartyVersionByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetVersionedPartyVersionByID not implemented yet")
+func (h *Handler) GetVersionedPartyVersion(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	versionedObjectID := c.Params("versioned_object_id")
+	if versionedObjectID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
+	}
+
+	versionID := c.Params("version_id")
+	if versionID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("version_id parameter is required")
+	}
+
+	partyAsJSON, err := h.DemographicService.GetVersionedPartyVersionAsJSON(ctx, versionedObjectID, time.Time{}, versionID)
+	if err != nil {
+		if err == service.ErrVersionedPartyNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Versioned Party not found for the given ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Versioned Party Version by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(partyAsJSON)
 }
 
 func (h *Handler) CreateDemographicContribution(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("CreateDemographicContribution not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	var newContribution openehr.CONTRIBUTION
+	if err := c.BodyParser(&newContribution); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Demographic Contribution", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	if errs := newContribution.Validate("$"); len(errs) > 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(errs)
+	}
+
+	contribution, err := h.DemographicService.CreateContribution(ctx, newContribution)
+	if err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to create Demographic Contribution", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(contribution)
 }
 
-func (h *Handler) GetDemographicContributionByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetDemographicContributionByID not implemented yet")
+func (h *Handler) GetDemographicContribution(c *fiber.Ctx) error {
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	contributionUID := c.Params("contribution_uid")
+	if contributionUID == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("contribution_uid parameter is required")
+	}
+
+	contributionAsJSON, err := h.DemographicService.GetContributionAsJSON(ctx, contributionUID)
+	if err != nil {
+		if err == service.ErrContributionNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Contribution not found for the given EHR ID and Contribution UID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get Contribution by ID", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(contributionAsJSON)
 }
 
 func (h *Handler) GetDemographicTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetDemographicTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Demographic Tags not implemented yet")
 }
 
 func (h *Handler) GetAgentTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetAgentTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Agent Tags not implemented yet")
 }
 
 func (h *Handler) UpdateAgentTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateAgentTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Update Agent Tags not implemented yet")
 }
 
 func (h *Handler) DeleteAgentTagByKey(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeleteAgentTagByKey not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Delete Agent Tag By Key not implemented yet")
 }
 
 func (h *Handler) GetGroupTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetGroupTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Group Tags not implemented yet")
 }
 
 func (h *Handler) UpdateGroupTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateGroupTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Update Group Tags not implemented yet")
 }
 
 func (h *Handler) DeleteGroupTagByKey(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeleteGroupTagByKey not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Delete Group Tag By Key not implemented yet")
 }
 
 func (h *Handler) GetPersonTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetPersonTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Person Tags not implemented yet")
 }
 
 func (h *Handler) UpdatePersonTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdatePersonTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Update Person Tags not implemented yet")
 }
 
 func (h *Handler) DeletePersonTagByKey(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeletePersonTagByKey not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Delete Person Tag By Key not implemented yet")
 }
 
 func (h *Handler) GetOrganisationTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetOrganisationTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Organisation Tags not implemented yet")
 }
 
 func (h *Handler) UpdateOrganisationTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateOrganisationTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Update Organisation Tags not implemented yet")
 }
 
 func (h *Handler) DeleteOrganisationTagByKey(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeleteOrganisationTagByKey not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Delete Organisation Tag By Key not implemented yet")
 }
 
 func (h *Handler) GetRoleTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetRoleTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Role Tags not implemented yet")
 }
 
 func (h *Handler) UpdateRoleTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UpdateRoleTags not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Update Role Tags not implemented yet")
 }
 
 func (h *Handler) DeleteRoleTagByKey(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("DeleteRoleTagByKey not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Delete Role Tag By Key not implemented yet")
 }
 
 func (h *Handler) ExecuteAdHocAQL(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("ExecuteAdHocAQL not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Execute Ad Hoc AQL not implemented yet")
 }
 
 func (h *Handler) ExecuteAdHocAQLPost(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("ExecuteAdHocAQLPost not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Execute Ad Hoc AQL Post not implemented yet")
 }
 
 func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("ExecuteStoredAQL not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL not implemented yet")
 }
 
 func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("ExecuteStoredAQLPost not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Post not implemented yet")
 }
 
 func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("ExecuteStoredAQLVersion not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Version not implemented yet")
 }
 
 func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("ExecuteStoredAQLVersionPost not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Version Post not implemented yet")
 }
 
 func (h *Handler) GetTemplatesADL14(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetTemplatesADL14 not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Templates ADL1.4 not implemented yet")
 }
 
 func (h *Handler) UploadTemplateADL14(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UploadTemplateADL14 not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Upload Template ADL1.4 not implemented yet")
 }
 
 func (h *Handler) GetTemplateADL14ByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetTemplateADL14ByID not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Template ADL1.4 By ID not implemented yet")
 }
 
 func (h *Handler) GetTemplatesADL2(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetTemplatesADL2 not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Templates ADL2 not implemented yet")
 }
 
 func (h *Handler) UploadTemplateADL2(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("UploadTemplateADL2 not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Upload Template ADL2 not implemented yet")
 }
 
 func (h *Handler) GetTemplateADL2ByID(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetTemplateADL2ByID not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Template ADL2 By ID not implemented yet")
 }
 
 func (h *Handler) GetTemplateADL2AtVersion(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetTemplateADL2AtVersion not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Template ADL2 At Version not implemented yet")
 }
 
 func (h *Handler) ListStoredQueries(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("ListStoredQueries not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("List Stored Queries not implemented yet")
 }
 
 func (h *Handler) StoreQuery(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("StoreQuery not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Store Query not implemented yet")
 }
 
 func (h *Handler) StoreQueryVersion(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("StoreQueryVersion not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Store Query Version not implemented yet")
 }
 
 func (h *Handler) GetStoredQueryAtVersion(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("GetStoredQueryAtVersion not implemented yet")
+	return c.Status(fiber.StatusNotImplemented).SendString("Get Stored Query At Version not implemented yet")
 }
 
 func (h *Handler) DeleteEHRByID(c *fiber.Ctx) error {

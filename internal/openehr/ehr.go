@@ -50,7 +50,7 @@ func (e *EHR) SetModelName() {
 	}
 }
 
-func (e EHR) Validate(path string) []util.ValidationError {
+func (e *EHR) Validate(path string) []util.ValidationError {
 	var errs []util.ValidationError
 	var attrPath string
 

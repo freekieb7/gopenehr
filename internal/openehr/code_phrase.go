@@ -20,7 +20,7 @@ func (c *CODE_PHRASE) SetModelName() {
 	c.TerminologyID.SetModelName()
 }
 
-func (c CODE_PHRASE) Validate(path string) []util.ValidationError {
+func (c *CODE_PHRASE) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

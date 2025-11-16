@@ -9,9 +9,9 @@ type DV_BOOLEAN struct {
 	Value bool                  `json:"value"`
 }
 
-func (d DV_BOOLEAN) isDataValueModel() {}
+func (d *DV_BOOLEAN) isDataValueModel() {}
 
-func (d DV_BOOLEAN) HasModelName() bool {
+func (d *DV_BOOLEAN) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -19,7 +19,7 @@ func (d *DV_BOOLEAN) SetModelName() {
 	d.Type_ = util.Some(DV_BOOLEAN_MODEL_NAME)
 }
 
-func (d DV_BOOLEAN) Validate(path string) []util.ValidationError {
+func (d *DV_BOOLEAN) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

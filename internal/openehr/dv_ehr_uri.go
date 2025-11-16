@@ -14,9 +14,9 @@ type DV_EHR_URI struct {
 	Value string                `json:"value"`
 }
 
-func (d DV_EHR_URI) isDataValueModel() {}
+func (d *DV_EHR_URI) isDataValueModel() {}
 
-func (d DV_EHR_URI) HasModelName() bool {
+func (d *DV_EHR_URI) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -24,7 +24,7 @@ func (d *DV_EHR_URI) SetModelName() {
 	d.Type_ = util.Some(DV_EHR_URI_MODEL_NAME)
 }
 
-func (d DV_EHR_URI) Validate(path string) []util.ValidationError {
+func (d *DV_EHR_URI) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

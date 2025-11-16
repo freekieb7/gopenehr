@@ -9,9 +9,9 @@ type PARTY_SELF struct {
 	ExternalRef util.Optional[PARTY_REF] `json:"external_ref,omitzero"`
 }
 
-func (p PARTY_SELF) isPartyProxyModel() {}
+func (p *PARTY_SELF) isPartyProxyModel() {}
 
-func (p PARTY_SELF) HasModelName() bool {
+func (p *PARTY_SELF) HasModelName() bool {
 	return p.Type_.E
 }
 
@@ -22,7 +22,7 @@ func (p *PARTY_SELF) SetModelName() {
 	}
 }
 
-func (p PARTY_SELF) Validate(path string) []util.ValidationError {
+func (p *PARTY_SELF) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

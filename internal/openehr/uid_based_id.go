@@ -40,14 +40,27 @@ func (x *X_UID_BASED_ID) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x X_UID_BASED_ID) Validate(path string) []util.ValidationError {
+func (x *X_UID_BASED_ID) Validate(path string) []util.ValidationError {
+	if x.Value == nil {
+		return []util.ValidationError{
+			{
+				Model:          UID_BASED_ID_MODEL_NAME,
+				Path:           path,
+				Message:        "value is not known UID_BASED_ID subtype",
+				Recommendation: "Ensure value is properly set",
+			},
+		}
+	}
+
 	var errs []util.ValidationError
+	var attrPath string
 
 	// Abstract model requires _type to be defined
 	if !x.Value.HasModelName() {
+		attrPath = path + "._type"
 		errs = append(errs, util.ValidationError{
-			Model:          OBJECT_REF_MODEL_NAME,
-			Path:           "._type",
+			Model:          UID_BASED_ID_MODEL_NAME,
+			Path:           attrPath,
 			Message:        "empty _type field",
 			Recommendation: "Ensure _type field is defined",
 		})

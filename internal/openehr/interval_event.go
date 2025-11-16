@@ -24,9 +24,9 @@ type INTERVAL_EVENT struct {
 	MathFunction     DV_CODED_TEXT                   `json:"math_function"`
 }
 
-func (i INTERVAL_EVENT) isEventModel() {}
+func (i *INTERVAL_EVENT) isEventModel() {}
 
-func (i INTERVAL_EVENT) HasModelName() bool {
+func (i *INTERVAL_EVENT) HasModelName() bool {
 	return i.Type_.E
 }
 

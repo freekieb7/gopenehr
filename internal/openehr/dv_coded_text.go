@@ -22,11 +22,11 @@ type DV_CODED_TEXT struct {
 	DefiningCode CODE_PHRASE                   `json:"defining_code"`
 }
 
-func (d DV_CODED_TEXT) isDataValueModel() {}
+func (d *DV_CODED_TEXT) isDataValueModel() {}
 
-func (d DV_CODED_TEXT) isDvTextModel() {}
+func (d *DV_CODED_TEXT) isDvTextModel() {}
 
-func (d DV_CODED_TEXT) HasModelName() bool {
+func (d *DV_CODED_TEXT) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -49,7 +49,7 @@ func (d *DV_CODED_TEXT) SetModelName() {
 	}
 }
 
-func (d DV_CODED_TEXT) Validate(path string) []util.ValidationError {
+func (d *DV_CODED_TEXT) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

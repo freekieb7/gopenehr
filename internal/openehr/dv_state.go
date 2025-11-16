@@ -10,9 +10,9 @@ type DV_STATE struct {
 	IsTerminal bool                  `json:"is_terminal"`
 }
 
-func (d DV_STATE) isDataValueModel() {}
+func (d *DV_STATE) isDataValueModel() {}
 
-func (d DV_STATE) HasModelName() bool {
+func (d *DV_STATE) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -21,7 +21,7 @@ func (d *DV_STATE) SetModelName() {
 	d.Value.SetModelName()
 }
 
-func (d DV_STATE) Validate(path string) []util.ValidationError {
+func (d *DV_STATE) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

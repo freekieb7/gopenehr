@@ -21,9 +21,9 @@ type ELEMENT struct {
 	NullReason       util.Optional[X_DV_TEXT]      `json:"null_reason,omitzero"`
 }
 
-func (e ELEMENT) isItemModel() {}
+func (e *ELEMENT) isItemModel() {}
 
-func (e ELEMENT) HasModelName() bool {
+func (e *ELEMENT) HasModelName() bool {
 	return e.Type_.E
 }
 
@@ -55,7 +55,7 @@ func (e *ELEMENT) SetModelName() {
 	}
 }
 
-func (e ELEMENT) Validate(path string) []util.ValidationError {
+func (e *ELEMENT) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

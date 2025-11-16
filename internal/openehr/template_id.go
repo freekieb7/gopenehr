@@ -13,9 +13,9 @@ type TEMPLATE_ID struct {
 	Value string                `json:"value"`
 }
 
-func (t TEMPLATE_ID) isObjectIDModel() {}
+func (t *TEMPLATE_ID) isObjectIDModel() {}
 
-func (t TEMPLATE_ID) HasModelName() bool {
+func (t *TEMPLATE_ID) HasModelName() bool {
 	return t.Type_.E
 }
 
@@ -23,7 +23,7 @@ func (t *TEMPLATE_ID) SetModelName() {
 	t.Type_ = util.Some(TEMPLATE_ID_MODEL_NAME)
 }
 
-func (t TEMPLATE_ID) Validate(path string) []util.ValidationError {
+func (t *TEMPLATE_ID) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

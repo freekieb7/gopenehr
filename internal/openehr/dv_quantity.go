@@ -17,9 +17,9 @@ type DV_QUANTITY struct {
 	Value                float64                          `json:"value"`
 }
 
-func (d DV_QUANTITY) isDataValueModel() {}
+func (d *DV_QUANTITY) isDataValueModel() {}
 
-func (d DV_QUANTITY) HasModelName() bool {
+func (d *DV_QUANTITY) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -39,7 +39,7 @@ func (d *DV_QUANTITY) SetModelName() {
 	d.Symbol.SetModelName()
 }
 
-func (d DV_QUANTITY) Validate(path string) []util.ValidationError {
+func (d *DV_QUANTITY) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

@@ -16,7 +16,7 @@ type TERM_MAPPING struct {
 	Target  CODE_PHRASE                  `json:"target"`
 }
 
-func (t TERM_MAPPING) HasModelName() bool {
+func (t *TERM_MAPPING) HasModelName() bool {
 	return t.Type_.E
 }
 
@@ -28,7 +28,7 @@ func (t *TERM_MAPPING) SetModelName() {
 	t.Target.SetModelName()
 }
 
-func (t TERM_MAPPING) Validate(path string) []util.ValidationError {
+func (t *TERM_MAPPING) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

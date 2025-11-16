@@ -101,6 +101,10 @@ func runServer(ctx context.Context) error {
 		}))
 	}
 
+	// Services
+	ehrService := openehrService.NewEHRService(logger, &db)
+	demographicService := openehrService.NewDemographicService(logger, &db)
+
 	// Routes
 	healthHandler := healthHandler.Handler{
 		HealthChecker: &health.Checker{
@@ -110,14 +114,7 @@ func runServer(ctx context.Context) error {
 	}
 	healthHandler.RegisterRoutes(srv)
 
-	openEHRHandler := openehrHandler.Handler{
-		Version: cfg.Version,
-		Logger:  logger,
-		EHRService: &openehrService.EHRService{
-			Logger: logger,
-			DB:     &db,
-		},
-	}
+	openEHRHandler := openehrHandler.NewHandler(cfg.Version, logger, &ehrService, &demographicService)
 	openEHRHandler.RegisterRoutes(srv)
 
 	// Set up signal handling for graceful shutdown

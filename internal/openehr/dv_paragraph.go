@@ -13,9 +13,9 @@ type DV_PARAGRAPH struct {
 	Items []X_DV_TEXT           `json:"items"`
 }
 
-func (d DV_PARAGRAPH) isDataValueModel() {}
+func (d *DV_PARAGRAPH) isDataValueModel() {}
 
-func (d DV_PARAGRAPH) HasModelName() bool {
+func (d *DV_PARAGRAPH) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -26,7 +26,7 @@ func (d *DV_PARAGRAPH) SetModelName() {
 	}
 }
 
-func (d DV_PARAGRAPH) Validate(path string) []util.ValidationError {
+func (d *DV_PARAGRAPH) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

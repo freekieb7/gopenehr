@@ -19,9 +19,9 @@ type SECTION struct {
 	Items            util.Optional[[]X_CONTENT_ITEM] `json:"items,omitzero"`
 }
 
-func (s SECTION) isContentItemModel() {}
+func (s *SECTION) isContentItemModel() {}
 
-func (s SECTION) HasModelName() bool {
+func (s *SECTION) HasModelName() bool {
 	return s.Type_.E
 }
 

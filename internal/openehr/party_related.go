@@ -16,9 +16,9 @@ type PARTY_RELATED struct {
 	Relationship DV_CODED_TEXT                  `json:"relationship"`
 }
 
-func (p PARTY_RELATED) isPartyProxyModel() {}
+func (p *PARTY_RELATED) isPartyProxyModel() {}
 
-func (p PARTY_RELATED) HasModelName() bool {
+func (p *PARTY_RELATED) HasModelName() bool {
 	return p.Type_.E
 }
 
@@ -34,7 +34,7 @@ func (p *PARTY_RELATED) SetModelName() {
 	}
 }
 
-func (p PARTY_RELATED) Validate(path string) []util.ValidationError {
+func (p *PARTY_RELATED) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

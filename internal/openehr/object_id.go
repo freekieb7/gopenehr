@@ -36,23 +36,30 @@ type X_OBJECT_ID struct {
 	Value ObjectIDModel
 }
 
-func (x X_OBJECT_ID) HasModelName() bool {
-	return x.Value.HasModelName()
-}
-
 func (x *X_OBJECT_ID) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x X_OBJECT_ID) Validate(path string) []util.ValidationError {
+func (x *X_OBJECT_ID) Validate(path string) []util.ValidationError {
+	if x.Value == nil {
+		return []util.ValidationError{
+			{
+				Model:          OBJECT_ID_MODEL_NAME,
+				Path:           path,
+				Message:        "value is not known OBJECT_ID subtype",
+				Recommendation: "Ensure value is properly set",
+			},
+		}
+	}
+
 	var errs []util.ValidationError
 	var attrPath string
 
 	// Abstract model requires _type to be defined
-	if !x.HasModelName() {
+	if !x.Value.HasModelName() {
 		attrPath = path + "._type"
 		errs = append(errs, util.ValidationError{
-			Model:          OBJECT_REF_MODEL_NAME,
+			Model:          OBJECT_ID_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "empty _type field",
 			Recommendation: "Ensure _type field is defined",

@@ -13,9 +13,9 @@ type DV_ORDINAL struct {
 	Value                int64                          `json:"value"`
 }
 
-func (d DV_ORDINAL) isDataValueModel() {}
+func (d *DV_ORDINAL) isDataValueModel() {}
 
-func (d DV_ORDINAL) HasModelName() bool {
+func (d *DV_ORDINAL) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -33,7 +33,7 @@ func (d *DV_ORDINAL) SetModelName() {
 	d.Symbol.SetModelName()
 }
 
-func (d DV_ORDINAL) Validate(path string) []util.ValidationError {
+func (d *DV_ORDINAL) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

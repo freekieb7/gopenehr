@@ -12,7 +12,7 @@ type LOCATABLE_REF struct {
 	ID        X_UID_BASED_ID        `json:"id"`
 }
 
-func (l LOCATABLE_REF) HasModelName() bool {
+func (l *LOCATABLE_REF) HasModelName() bool {
 	return l.Type_.E
 }
 

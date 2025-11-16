@@ -17,9 +17,9 @@ type DV_SCALE struct {
 	Value                float64                          `json:"value"`
 }
 
-func (d DV_SCALE) isDataValueModel() {}
+func (d *DV_SCALE) isDataValueModel() {}
 
-func (d DV_SCALE) HasModelName() bool {
+func (d *DV_SCALE) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -27,7 +27,7 @@ func (d *DV_SCALE) SetModelName() {
 	d.Type_ = util.Some(DV_SCALE_MODEL_NAME)
 }
 
-func (d DV_SCALE) Validate(path string) []util.ValidationError {
+func (d *DV_SCALE) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

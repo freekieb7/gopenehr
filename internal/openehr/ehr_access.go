@@ -19,7 +19,7 @@ type EHR_ACCESS struct {
 	// Settings         util.Optional[ACCESS_CONTROL_SETTINGS] `json:"settings,omitzero"`
 }
 
-func (e EHR_ACCESS) isVersionModel() {}
+func (e *EHR_ACCESS) isVersionModel() {}
 
 func (e *EHR_ACCESS) SetModelName() {
 	e.MetaType = util.Some(EHR_ACCESS_MODEL_NAME)
@@ -40,7 +40,7 @@ func (e *EHR_ACCESS) SetModelName() {
 	}
 }
 
-func (e EHR_ACCESS) Validate(path string) []util.ValidationError {
+func (e *EHR_ACCESS) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

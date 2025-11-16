@@ -45,7 +45,18 @@ func (x *X_ITEM_STRUCTURE) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x X_ITEM_STRUCTURE) Validate(path string) []util.ValidationError {
+func (x *X_ITEM_STRUCTURE) Validate(path string) []util.ValidationError {
+	if x.Value == nil {
+		return []util.ValidationError{
+			{
+				Model:          ITEM_STRUCTURE_MODEL_NAME,
+				Path:           path,
+				Message:        "value is not known ITEM_STRUCTURE subtype",
+				Recommendation: "Ensure value is properly set",
+			},
+		}
+	}
+
 	var errs []util.ValidationError
 	var attrPath string
 

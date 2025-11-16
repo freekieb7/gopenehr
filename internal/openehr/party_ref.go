@@ -16,7 +16,7 @@ func (p *PARTY_REF) SetModelName() {
 	p.ID.SetModelName()
 }
 
-func (p PARTY_REF) Validate(path string) []util.ValidationError {
+func (p *PARTY_REF) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

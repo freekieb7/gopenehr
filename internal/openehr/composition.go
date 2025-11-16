@@ -25,7 +25,7 @@ type COMPOSITION struct {
 	Content          util.Optional[[]X_CONTENT_ITEM] `json:"content,omitzero"`
 }
 
-func (c COMPOSITION) isVersionModel() {}
+func (c *COMPOSITION) isVersionModel() {}
 
 func (c *COMPOSITION) SetModelName() {
 	c.Type_ = util.Some(COMPOSITION_MODEL_NAME)

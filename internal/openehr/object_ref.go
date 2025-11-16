@@ -20,7 +20,7 @@ func (o *OBJECT_REF) SetModelName() {
 	o.ID.SetModelName()
 }
 
-func (o OBJECT_REF) Validate(path string) []util.ValidationError {
+func (o *OBJECT_REF) Validate(path string) []util.ValidationError {
 	var errs []util.ValidationError
 	var attrPath string
 

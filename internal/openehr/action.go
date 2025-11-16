@@ -30,9 +30,9 @@ type ACTION struct {
 	Description         X_ITEM_STRUCTURE                   `json:"description"`
 }
 
-func (a ACTION) isContentItemModel() {}
+func (a *ACTION) isContentItemModel() {}
 
-func (a ACTION) HasModelName() bool {
+func (a *ACTION) HasModelName() bool {
 	return a.Type_.E
 }
 

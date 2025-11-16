@@ -48,7 +48,18 @@ func (x *X_EVENT) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x X_EVENT) Validate(path string) []util.ValidationError {
+func (x *X_EVENT) Validate(path string) []util.ValidationError {
+	if x.Value == nil {
+		return []util.ValidationError{
+			{
+				Model:          EVENT_MODEL_NAME,
+				Path:           path,
+				Message:        "value is not known EVENT subtype",
+				Recommendation: "Ensure value is properly set",
+			},
+		}
+	}
+
 	var errs []util.ValidationError
 	var attrPath string
 

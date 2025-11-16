@@ -23,10 +23,10 @@ var (
 )
 
 type ValidationError struct {
-	Model          string
-	Path           string
-	Message        string
-	Recommendation string
+	Model          string `json:"model"`
+	Path           string `json:"path"`
+	Message        string `json:"message"`
+	Recommendation string `json:"recommendation"`
 }
 
 func ValidateUID(uid string) error {

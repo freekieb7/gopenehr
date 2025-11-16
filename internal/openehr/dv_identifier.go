@@ -12,9 +12,9 @@ type DV_IDENTIFIER struct {
 	Type     util.Optional[string] `json:"type,omitzero"`
 }
 
-func (d DV_IDENTIFIER) isDataValueModel() {}
+func (d *DV_IDENTIFIER) isDataValueModel() {}
 
-func (d DV_IDENTIFIER) HasModelName() bool {
+func (d *DV_IDENTIFIER) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -22,7 +22,7 @@ func (d *DV_IDENTIFIER) SetModelName() {
 	d.Type_ = util.Some(DV_IDENTIFIER_MODEL_NAME)
 }
 
-func (d DV_IDENTIFIER) Validate(path string) []util.ValidationError {
+func (d *DV_IDENTIFIER) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

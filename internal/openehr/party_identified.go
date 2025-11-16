@@ -15,9 +15,9 @@ type PARTY_IDENTIFIED struct {
 	Identifiers util.Optional[[]DV_IDENTIFIER] `json:"identifiers,omitzero"`
 }
 
-func (p PARTY_IDENTIFIED) isPartyProxyModel() {}
+func (p *PARTY_IDENTIFIED) isPartyProxyModel() {}
 
-func (p PARTY_IDENTIFIED) HasModelName() bool {
+func (p *PARTY_IDENTIFIED) HasModelName() bool {
 	return p.Type_.E
 }
 
@@ -33,7 +33,7 @@ func (p *PARTY_IDENTIFIED) SetModelName() {
 	}
 }
 
-func (p PARTY_IDENTIFIED) Validate(path string) []util.ValidationError {
+func (p *PARTY_IDENTIFIED) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

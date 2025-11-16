@@ -15,9 +15,9 @@ type DV_PARSABLE struct {
 	Formalism string                     `json:"formalism"`
 }
 
-func (d DV_PARSABLE) isDataValueModel() {}
+func (d *DV_PARSABLE) isDataValueModel() {}
 
-func (d DV_PARSABLE) HasModelName() bool {
+func (d *DV_PARSABLE) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -31,7 +31,7 @@ func (d *DV_PARSABLE) SetModelName() {
 	}
 }
 
-func (d DV_PARSABLE) Validate(path string) []util.ValidationError {
+func (d *DV_PARSABLE) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

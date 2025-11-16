@@ -13,9 +13,9 @@ type DV_URI struct {
 	Value string                `json:"value"`
 }
 
-func (d DV_URI) isDataValueModel() {}
+func (d *DV_URI) isDataValueModel() {}
 
-func (d DV_URI) HasModelName() bool {
+func (d *DV_URI) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -23,7 +23,7 @@ func (d *DV_URI) SetModelName() {
 	d.Type_ = util.Some(DV_URI_MODEL_NAME)
 }
 
-func (d DV_URI) Validate(path string) []util.ValidationError {
+func (d *DV_URI) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 
 	// Validate _type

@@ -34,7 +34,7 @@ func (f *FEEDER_AUDIT) SetModelName() {
 	}
 }
 
-func (f FEEDER_AUDIT) Validate(path string) []util.ValidationError {
+func (f *FEEDER_AUDIT) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

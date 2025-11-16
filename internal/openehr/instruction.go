@@ -30,9 +30,9 @@ type INSTRUCTION struct {
 	Activities          util.Optional[[]ACTIVITY]       `json:"activities,omitzero"`
 }
 
-func (i INSTRUCTION) isContentItemModel() {}
+func (i *INSTRUCTION) isContentItemModel() {}
 
-func (i INSTRUCTION) HasModelName() bool {
+func (i *INSTRUCTION) HasModelName() bool {
 	return i.Type_.E
 }
 

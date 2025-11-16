@@ -21,9 +21,9 @@ type DV_DATE_TIME struct {
 	Value                string                           `json:"value"`
 }
 
-func (d DV_DATE_TIME) isDataValueModel() {}
+func (d *DV_DATE_TIME) isDataValueModel() {}
 
-func (d DV_DATE_TIME) HasModelName() bool {
+func (d *DV_DATE_TIME) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -45,7 +45,7 @@ func (d *DV_DATE_TIME) SetModelName() {
 	}
 }
 
-func (d DV_DATE_TIME) Validate(path string) []util.ValidationError {
+func (d *DV_DATE_TIME) Validate(path string) []util.ValidationError {
 	var errs []util.ValidationError
 	var attrPath string
 

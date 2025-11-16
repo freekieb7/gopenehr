@@ -21,9 +21,9 @@ type POINT_EVENT struct {
 	Data             X_ITEM_STRUCTURE                `json:"data"`
 }
 
-func (p POINT_EVENT) isEventModel() {}
+func (p *POINT_EVENT) isEventModel() {}
 
-func (p POINT_EVENT) HasModelName() bool {
+func (p *POINT_EVENT) HasModelName() bool {
 	return p.Type_.E
 }
 

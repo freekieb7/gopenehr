@@ -22,7 +22,7 @@ type EHR_STATUS struct {
 	OtherDetails     util.Optional[X_ITEM_STRUCTURE] `json:"other_details,omitzero"`
 }
 
-func (e EHR_STATUS) isVersionModel() {}
+func (e *EHR_STATUS) isVersionModel() {}
 
 func (e *EHR_STATUS) SetModelName() {
 	e.Type_ = util.Some(EHR_STATUS_MODEL_NAME)
@@ -47,7 +47,7 @@ func (e *EHR_STATUS) SetModelName() {
 	}
 }
 
-func (e EHR_STATUS) Validate(path string) []util.ValidationError {
+func (e *EHR_STATUS) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

@@ -14,11 +14,11 @@ type HIER_OBJECT_ID struct {
 	Value string                `json:"value"`
 }
 
-func (h HIER_OBJECT_ID) isUidBasedIDModel() {}
+func (h *HIER_OBJECT_ID) isUidBasedIDModel() {}
 
-func (h HIER_OBJECT_ID) isObjectIDModel() {}
+func (h *HIER_OBJECT_ID) isObjectIDModel() {}
 
-func (h HIER_OBJECT_ID) HasModelName() bool {
+func (h *HIER_OBJECT_ID) HasModelName() bool {
 	return h.Type_.E
 }
 
@@ -26,7 +26,7 @@ func (h *HIER_OBJECT_ID) SetModelName() {
 	h.Type_ = util.Some(HIER_OBJECT_ID_MODEL_NAME)
 }
 
-func (h HIER_OBJECT_ID) Validate(path string) []util.ValidationError {
+func (h *HIER_OBJECT_ID) Validate(path string) []util.ValidationError {
 	var errs []util.ValidationError
 	var attrPath string
 

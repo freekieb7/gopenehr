@@ -39,7 +39,18 @@ func (x *X_DATA_VALUE) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x X_DATA_VALUE) Validate(path string) []util.ValidationError {
+func (x *X_DATA_VALUE) Validate(path string) []util.ValidationError {
+	if x.Value == nil {
+		return []util.ValidationError{
+			{
+				Model:          DATA_VALUE_MODEL_NAME,
+				Path:           path,
+				Message:        "value is not known DATA_VALUE subtype",
+				Recommendation: "Ensure value is properly set",
+			},
+		}
+	}
+
 	var errs []util.ValidationError
 	var attrPath string
 

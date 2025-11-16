@@ -25,9 +25,9 @@ type ADMIN_ENTRY struct {
 	Data                X_ITEM_STRUCTURE               `json:"data"`
 }
 
-func (a ADMIN_ENTRY) isContentItemModel() {}
+func (a *ADMIN_ENTRY) isContentItemModel() {}
 
-func (a ADMIN_ENTRY) HasModelName() bool {
+func (a *ADMIN_ENTRY) HasModelName() bool {
 	return a.Type_.E
 }
 

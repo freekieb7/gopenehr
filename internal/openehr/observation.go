@@ -28,9 +28,9 @@ type OBSERVATION struct {
 	State               util.Optional[HISTORY]          `json:"state,omitzero"`
 }
 
-func (o OBSERVATION) isContentItemModel() {}
+func (o *OBSERVATION) isContentItemModel() {}
 
-func (o OBSERVATION) HasModelName() bool {
+func (o *OBSERVATION) HasModelName() bool {
 	return o.Type_.E
 }
 

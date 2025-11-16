@@ -19,7 +19,7 @@ func (a *ARCHETYPED) SetModelName() {
 	}
 }
 
-func (a ARCHETYPED) Validate(path string) []util.ValidationError {
+func (a *ARCHETYPED) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

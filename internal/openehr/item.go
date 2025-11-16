@@ -43,7 +43,7 @@ func (i *X_ITEM) SetModelName() {
 	i.Value.SetModelName()
 }
 
-func (i X_ITEM) Validate(path string) []util.ValidationError {
+func (i *X_ITEM) Validate(path string) []util.ValidationError {
 	var errs []util.ValidationError
 	var attrPath string
 

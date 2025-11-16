@@ -19,9 +19,9 @@ type GENERIC_ENTRY struct {
 	Data             X_ITEM                        `json:"data"`
 }
 
-func (g GENERIC_ENTRY) isContentItemModel() {}
+func (g *GENERIC_ENTRY) isContentItemModel() {}
 
-func (g GENERIC_ENTRY) HasModelName() bool {
+func (g *GENERIC_ENTRY) HasModelName() bool {
 	return g.Type_.E
 }
 

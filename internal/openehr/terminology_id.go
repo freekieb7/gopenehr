@@ -17,7 +17,7 @@ func (t *TERMINOLOGY_ID) SetModelName() {
 	t.Type_ = util.Some(TERMINOLOGY_ID_MODEL_NAME)
 }
 
-func (t TERMINOLOGY_ID) Validate(path string) []util.ValidationError {
+func (t *TERMINOLOGY_ID) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

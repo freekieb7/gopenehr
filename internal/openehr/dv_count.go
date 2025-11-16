@@ -19,9 +19,9 @@ type DV_COUNT struct {
 	OtherReferenceRanges util.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges,omitzero"`
 }
 
-func (d DV_COUNT) isDataValueModel() {}
+func (d *DV_COUNT) isDataValueModel() {}
 
-func (d DV_COUNT) HasModelName() bool {
+func (d *DV_COUNT) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -40,7 +40,7 @@ func (d *DV_COUNT) SetModelName() {
 	}
 }
 
-func (d DV_COUNT) Validate(path string) []util.ValidationError {
+func (d *DV_COUNT) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

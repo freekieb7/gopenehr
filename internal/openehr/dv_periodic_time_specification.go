@@ -9,9 +9,9 @@ type DV_PERIODIC_TIME_SPECIFICATION struct {
 	Value DV_PARSABLE           `json:"value"`
 }
 
-func (d DV_PERIODIC_TIME_SPECIFICATION) isDataValueModel() {}
+func (d *DV_PERIODIC_TIME_SPECIFICATION) isDataValueModel() {}
 
-func (d DV_PERIODIC_TIME_SPECIFICATION) HasModelName() bool {
+func (d *DV_PERIODIC_TIME_SPECIFICATION) HasModelName() bool {
 	return d.Type_.E
 }
 
@@ -20,7 +20,7 @@ func (d *DV_PERIODIC_TIME_SPECIFICATION) SetModelName() {
 	d.Value.SetModelName()
 }
 
-func (d DV_PERIODIC_TIME_SPECIFICATION) Validate(path string) []util.ValidationError {
+func (d *DV_PERIODIC_TIME_SPECIFICATION) Validate(path string) []util.ValidationError {
 	var errors []util.ValidationError
 	var attrPath string
 

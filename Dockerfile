@@ -7,15 +7,12 @@ ARG VERSION=dev
 ARG GIT_COMMIT=unknown
 ARG BUILD_TIME=unknown
 
-# Cache deps
-COPY go.mod go.sum ./
-RUN go mod download
-
 # Copy source
 COPY . .
 
 # Build static binary for linux
 RUN CGO_ENABLED=0 GOOS=linux go build \
+    -mod=vendor \
     -ldflags="-s -w \
     -X github.com/freekieb7/gopenehr/internal/config.Version=${VERSION} \
     -X github.com/freekieb7/gopenehr/internal/config.GitCommit=${GIT_COMMIT} \

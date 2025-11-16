@@ -169,7 +169,10 @@ func (s *EHRService) CreateEHRWithID(ctx context.Context, providedEHRStatus util
 	// Build EHR Access
 	newEhrAccess := openehr.EHR_ACCESS{
 		UID: util.Some(openehr.X_UID_BASED_ID{
-			Value: &versionedEhrAccess.UID,
+			Value: &openehr.OBJECT_VERSION_ID{
+				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
+				Value: fmt.Sprintf("%s::%s::1", versionedEhrAccess.UID.Value, config.SYSTEM_ID_GOPENEHR),
+			},
 		}),
 		Name: openehr.X_DV_TEXT{
 			Value: &openehr.DV_TEXT{
@@ -479,19 +482,19 @@ func (s *EHRService) GetEHRStatusAsJSON(ctx context.Context, ehrID string, filte
 	return rawEhrStatusJSON, nil
 }
 
-func (s *EHRService) UpdateEHRStatus(ctx context.Context, ehrID string, ehrStatus openehr.EHR_STATUS) error {
+func (s *EHRService) UpdateEHRStatus(ctx context.Context, ehrID string, ehrStatus openehr.EHR_STATUS) (openehr.EHR_STATUS, error) {
 	// Validate EHR Status
 	if !ehrStatus.UID.E {
-		return fmt.Errorf("EHR Status UID must be set for update")
+		return openehr.EHR_STATUS{}, fmt.Errorf("EHR Status UID must be set for update")
 	}
 
 	ehrStatusVersionID, ok := ehrStatus.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
 	if !ok {
-		return fmt.Errorf("EHR Status UID must be of type OBJECT_VERSION_ID, got %T", ehrStatus.UID.V.Value)
+		return openehr.EHR_STATUS{}, fmt.Errorf("EHR Status UID must be of type OBJECT_VERSION_ID, got %T", ehrStatus.UID.V.Value)
 	}
 
 	if errs := ehrStatus.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for updated EHR Status: %v", errs)
+		return openehr.EHR_STATUS{}, fmt.Errorf("validation errors for updated EHR Status: %v", errs)
 	}
 
 	// Prepare Original Version of EHR Status
@@ -511,7 +514,7 @@ func (s *EHRService) UpdateEHRStatus(ctx context.Context, ehrID string, ehrStatu
 
 	ehrStatusVersion.SetModelName()
 	if errs := ehrStatusVersion.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new EHR Status Version: %v", errs)
+		return openehr.EHR_STATUS{}, fmt.Errorf("validation errors for new EHR Status Version: %v", errs)
 	}
 
 	// Prepare contribution
@@ -553,13 +556,13 @@ func (s *EHRService) UpdateEHRStatus(ctx context.Context, ehrID string, ehrStatu
 
 	contribution.SetModelName()
 	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new Contribution: %v", errs)
+		return openehr.EHR_STATUS{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
 	}
 
 	// Start transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return openehr.EHR_STATUS{}, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if err := tx.Rollback(ctx); err != nil && err != database.ErrTxClosed {
@@ -571,21 +574,21 @@ func (s *EHRService) UpdateEHRStatus(ctx context.Context, ehrID string, ehrStatu
 	query := `INSERT INTO tbl_openehr_ehr_status (id, versioned_object_id, ehr_id, data) VALUES ($1, $2, $3, $4)`
 	args := []any{ehrStatusVersion.UID.Value, ehrStatusVersion.UID.UID(), ehrID, ehrStatusVersion}
 	if _, err := tx.Exec(ctx, query, args...); err != nil {
-		return fmt.Errorf("failed to insert ehr status into the database: %w", err)
+		return openehr.EHR_STATUS{}, fmt.Errorf("failed to insert ehr status into the database: %w", err)
 	}
 
 	// Insert Contribution
 	query = `INSERT INTO tbl_openehr_contribution (id, ehr_id, data) VALUES ($1, $2, $3)`
 	args = []any{contribution.UID.Value, ehrID, contribution}
 	if _, err := tx.Exec(ctx, query, args...); err != nil {
-		return fmt.Errorf("failed to insert contribution into the database: %w", err)
+		return openehr.EHR_STATUS{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return openehr.EHR_STATUS{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return nil
+	return ehrStatus, nil
 }
 
 func (s *EHRService) GetVersionedEHRStatusAsJSON(ctx context.Context, ehrID string) ([]byte, error) {
@@ -978,32 +981,32 @@ func (s *EHRService) GetRawCurrentCompositionByVersionedObjectID(ctx context.Con
 	return rawCompositionJSON, nil
 }
 
-func (s *EHRService) UpdateCompositionByID(ctx context.Context, ehrID string, updatedComposition openehr.COMPOSITION) error {
+func (s *EHRService) UpdateCompositionByID(ctx context.Context, ehrID string, composition openehr.COMPOSITION) (openehr.COMPOSITION, error) {
 	// Validate updated Composition UID
-	if errs := updatedComposition.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for updated Composition UID: %v", errs)
+	if errs := composition.Validate("$"); len(errs) > 0 {
+		return openehr.COMPOSITION{}, fmt.Errorf("validation errors for updated Composition UID: %v", errs)
 	}
 
-	if !updatedComposition.UID.E {
-		return fmt.Errorf("composition UID must be set for update")
+	if !composition.UID.E {
+		return openehr.COMPOSITION{}, fmt.Errorf("composition UID must be set for update")
 	}
 
 	// Check if Composition exists
-	existsComp, err := s.ExistsEHRComposition(ctx, updatedComposition.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value)
+	existsComp, err := s.ExistsEHRComposition(ctx, composition.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value)
 	if err != nil {
-		return fmt.Errorf("failed to check if Composition exists: %w", err)
+		return openehr.COMPOSITION{}, fmt.Errorf("failed to check if Composition exists: %w", err)
 	}
 	if existsComp {
-		return ErrCompositionAlreadyExists
+		return openehr.COMPOSITION{}, ErrCompositionAlreadyExists
 	}
 
-	if errs := updatedComposition.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for updated Composition: %v", errs)
+	if errs := composition.Validate("$"); len(errs) > 0 {
+		return openehr.COMPOSITION{}, fmt.Errorf("validation errors for updated Composition: %v", errs)
 	}
 
 	// Prepare Original Version of Composition
 	compositionVersion := openehr.ORIGINAL_VERSION{
-		UID: *updatedComposition.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
+		UID: *composition.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
 		LifecycleState: openehr.DV_CODED_TEXT{
 			Value: terminology.VersionLifecycleStateNames[terminology.VERSION_LIFECYCLE_STATE_CODE_COMPLETE],
 			DefiningCode: openehr.CODE_PHRASE{
@@ -1013,13 +1016,13 @@ func (s *EHRService) UpdateCompositionByID(ctx context.Context, ehrID string, up
 				},
 			},
 		},
-		Data: &updatedComposition,
+		Data: &composition,
 	}
 	compositionVersion.SetModelName()
 
 	// Just for ensurance that models are valid
 	if errs := compositionVersion.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new Composition Version: %v", errs)
+		return openehr.COMPOSITION{}, fmt.Errorf("validation errors for new Composition Version: %v", errs)
 	}
 
 	// Prepare contribution
@@ -1061,7 +1064,7 @@ func (s *EHRService) UpdateCompositionByID(ctx context.Context, ehrID string, up
 	contribution.SetModelName()
 
 	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new Contribution: %v", errs)
+		return openehr.COMPOSITION{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
 	}
 
 	// Insert Composition Version
@@ -1069,17 +1072,17 @@ func (s *EHRService) UpdateCompositionByID(ctx context.Context, ehrID string, up
 		 VALUES ($1, $2, $3, $4)`
 	args := []any{compositionVersion.UID.Value, strings.Split(compositionVersion.UID.Value, "::")[0], ehrID, compositionVersion}
 	if _, err := s.DB.Exec(ctx, query, args...); err != nil {
-		return fmt.Errorf("failed to insert updated composition into the database: %w", err)
+		return openehr.COMPOSITION{}, fmt.Errorf("failed to insert updated composition into the database: %w", err)
 	}
 
 	// Insert Contribution
 	query = `INSERT INTO tbl_openehr_contribution (id, ehr_id, data) VALUES ($1, $2, $3)`
 	args = []any{contribution.UID.Value, ehrID, contribution}
 	if _, err := s.DB.Exec(ctx, query, args...); err != nil {
-		return fmt.Errorf("failed to insert contribution into the database: %w", err)
+		return openehr.COMPOSITION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
 
-	return nil
+	return composition, nil
 }
 
 func (s *EHRService) DeleteComposition(ctx context.Context, versionedObjectID string) error {
@@ -1487,6 +1490,29 @@ func (s *EHRService) CreateDirectory(ctx context.Context, ehrID string) (openehr
 	return directory, nil
 }
 
+func (s *EHRService) GetDirectory(ctx context.Context, ehrID string) (openehr.FOLDER, error) {
+	// Fetch Directory by EHR ID
+	query := `
+		SELECT f.data 
+		FROM tbl_openehr_folder f
+		WHERE f.ehr_id = $1
+		ORDER BY f.created_at DESC
+		LIMIT 1
+	`
+	args := []any{ehrID}
+	row := s.DB.QueryRow(ctx, query, args...)
+
+	var directory openehr.FOLDER
+	if err := row.Scan(&directory); err != nil {
+		if err == database.ErrNoRows {
+			return openehr.FOLDER{}, ErrDirectoryNotFound
+		}
+		return openehr.FOLDER{}, fmt.Errorf("failed to fetch Directory by EHR ID from database: %w", err)
+	}
+
+	return directory, nil
+}
+
 func (s *EHRService) GetRawDirectory(ctx context.Context, ehrID string) ([]byte, error) {
 	// Fetch Directory by EHR ID
 	query := `
@@ -1744,7 +1770,6 @@ func (s *EHRService) GetFolderInDirectoryVersionAsJSON(ctx context.Context, ehrI
 	if filterVersionID != "" {
 		query.WriteString(fmt.Sprintf(` AND id = $%d`, argNum))
 		args = append(args, filterVersionID)
-		argNum++
 	}
 
 	query.WriteString(` ORDER BY created_at DESC LIMIT 1`)

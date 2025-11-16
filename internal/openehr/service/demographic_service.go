@@ -245,19 +245,19 @@ func (s *DemographicService) GetAgentAsJSON(ctx context.Context, uidBasedID stri
 	return rawAgentJSON, nil
 }
 
-func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGENT) error {
+func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGENT) (openehr.AGENT, error) {
 	// Validate agent
 	if !agent.UID.E {
-		return fmt.Errorf("agent UID is required for update")
+		return openehr.AGENT{}, fmt.Errorf("agent UID is required for update")
 	}
 
 	agentVersionID, ok := agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
 	if !ok {
-		return fmt.Errorf("agent UID must be of type OBJECT_VERSION_ID, got %T", agent.UID.V.Value)
+		return openehr.AGENT{}, fmt.Errorf("agent UID must be of type OBJECT_VERSION_ID, got %T", agent.UID.V.Value)
 	}
 
 	if errs := agent.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for agent: %v", errs)
+		return openehr.AGENT{}, fmt.Errorf("validation errors for agent: %v", errs)
 	}
 
 	// Prepare contribution
@@ -300,13 +300,13 @@ func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGEN
 	contribution.SetModelName()
 
 	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new Contribution: %v", errs)
+		return openehr.AGENT{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
 	}
 
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return openehr.AGENT{}, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if err := tx.Rollback(ctx); err != nil && err != database.ErrTxClosed {
@@ -318,22 +318,22 @@ func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGEN
 	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_agent (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(), agent)
 	if err != nil {
-		return fmt.Errorf("failed to insert agent: %w", err)
+		return openehr.AGENT{}, fmt.Errorf("failed to insert agent: %w", err)
 	}
 
 	// Insert contribution
 	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
-		return fmt.Errorf("failed to insert contribution: %w", err)
+		return openehr.AGENT{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
 
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return openehr.AGENT{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return nil
+	return agent, nil
 }
 
 func (s *DemographicService) DeleteAgent(ctx context.Context, versionedObjectID string) error {
@@ -613,19 +613,19 @@ func (s *DemographicService) GetGroupAsJSON(ctx context.Context, uidBasedID stri
 	return rawGroupJSON, nil
 }
 
-func (s *DemographicService) UpdateGroup(ctx context.Context, group openehr.GROUP) error {
+func (s *DemographicService) UpdateGroup(ctx context.Context, group openehr.GROUP) (openehr.GROUP, error) {
 	// Validate group
 	if !group.UID.E {
-		return fmt.Errorf("group UID is required for update")
+		return openehr.GROUP{}, fmt.Errorf("group UID is required for update")
 	}
 
 	groupVersionID, ok := group.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
 	if !ok {
-		return fmt.Errorf("group UID must be of type OBJECT_VERSION_ID, got %T", group.UID.V.Value)
+		return openehr.GROUP{}, fmt.Errorf("group UID must be of type OBJECT_VERSION_ID, got %T", group.UID.V.Value)
 	}
 
 	if errs := group.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for group: %v", errs)
+		return openehr.GROUP{}, fmt.Errorf("validation errors for group: %v", errs)
 	}
 
 	// Prepare contribution
@@ -668,13 +668,13 @@ func (s *DemographicService) UpdateGroup(ctx context.Context, group openehr.GROU
 	contribution.SetModelName()
 
 	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new Contribution: %v", errs)
+		return openehr.GROUP{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
 	}
 
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return openehr.GROUP{}, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if err := tx.Rollback(ctx); err != nil && err != database.ErrTxClosed {
@@ -686,22 +686,22 @@ func (s *DemographicService) UpdateGroup(ctx context.Context, group openehr.GROU
 	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_group (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		group.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, group.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(), group)
 	if err != nil {
-		return fmt.Errorf("failed to insert group: %w", err)
+		return openehr.GROUP{}, fmt.Errorf("failed to insert group: %w", err)
 	}
 
 	// Insert contribution
 	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
-		return fmt.Errorf("failed to insert contribution: %w", err)
+		return openehr.GROUP{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
 
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return openehr.GROUP{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return nil
+	return group, nil
 }
 
 func (s *DemographicService) DeleteGroup(ctx context.Context, versionedObjectID string) error {
@@ -981,19 +981,19 @@ func (s *DemographicService) GetPersonAsJSON(ctx context.Context, uidBasedID str
 	return rawPersonJSON, nil
 }
 
-func (s *DemographicService) UpdatePerson(ctx context.Context, person openehr.PERSON) error {
+func (s *DemographicService) UpdatePerson(ctx context.Context, person openehr.PERSON) (openehr.PERSON, error) {
 	// Validate person
 	if !person.UID.E {
-		return fmt.Errorf("person UID is required for update")
+		return openehr.PERSON{}, fmt.Errorf("person UID is required for update")
 	}
 
 	personVersionID, ok := person.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
 	if !ok {
-		return fmt.Errorf("person UID must be of type OBJECT_VERSION_ID, got %T", person.UID.V.Value)
+		return openehr.PERSON{}, fmt.Errorf("person UID must be of type OBJECT_VERSION_ID, got %T", person.UID.V.Value)
 	}
 
 	if errs := person.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for person: %v", errs)
+		return openehr.PERSON{}, fmt.Errorf("validation errors for person: %v", errs)
 	}
 
 	// Prepare contribution
@@ -1036,13 +1036,13 @@ func (s *DemographicService) UpdatePerson(ctx context.Context, person openehr.PE
 	contribution.SetModelName()
 
 	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new Contribution: %v", errs)
+		return openehr.PERSON{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
 	}
 
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return openehr.PERSON{}, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if err := tx.Rollback(ctx); err != nil && err != database.ErrTxClosed {
@@ -1054,22 +1054,22 @@ func (s *DemographicService) UpdatePerson(ctx context.Context, person openehr.PE
 	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_person (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		person.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, person.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(), person)
 	if err != nil {
-		return fmt.Errorf("failed to insert person: %w", err)
+		return openehr.PERSON{}, fmt.Errorf("failed to insert person: %w", err)
 	}
 
 	// Insert contribution
 	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
-		return fmt.Errorf("failed to insert contribution: %w", err)
+		return openehr.PERSON{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
 
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return openehr.PERSON{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return nil
+	return person, nil
 }
 
 func (s *DemographicService) DeletePerson(ctx context.Context, versionedObjectID string) error {
@@ -1697,19 +1697,19 @@ func (s *DemographicService) GetRoleAsJSON(ctx context.Context, uidBasedID strin
 	return rawRoleJSON, nil
 }
 
-func (s *DemographicService) UpdateRole(ctx context.Context, role openehr.ROLE) error {
+func (s *DemographicService) UpdateRole(ctx context.Context, role openehr.ROLE) (openehr.ROLE, error) {
 	// Validate role
 	if !role.UID.E {
-		return fmt.Errorf("role UID is required for update")
+		return openehr.ROLE{}, fmt.Errorf("role UID is required for update")
 	}
 
 	roleVersionID, ok := role.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
 	if !ok {
-		return fmt.Errorf("role UID must be of type OBJECT_VERSION_ID, got %T", role.UID.V.Value)
+		return openehr.ROLE{}, fmt.Errorf("role UID must be of type OBJECT_VERSION_ID, got %T", role.UID.V.Value)
 	}
 
 	if errs := role.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for role: %v", errs)
+		return openehr.ROLE{}, fmt.Errorf("validation errors for role: %v", errs)
 	}
 
 	// Prepare contribution
@@ -1752,13 +1752,13 @@ func (s *DemographicService) UpdateRole(ctx context.Context, role openehr.ROLE) 
 	contribution.SetModelName()
 
 	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new Contribution: %v", errs)
+		return openehr.ROLE{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
 	}
 
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return openehr.ROLE{}, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
 		if err := tx.Rollback(ctx); err != nil && err != database.ErrTxClosed {
@@ -1770,22 +1770,22 @@ func (s *DemographicService) UpdateRole(ctx context.Context, role openehr.ROLE) 
 	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_role (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		role.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, role.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(), role)
 	if err != nil {
-		return fmt.Errorf("failed to insert role: %w", err)
+		return openehr.ROLE{}, fmt.Errorf("failed to insert role: %w", err)
 	}
 
 	// Insert contribution
 	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
-		return fmt.Errorf("failed to insert contribution: %w", err)
+		return openehr.ROLE{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
 
 	// Commit transaction
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		return openehr.ROLE{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	return nil
+	return role, nil
 }
 
 func (s *DemographicService) DeleteRole(ctx context.Context, versionedObjectID string) error {

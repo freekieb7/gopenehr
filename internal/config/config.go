@@ -33,6 +33,7 @@ func (e Environment) IsProduction() bool {
 }
 
 type Config struct {
+	Host        string
 	Version     string
 	Environment Environment
 	DatabaseURL string
@@ -40,6 +41,12 @@ type Config struct {
 
 func (c *Config) Load() error {
 	c.Version = Version
+
+	host, err := getEnvString("APP_HOST", "http://localhost:3000", false)
+	if err != nil {
+		return err
+	}
+	c.Host = host
 
 	env, err := getEnvEnvironment("APP_ENV", Production, false)
 	if err != nil {

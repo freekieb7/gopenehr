@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/openehr"
 	"github.com/freekieb7/gopenehr/internal/openehr/service"
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
@@ -14,15 +15,15 @@ import (
 )
 
 type Handler struct {
-	Version            string
+	Config             *config.Config
 	Logger             *slog.Logger
 	EHRService         *service.EHRService
 	DemographicService *service.DemographicService
 }
 
-func NewHandler(version string, logger *slog.Logger, ehrService *service.EHRService, demographicService *service.DemographicService) Handler {
+func NewHandler(cfg *config.Config, logger *slog.Logger, ehrService *service.EHRService, demographicService *service.DemographicService) Handler {
 	return Handler{
-		Version:            version,
+		Config:             cfg,
 		Logger:             logger,
 		EHRService:         ehrService,
 		DemographicService: demographicService,
@@ -154,7 +155,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 func (h *Handler) SystemInfo(c *fiber.Ctx) error {
 	response := map[string]any{
 		"solution":              "gopenEHR",
-		"version":               h.Version,
+		"version":               h.Config.Version,
 		"vendor":                "freekieb7",
 		"restapi_specs_version": "development",
 		"conformance_profile":   "STANDARD",
@@ -172,6 +173,8 @@ func (h *Handler) SystemInfo(c *fiber.Ctx) error {
 
 func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	subjectID := c.Query("subject_id")
 	if subjectID == "" {
@@ -202,19 +205,25 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
+	// response type
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
 	// Check for optional EHR_STATUS in the request body
-	var newEhrStatus util.Optional[openehr.EHR_STATUS]
+	var requestEhrStatus util.Optional[openehr.EHR_STATUS]
 	if len(c.Body()) > 0 {
-		if err := c.BodyParser(&newEhrStatus.V); err != nil {
+		if err := c.BodyParser(&requestEhrStatus.V); err != nil {
 			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 		}
-		newEhrStatus.E = true
+		requestEhrStatus.E = true
 	}
 
 	// Create EHR
-	ehr, err := h.EHRService.CreateEHR(ctx, newEhrStatus)
+	newEHR, err := h.EHRService.CreateEHR(ctx, requestEhrStatus)
 	if err != nil {
-		if newEhrStatus.E && err == service.ErrEHRStatusAlreadyExists {
+		if requestEhrStatus.E && err == service.ErrEHRStatusAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("EHR Status with the given UID already exists")
 		}
 
@@ -223,26 +232,46 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(ehr)
+	// Set response headers
+	c.Set("ETag", "\""+newEHR.EHRID.Value+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+newEHR.EHRID.Value)
+
+	c.Status(fiber.StatusCreated)
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(newEHR)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + newEHR.EHRID.Value + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(newEHR)
+	}
 }
 
 func (h *Handler) GetEHR(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
 
-	ehrJSON, err := h.EHRService.GetEHRAsJSON(ctx, ehrID)
+	ehr, err := h.EHRService.GetEHRAsJSON(ctx, ehrID)
 	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given ID")
+		}
 		h.Logger.ErrorContext(ctx, "Failed to get EHR by ID", "error", err)
 		c.Status(http.StatusInternalServerError)
 		return nil
 	}
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(ehrJSON)
+	return c.Status(fiber.StatusOK).Send(ehr)
 }
 
 func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
@@ -255,22 +284,28 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
 
+	// response type
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
 	// Check for optional EHR_STATUS in the request body
-	var newEhrStatus util.Optional[openehr.EHR_STATUS]
+	var requestEhrStatus util.Optional[openehr.EHR_STATUS]
 	if len(c.Body()) > 0 {
-		if err := c.BodyParser(&newEhrStatus.V); err != nil {
+		if err := c.BodyParser(&requestEhrStatus.V); err != nil {
 			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 		}
-		newEhrStatus.E = true
+		requestEhrStatus.E = true
 	}
 
 	// Create EHR with specified ID and EHR_STATUS
-	ehr, err := h.EHRService.CreateEHRWithID(ctx, newEhrStatus, ehrID)
+	newEHR, err := h.EHRService.CreateEHRWithID(ctx, requestEhrStatus, ehrID)
 	if err != nil {
 		if err == service.ErrEHRAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("EHR with the given ID already exists")
 		}
-		if newEhrStatus.E && err == service.ErrEHRStatusAlreadyExists {
+		if requestEhrStatus.E && err == service.ErrEHRStatusAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("EHR Status with the given UID already exists")
 		}
 
@@ -279,11 +314,28 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.Status(fiber.StatusOK).JSON(ehr)
+	// Determine response
+	c.Set("ETag", "\""+newEHR.EHRID.Value+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+newEHR.EHRID.Value)
+
+	c.Status(fiber.StatusCreated)
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(newEHR)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + newEHR.EHRID.Value + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(newEHR)
+	}
 }
 
 func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
@@ -328,8 +380,14 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
 	}
 
-	var newEhrStatus openehr.EHR_STATUS
-	if err := c.BodyParser(&newEhrStatus); err != nil {
+	// response type
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
+	var requestEhrStatus openehr.EHR_STATUS
+	if err := c.BodyParser(&requestEhrStatus); err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
@@ -350,7 +408,8 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 	}
 
 	// Proceed to update EHR Status
-	if err := h.EHRService.UpdateEHRStatus(ctx, ehrID, newEhrStatus); err != nil {
+	updatedEHRStatus, err := h.EHRService.UpdateEHRStatus(ctx, ehrID, requestEhrStatus)
+	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR Status not found for the given EHR ID")
 		}
@@ -363,11 +422,28 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	// Determine response
+	updatedEHRStatusID := updatedEHRStatus.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+updatedEHRStatusID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+ehrID+"/ehr_status/"+updatedEHRStatusID)
+
+	switch returnType {
+	case ReturnTypeMinimal:
+		return c.SendStatus(fiber.StatusNoContent)
+	case ReturnTypeRepresentation:
+		return c.Status(fiber.StatusOK).JSON(updatedEHRStatus)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + updatedEHRStatusID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.Status(fiber.StatusOK).JSON(updatedEHRStatus)
+	}
 }
 
 func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
@@ -395,6 +471,8 @@ func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
@@ -474,6 +552,8 @@ func (h *Handler) GetVersionedEHRStatusVersion(c *fiber.Ctx) error {
 func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
 	ctx := c.Context()
 
+	c.Accepts("application/json")
+
 	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
@@ -508,12 +588,19 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
 
-	var newComposition openehr.COMPOSITION
-	if err := c.BodyParser(&newComposition); err != nil {
+	// response type
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
+	// Parse new composition from request body
+	var requestComposition openehr.COMPOSITION
+	if err := c.BodyParser(&requestComposition); err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
-	composition, err := h.EHRService.CreateComposition(ctx, ehrID, newComposition)
+	newComposition, err := h.EHRService.CreateComposition(ctx, ehrID, requestComposition)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
@@ -527,7 +614,22 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(composition)
+	// Determine response
+	compositionID := newComposition.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+compositionID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+ehrID+"/composition/"+compositionID)
+
+	switch returnType {
+	case ReturnTypeMinimal:
+		return c.SendStatus(fiber.StatusCreated)
+	case ReturnTypeRepresentation:
+		return c.Status(fiber.StatusCreated).JSON(newComposition)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + compositionID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.Status(fiber.StatusCreated).JSON(newComposition)
+	}
 }
 
 func (h *Handler) GetComposition(c *fiber.Ctx) error {
@@ -582,6 +684,12 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
 	}
 
+	// response type
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
 	// Check collision using If-Match header
 	currentComposition, err := h.EHRService.GetComposition(ctx, uidBasedID, ehrID)
 	if err != nil {
@@ -602,13 +710,14 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 	}
 
 	// Parse updated composition from request body
-	var updatedComposition openehr.COMPOSITION
-	if err := c.BodyParser(&updatedComposition); err != nil {
+	var requestComposition openehr.COMPOSITION
+	if err := c.BodyParser(&requestComposition); err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
 	// Proceed to update Composition
-	if err := h.EHRService.UpdateCompositionByID(ctx, ehrID, updatedComposition); err != nil {
+	updatedComposition, err := h.EHRService.UpdateCompositionByID(ctx, ehrID, requestComposition)
+	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
 		}
@@ -624,7 +733,22 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	// Determine response
+	updatedCompositionID := updatedComposition.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+updatedCompositionID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+ehrID+"/composition/"+updatedCompositionID)
+
+	switch returnType {
+	case ReturnTypeMinimal:
+		return c.SendStatus(fiber.StatusNoContent)
+	case ReturnTypeRepresentation:
+		return c.Status(fiber.StatusOK).JSON(updatedComposition)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + updatedCompositionID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.Status(fiber.StatusOK).JSON(updatedComposition)
+	}
 }
 
 func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
@@ -682,6 +806,8 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
 	ctx := c.Context()
 
+	c.Accepts("application/json")
+
 	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
@@ -712,6 +838,8 @@ func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
 func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
 	ctx := c.Context()
 
+	c.Accepts("application/json")
+
 	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
@@ -741,6 +869,8 @@ func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
@@ -781,6 +911,8 @@ func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
@@ -828,6 +960,12 @@ func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
 
+	// return type
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
 	directory, err := h.EHRService.CreateDirectory(ctx, ehrID)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
@@ -842,7 +980,23 @@ func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(directory)
+	// Determine response
+	directoryID := directory.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+directoryID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+ehrID+"/directory/"+directoryID)
+
+	c.Status(fiber.StatusCreated)
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(directory)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + directoryID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(directory)
+	}
 }
 
 func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
@@ -860,8 +1014,14 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
 	}
 
-	var currentDirectory openehr.FOLDER
-	rawCurrentDirectory, err := h.EHRService.GetRawDirectory(ctx, ehrID)
+	// return type
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
+	// Check collision using If-Match header
+	currentDirectory, err := h.EHRService.GetDirectory(ctx, ehrID)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
@@ -870,11 +1030,6 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusNotFound).SendString("Directory not found for the given EHR ID")
 		}
 		h.Logger.ErrorContext(ctx, "Failed to get current Directory", "error", err)
-		c.Status(http.StatusInternalServerError)
-		return nil
-	}
-	if err := json.Unmarshal(rawCurrentDirectory, &currentDirectory); err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to unmarshal current Directory", "error", err)
 		c.Status(http.StatusInternalServerError)
 		return nil
 	}
@@ -908,7 +1063,22 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	// Determine response
+	updatedDirectoryID := updatedDirectory.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+updatedDirectoryID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+ehrID+"/directory/"+updatedDirectoryID)
+
+	switch returnType {
+	case ReturnTypeMinimal:
+		return c.SendStatus(fiber.StatusNoContent)
+	case ReturnTypeRepresentation:
+		return c.Status(fiber.StatusOK).JSON(updatedDirectory)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + updatedDirectoryID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.Status(fiber.StatusOK).JSON(updatedDirectory)
+	}
 }
 
 func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
@@ -967,6 +1137,8 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
 	ctx := c.Context()
 
+	c.Accepts("application/json")
+
 	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
@@ -1001,6 +1173,8 @@ func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
 
 func (h *Handler) GetFolderInDirectoryVersion(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
@@ -1041,6 +1215,13 @@ func (h *Handler) CreateContribution(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
 
+	// return type
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
+	// Parse new contribution from request body
 	var newContribution openehr.CONTRIBUTION
 	if err := c.BodyParser(&newContribution); err != nil {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
@@ -1057,7 +1238,23 @@ func (h *Handler) CreateContribution(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(contribution)
+	// Determine response
+	contributionID := contribution.UID.Value
+	c.Set("ETag", "\""+contributionID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+ehrID+"/contribution/"+contributionID)
+
+	c.Status(fiber.StatusCreated)
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(contribution)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + contributionID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(contribution)
+	}
 }
 
 func (h *Handler) GetContribution(c *fiber.Ctx) error {
@@ -1126,6 +1323,13 @@ func (h *Handler) CreateAgent(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
+	// return type
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
+	// Parse new agent from request body
 	var newAgent openehr.AGENT
 	if err := c.BodyParser(&newAgent); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Agent", "error", err)
@@ -1147,11 +1351,29 @@ func (h *Handler) CreateAgent(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(agent)
+	// Determine response
+	agentID := agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+agentID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/agent/"+agentID)
+
+	c.Status(fiber.StatusCreated)
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(agent)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + agentID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(agent)
+	}
 }
 
 func (h *Handler) GetAgent(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	uidBasedID := c.Params("uid_based_id")
 	if uidBasedID == "" {
@@ -1187,6 +1409,12 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
 	}
 
+	// return type
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
 	// Ensure Agent exists before update
 	versionedObjectID := strings.Split(uidBasedID, "::")[0]
 	currentAgent, err := h.DemographicService.GetAgent(ctx, versionedObjectID)
@@ -1205,14 +1433,15 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 	}
 
 	// Parse updated agent from request body
-	var updatedAgent openehr.AGENT
-	if err := c.BodyParser(&updatedAgent); err != nil {
+	var requestAgent openehr.AGENT
+	if err := c.BodyParser(&requestAgent); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Agent", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
 	// Proceed to update Agent
-	if err := h.DemographicService.UpdateAgent(ctx, updatedAgent); err != nil {
+	updatedAgent, err := h.DemographicService.UpdateAgent(ctx, requestAgent)
+	if err != nil {
 		if err == service.ErrAgentNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Agent not found for the given agent ID")
 		}
@@ -1225,7 +1454,22 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	// Determine response
+	updatedAgentID := updatedAgent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+updatedAgentID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/agent/"+updatedAgentID)
+
+	switch returnType {
+	case ReturnTypeMinimal:
+		return c.SendStatus(fiber.StatusNoContent)
+	case ReturnTypeRepresentation:
+		return c.Status(fiber.StatusOK).JSON(updatedAgent)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + updatedAgentID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.Status(fiber.StatusOK).JSON(updatedAgent)
+	}
 }
 
 func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
@@ -1277,6 +1521,13 @@ func (h *Handler) CreateGroup(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
+	// Parse return type from Prefer header
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
+	// Parse new group from request body
 	var newGroup openehr.GROUP
 	if err := c.BodyParser(&newGroup); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Group", "error", err)
@@ -1298,11 +1549,29 @@ func (h *Handler) CreateGroup(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(group)
+	// Determine response
+	groupID := group.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+groupID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/group/"+groupID)
+
+	c.Status(fiber.StatusCreated)
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(group)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + groupID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(group)
+	}
 }
 
 func (h *Handler) GetGroup(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	uidBasedID := c.Params("uid_based_id")
 	if uidBasedID == "" {
@@ -1338,6 +1607,12 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
 	}
 
+	// Parse return type from Prefer header
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
 	// Ensure Group exists before update
 	versionedObjectID := strings.Split(uidBasedID, "::")[0]
 	currentGroup, err := h.DemographicService.GetGroup(ctx, versionedObjectID)
@@ -1356,14 +1631,15 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 	}
 
 	// Parse updated group from request body
-	var updatedGroup openehr.GROUP
-	if err := c.BodyParser(&updatedGroup); err != nil {
+	var requestGroup openehr.GROUP
+	if err := c.BodyParser(&requestGroup); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Group", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
 	// Proceed to update Group
-	if err := h.DemographicService.UpdateGroup(ctx, updatedGroup); err != nil {
+	updatedGroup, err := h.DemographicService.UpdateGroup(ctx, requestGroup)
+	if err != nil {
 		if err == service.ErrGroupNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Group not found for the given group ID")
 		}
@@ -1376,7 +1652,22 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	// Determine response
+	updatedGroupID := updatedGroup.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+updatedGroupID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/group/"+updatedGroupID)
+
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(updatedGroup)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + updatedGroupID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(updatedGroup)
+	}
 }
 
 func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
@@ -1428,6 +1719,13 @@ func (h *Handler) CreatePerson(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
+	// return type
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
+	// Parse new person from request body
 	var newPerson openehr.PERSON
 	if err := c.BodyParser(&newPerson); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Person", "error", err)
@@ -1449,11 +1747,28 @@ func (h *Handler) CreatePerson(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(person)
+	// Determine response
+	personID := person.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+personID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/person/"+personID)
+
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(person)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + personID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(person)
+	}
 }
 
 func (h *Handler) GetPerson(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	uidBasedID := c.Params("uid_based_id")
 	if uidBasedID == "" {
@@ -1489,6 +1804,12 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
 	}
 
+	// Parse return type from Prefer header
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
 	// Ensure Person exists before update
 	versionedObjectID := strings.Split(uidBasedID, "::")[0]
 	currentPerson, err := h.DemographicService.GetPerson(ctx, versionedObjectID)
@@ -1507,14 +1828,15 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 	}
 
 	// Parse updated person from request body
-	var updatedPerson openehr.PERSON
-	if err := c.BodyParser(&updatedPerson); err != nil {
+	var requestPerson openehr.PERSON
+	if err := c.BodyParser(&requestPerson); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Person", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
 	// Proceed to update Person
-	if err := h.DemographicService.UpdatePerson(ctx, updatedPerson); err != nil {
+	updatePerson, err := h.DemographicService.UpdatePerson(ctx, requestPerson)
+	if err != nil {
 		if err == service.ErrPersonNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Person not found for the given person ID")
 		}
@@ -1527,7 +1849,22 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	// Determine response
+	updatedPersonID := updatePerson.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+updatedPersonID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/person/"+updatedPersonID)
+
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(updatePerson)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + updatedPersonID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(updatePerson)
+	}
 }
 
 func (h *Handler) DeletePerson(c *fiber.Ctx) error {
@@ -1579,6 +1916,13 @@ func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
+	// return type
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
+	// Parse new organisation from request body
 	var newOrganisation openehr.ORGANISATION
 	if err := c.BodyParser(&newOrganisation); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Organisation", "error", err)
@@ -1600,11 +1944,29 @@ func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(organisation)
+	// Determine response
+	organisationID := organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+organisationID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/organisation/"+organisationID)
+
+	c.Status(fiber.StatusCreated)
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(organisation)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + organisationID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(organisation)
+	}
 }
 
 func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	uidBasedID := c.Params("uid_based_id")
 	if uidBasedID == "" {
@@ -1638,6 +2000,12 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 	ifMatch := c.Get("If-Match")
 	if ifMatch == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
+	}
+
+	// Parse return type from Prefer header
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
 
 	// Ensure Organisation exists before update
@@ -1678,7 +2046,22 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	// Determine response
+	updatedOrganisationID := updatedOrganisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+updatedOrganisationID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/organisation/"+updatedOrganisationID)
+
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(updatedOrganisation)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + updatedOrganisationID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(updatedOrganisation)
+	}
 }
 
 func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
@@ -1730,6 +2113,13 @@ func (h *Handler) CreateRole(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
+	// Parse return type from Prefer header
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
+	// Parse new role from request body
 	var newRole openehr.ROLE
 	if err := c.BodyParser(&newRole); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Role", "error", err)
@@ -1751,11 +2141,29 @@ func (h *Handler) CreateRole(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(role)
+	// Determine response
+	roleID := role.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+roleID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/role/"+roleID)
+
+	c.Status(fiber.StatusCreated)
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(role)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + roleID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(role)
+	}
 }
 
 func (h *Handler) GetRole(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	uidBasedID := c.Params("uid_based_id")
 	if uidBasedID == "" {
@@ -1791,6 +2199,12 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
 	}
 
+	// Parse return type from Prefer header
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
 	// Ensure Role exists before update
 	versionedObjectID := strings.Split(uidBasedID, "::")[0]
 	currentRole, err := h.DemographicService.GetRole(ctx, versionedObjectID)
@@ -1809,14 +2223,15 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 	}
 
 	// Parse updated role from request body
-	var updatedRole openehr.ROLE
-	if err := c.BodyParser(&updatedRole); err != nil {
+	var requestRole openehr.ROLE
+	if err := c.BodyParser(&requestRole); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Role", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
 	// Proceed to update Role
-	if err := h.DemographicService.UpdateRole(ctx, updatedRole); err != nil {
+	updatedRole, err := h.DemographicService.UpdateRole(ctx, requestRole)
+	if err != nil {
 		if err == service.ErrRoleNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Role not found for the given role ID")
 		}
@@ -1829,7 +2244,22 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	// Determine response
+	updatedRoleID := updatedRole.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	c.Set("ETag", "\""+updatedRoleID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/role/"+updatedRoleID)
+
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(updatedRole)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + updatedRoleID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(updatedRole)
+	}
 }
 
 func (h *Handler) DeleteRole(c *fiber.Ctx) error {
@@ -1879,6 +2309,8 @@ func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 func (h *Handler) GetVersionedParty(c *fiber.Ctx) error {
 	ctx := c.Context()
 
+	c.Accepts("application/json")
+
 	versionedObjectID := c.Params("versioned_object_id")
 	if versionedObjectID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
@@ -1901,6 +2333,8 @@ func (h *Handler) GetVersionedParty(c *fiber.Ctx) error {
 func (h *Handler) GetVersionedPartyRevisionHistory(c *fiber.Ctx) error {
 	ctx := c.Context()
 
+	c.Accepts("application/json")
+
 	versionedObjectID := c.Params("versioned_object_id")
 	if versionedObjectID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
@@ -1922,6 +2356,8 @@ func (h *Handler) GetVersionedPartyRevisionHistory(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedPartyVersionAtTime(c *fiber.Ctx) error {
 	ctx := c.Context()
+
+	c.Accepts("application/json")
 
 	versionedObjectID := c.Params("versioned_object_id")
 	if versionedObjectID == "" {
@@ -1955,6 +2391,8 @@ func (h *Handler) GetVersionedPartyVersionAtTime(c *fiber.Ctx) error {
 func (h *Handler) GetVersionedPartyVersion(c *fiber.Ctx) error {
 	ctx := c.Context()
 
+	c.Accepts("application/json")
+
 	versionedObjectID := c.Params("versioned_object_id")
 	if versionedObjectID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("versioned_object_id parameter is required")
@@ -1984,6 +2422,13 @@ func (h *Handler) CreateDemographicContribution(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
+	// Parse return type from Prefer header
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	if !returnType.IsValid() {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	}
+
+	// Parse new contribution from request body
 	var newContribution openehr.CONTRIBUTION
 	if err := c.BodyParser(&newContribution); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Demographic Contribution", "error", err)
@@ -2001,7 +2446,23 @@ func (h *Handler) CreateDemographicContribution(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(contribution)
+	// Determine response
+	contributionID := contribution.UID.Value
+	c.Set("ETag", "\""+contributionID+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/demographic/contribution/"+contributionID)
+
+	c.Status(fiber.StatusCreated)
+	switch returnType {
+	case ReturnTypeMinimal:
+		return nil
+	case ReturnTypeRepresentation:
+		return c.JSON(contribution)
+	case ReturnTypeIdentifier:
+		return c.JSON(`{"uid":"` + contributionID + `"}`)
+	default:
+		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		return c.JSON(contribution)
+	}
 }
 
 func (h *Handler) GetDemographicContribution(c *fiber.Ctx) error {
@@ -2162,8 +2623,8 @@ func (h *Handler) GetStoredQueryAtVersion(c *fiber.Ctx) error {
 
 func (h *Handler) DeleteEHRByID(c *fiber.Ctx) error {
 	ctx := c.Context()
-	ehrID := c.Params("ehr_id")
 
+	ehrID := c.Params("ehr_id")
 	if ehrID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
 	}
@@ -2206,4 +2667,21 @@ func (h *Handler) DeleteMultipleEHRs(c *fiber.Ctx) error {
 type ValidationErrorResponse struct {
 	Message          string   `json:"message"`
 	ValidationErrors []string `json:"validationErrors"`
+}
+
+type ReturnType string
+
+const (
+	ReturnTypeMinimal        ReturnType = "minimal"
+	ReturnTypeRepresentation ReturnType = "representation"
+	ReturnTypeIdentifier     ReturnType = "identifier"
+)
+
+func (r ReturnType) IsValid() bool {
+	switch r {
+	case ReturnTypeMinimal, ReturnTypeRepresentation, ReturnTypeIdentifier:
+		return true
+	default:
+		return false
+	}
 }

@@ -33,11 +33,15 @@ jobs:
         with:
           go-version: '1.25.4'
 
-      - name: Download dependencies
-        run: go mod download
+      - name: Verify vendor directory
+        run: |
+          if [ ! -d "vendor" ]; then
+            echo "Error: vendor directory not found"
+            exit 1
+          fi
 
       - name: Run tests
-        run: go test -v -race -coverprofile=coverage.out ./...
+        run: go test -mod=vendor -v -race -coverprofile=coverage.out ./...
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
@@ -59,10 +63,18 @@ jobs:
         with:
           go-version: '1.25.4'
 
+      - name: Verify vendor directory
+        run: |
+          if [ ! -d "vendor" ]; then
+            echo "Error: vendor directory not found"
+            exit 1
+          fi
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
           version: latest
+          args: --modules-download-mode=vendor
 
   docker:
     name: Build and Push Docker Image

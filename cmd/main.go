@@ -114,7 +114,7 @@ func runServer(ctx context.Context) error {
 	}
 	healthHandler.RegisterRoutes(srv)
 
-	openEHRHandler := openehrHandler.NewHandler(cfg.Version, logger, &ehrService, &demographicService)
+	openEHRHandler := openehrHandler.NewHandler(&cfg, logger, &ehrService, &demographicService)
 	openEHRHandler.RegisterRoutes(srv)
 
 	// Set up signal handling for graceful shutdown

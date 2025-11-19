@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/freekieb7/gopenehr/internal/openehr/service"
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 type Handler struct {
@@ -19,14 +21,16 @@ type Handler struct {
 	Logger             *slog.Logger
 	EHRService         *service.EHRService
 	DemographicService *service.DemographicService
+	QueryService       *service.QueryService
 }
 
-func NewHandler(cfg *config.Config, logger *slog.Logger, ehrService *service.EHRService, demographicService *service.DemographicService) Handler {
+func NewHandler(cfg *config.Config, logger *slog.Logger, ehrService *service.EHRService, demographicService *service.DemographicService, queryService *service.QueryService) Handler {
 	return Handler{
 		Config:             cfg,
 		Logger:             logger,
 		EHRService:         ehrService,
 		DemographicService: demographicService,
+		QueryService:       queryService,
 	}
 }
 
@@ -131,8 +135,8 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	v1.Post("/query/aql", h.ExecuteAdHocAQLPost)
 	v1.Get("/query/:qualified_query_name", h.ExecuteStoredAQL)
 	v1.Post("/query/:qualified_query_name", h.ExecuteStoredAQLPost)
-	v1.Get("/query/:qualified_query_name/version", h.ExecuteStoredAQLVersion)
-	v1.Post("/query/:qualified_query_name/version", h.ExecuteStoredAQLVersionPost)
+	v1.Get("/query/:qualified_query_name/:version", h.ExecuteStoredAQLVersion)
+	v1.Post("/query/:qualified_query_name/:version", h.ExecuteStoredAQLVersionPost)
 
 	v1.Get("/definition/template/adl1.4", h.GetTemplatesADL14)
 	v1.Post("/definition/template/adl1.4", h.UploadTemplateADL14)
@@ -221,7 +225,7 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 	}
 
 	// Create EHR
-	newEHR, err := h.EHRService.CreateEHR(ctx, requestEhrStatus)
+	newEHR, err := h.EHRService.CreateEHR(ctx, uuid.NewString(), requestEhrStatus)
 	if err != nil {
 		if requestEhrStatus.E && err == service.ErrEHRStatusAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("EHR Status with the given UID already exists")
@@ -299,8 +303,19 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 		requestEhrStatus.E = true
 	}
 
+	// Check if EHR with given ID already exists
+	_, err := h.EHRService.GetEHR(ctx, ehrID)
+	if err == nil {
+		return c.Status(fiber.StatusConflict).SendString("EHR with the given ID already exists")
+	}
+	if err != service.ErrEHRNotFound {
+		h.Logger.ErrorContext(ctx, "Failed to check if EHR exists", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
 	// Create EHR with specified ID and EHR_STATUS
-	newEHR, err := h.EHRService.CreateEHRWithID(ctx, requestEhrStatus, ehrID)
+	ehr, err := h.EHRService.CreateEHR(ctx, ehrID, requestEhrStatus)
 	if err != nil {
 		if err == service.ErrEHRAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("EHR with the given ID already exists")
@@ -315,20 +330,20 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 	}
 
 	// Determine response
-	c.Set("ETag", "\""+newEHR.EHRID.Value+"\"")
-	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+newEHR.EHRID.Value)
+	c.Set("ETag", "\""+ehr.EHRID.Value+"\"")
+	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+ehr.EHRID.Value)
 
 	c.Status(fiber.StatusCreated)
 	switch returnType {
 	case ReturnTypeMinimal:
 		return nil
 	case ReturnTypeRepresentation:
-		return c.JSON(newEHR)
+		return c.JSON(ehr)
 	case ReturnTypeIdentifier:
-		return c.JSON(`{"uid":"` + newEHR.EHRID.Value + `"}`)
+		return c.JSON(`{"uid":"` + ehr.EHRID.Value + `"}`)
 	default:
 		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.JSON(newEHR)
+		return c.JSON(ehr)
 	}
 }
 
@@ -402,9 +417,23 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 		return nil
 	}
 
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing EHR Status
+	// Check collision using If-Match header
 	if currentEHRStatus.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value != ifMatch {
 		return c.Status(fiber.StatusPreconditionFailed).SendString("EHR Status has been modified since the provided version")
+	}
+
+	// Check if UID is provided in the request body
+	if !requestEhrStatus.UID.E {
+		return c.Status(fiber.StatusBadRequest).SendString("EHR Status UID must be provided in the request body for update")
+	}
+
+	// Ensure the UID in the request body matches the If-Match header
+	requestEHRStatusVersionID, ok := requestEhrStatus.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+	if !ok {
+		return c.Status(fiber.StatusBadRequest).SendString("EHR Status UID must be of type OBJECT_VERSION_ID")
+	}
+	if requestEHRStatusVersionID.Value != ifMatch {
+		return c.Status(fiber.StatusBadRequest).SendString("EHR Status UID in the request body does not match the If-Match header value")
 	}
 
 	// Proceed to update EHR Status
@@ -429,7 +458,8 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 
 	switch returnType {
 	case ReturnTypeMinimal:
-		return c.SendStatus(fiber.StatusNoContent)
+		c.Status(fiber.StatusNoContent)
+		return nil
 	case ReturnTypeRepresentation:
 		return c.Status(fiber.StatusOK).JSON(updatedEHRStatus)
 	case ReturnTypeIdentifier:
@@ -600,6 +630,18 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
+	// Check if EHR exists
+	_, err := h.EHRService.GetEHR(ctx, ehrID)
+	if err != nil {
+		if err == service.ErrEHRNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to check if EHR exists", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Create Composition
 	newComposition, err := h.EHRService.CreateComposition(ctx, ehrID, requestComposition)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
@@ -618,17 +660,18 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 	compositionID := newComposition.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
 	c.Set("ETag", "\""+compositionID+"\"")
 	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+ehrID+"/composition/"+compositionID)
+	c.Status(fiber.StatusCreated)
 
 	switch returnType {
 	case ReturnTypeMinimal:
-		return c.SendStatus(fiber.StatusCreated)
+		return nil
 	case ReturnTypeRepresentation:
-		return c.Status(fiber.StatusCreated).JSON(newComposition)
+		return c.JSON(newComposition)
 	case ReturnTypeIdentifier:
 		return c.JSON(`{"uid":"` + compositionID + `"}`)
 	default:
 		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.Status(fiber.StatusCreated).JSON(newComposition)
+		return c.JSON(newComposition)
 	}
 }
 
@@ -740,7 +783,8 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 
 	switch returnType {
 	case ReturnTypeMinimal:
-		return c.SendStatus(fiber.StatusNoContent)
+		c.Status(fiber.StatusNoContent)
+		return nil
 	case ReturnTypeRepresentation:
 		return c.Status(fiber.StatusOK).JSON(updatedComposition)
 	case ReturnTypeIdentifier:
@@ -800,7 +844,8 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	c.Status(fiber.StatusNoContent)
+	return nil
 }
 
 func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
@@ -961,12 +1006,20 @@ func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 	}
 
 	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
 
-	directory, err := h.EHRService.CreateDirectory(ctx, ehrID)
+	var requestDirectory util.Optional[openehr.FOLDER]
+	if len(c.Body()) > 0 {
+		if err := c.BodyParser(&requestDirectory.V); err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+		}
+		requestDirectory.E = true
+	}
+
+	directory, err := h.EHRService.CreateDirectory(ctx, ehrID, requestDirectory)
 	if err != nil {
 		if err == service.ErrEHRNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
@@ -1070,7 +1123,8 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 
 	switch returnType {
 	case ReturnTypeMinimal:
-		return c.SendStatus(fiber.StatusNoContent)
+		c.Status(fiber.StatusNoContent)
+		return nil
 	case ReturnTypeRepresentation:
 		return c.Status(fiber.StatusOK).JSON(updatedDirectory)
 	case ReturnTypeIdentifier:
@@ -1131,7 +1185,8 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	c.Status(fiber.StatusNoContent)
+	return nil
 }
 
 func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
@@ -1216,7 +1271,7 @@ func (h *Handler) CreateContribution(c *fiber.Ctx) error {
 	}
 
 	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
@@ -1324,7 +1379,7 @@ func (h *Handler) CreateAgent(c *fiber.Ctx) error {
 	c.Accepts("application/json")
 
 	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
@@ -1410,7 +1465,7 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 	}
 
 	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
@@ -1461,7 +1516,8 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 
 	switch returnType {
 	case ReturnTypeMinimal:
-		return c.SendStatus(fiber.StatusNoContent)
+		c.Status(fiber.StatusNoContent)
+		return nil
 	case ReturnTypeRepresentation:
 		return c.Status(fiber.StatusOK).JSON(updatedAgent)
 	case ReturnTypeIdentifier:
@@ -1513,7 +1569,8 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	c.Status(fiber.StatusNoContent)
+	return nil
 }
 
 func (h *Handler) CreateGroup(c *fiber.Ctx) error {
@@ -1522,7 +1579,7 @@ func (h *Handler) CreateGroup(c *fiber.Ctx) error {
 	c.Accepts("application/json")
 
 	// Parse return type from Prefer header
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
@@ -1608,7 +1665,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 	}
 
 	// Parse return type from Prefer header
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
@@ -1711,7 +1768,8 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	c.Status(fiber.StatusNoContent)
+	return nil
 }
 
 func (h *Handler) CreatePerson(c *fiber.Ctx) error {
@@ -1720,7 +1778,7 @@ func (h *Handler) CreatePerson(c *fiber.Ctx) error {
 	c.Accepts("application/json")
 
 	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
@@ -1805,7 +1863,7 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 	}
 
 	// Parse return type from Prefer header
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
@@ -1908,7 +1966,8 @@ func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	c.Status(fiber.StatusNoContent)
+	return nil
 }
 
 func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
@@ -1917,7 +1976,7 @@ func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 	c.Accepts("application/json")
 
 	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
@@ -2003,7 +2062,7 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 	}
 
 	// Parse return type from Prefer header
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
@@ -2105,7 +2164,8 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	c.Status(fiber.StatusNoContent)
+	return nil
 }
 
 func (h *Handler) CreateRole(c *fiber.Ctx) error {
@@ -2114,7 +2174,7 @@ func (h *Handler) CreateRole(c *fiber.Ctx) error {
 	c.Accepts("application/json")
 
 	// Parse return type from Prefer header
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
@@ -2200,7 +2260,7 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 	}
 
 	// Parse return type from Prefer header
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
@@ -2303,7 +2363,8 @@ func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	c.Status(fiber.StatusNoContent)
+	return nil
 }
 
 func (h *Handler) GetVersionedParty(c *fiber.Ctx) error {
@@ -2423,7 +2484,7 @@ func (h *Handler) CreateDemographicContribution(c *fiber.Ctx) error {
 	c.Accepts("application/json")
 
 	// Parse return type from Prefer header
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeRepresentation)))
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
@@ -2554,27 +2615,336 @@ func (h *Handler) DeleteRoleTagByKey(c *fiber.Ctx) error {
 }
 
 func (h *Handler) ExecuteAdHocAQL(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("Execute Ad Hoc AQL not implemented yet")
+	ctx := c.Context()
+
+	query := c.Query("q")
+	if query == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("q query parameter is required")
+	}
+
+	ehrID := c.Query("ehr_id")
+	if ehrID != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Ad Hoc AQL with ehr_id not implemented yet")
+	}
+
+	fetch := c.Query("fetch")
+	if fetch != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Ad Hoc AQL with fetch not implemented yet")
+	}
+
+	offset := c.Query("offset")
+	if offset != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Ad Hoc AQL with offset not implemented yet")
+	}
+
+	queryParametersStr := c.Query("query_parameters")
+	queryParametersURLValues, err := url.ParseQuery(queryParametersStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid query_parameters format")
+	}
+
+	queryParameters := make(map[string]any)
+	for key, values := range queryParametersURLValues {
+		if len(values) > 0 {
+			queryParameters[key] = values[0]
+		}
+	}
+
+	// Execute AQL query
+	if err := h.QueryService.QueryAndCopyTo(ctx, c.Response().BodyWriter(), query, queryParameters); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to execute Ad Hoc AQL", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	c.Status(fiber.StatusOK)
+	return nil
+}
+
+type AdHocAQLRequest struct {
+	Query           string         `json:"q"`
+	EHRID           string         `json:"ehr_id,omitempty"`
+	Fetch           string         `json:"fetch,omitempty"`
+	Offset          int            `json:"offset,omitempty"`
+	QueryParameters map[string]any `json:"query_parameters,omitempty"`
 }
 
 func (h *Handler) ExecuteAdHocAQLPost(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("Execute Ad Hoc AQL Post not implemented yet")
+	ctx := c.Context()
+
+	var aqlRequest AdHocAQLRequest
+	if err := c.BodyParser(&aqlRequest); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse AQL request body", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	if aqlRequest.Query == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("query field is required in the request body")
+	}
+
+	if aqlRequest.EHRID != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Ad Hoc AQL Post with ehr_id not implemented yet")
+	}
+
+	if aqlRequest.Fetch != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Ad Hoc AQL Post with fetch not implemented yet")
+	}
+
+	if aqlRequest.Offset != 0 {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Ad Hoc AQL Post with offset not implemented yet")
+	}
+
+	// Execute AQL query
+	if err := h.QueryService.QueryAndCopyTo(ctx, c.Response().BodyWriter(), aqlRequest.Query, aqlRequest.QueryParameters); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to execute Ad Hoc AQL Post", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	c.Status(fiber.StatusOK)
+	return nil
 }
 
 func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL not implemented yet")
+	ctx := c.Context()
+
+	name := c.Params("qualified_query_name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("qualified_query_name path parameter is required")
+	}
+
+	ehrID := c.Query("ehr_id")
+	if ehrID != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL with ehr_id not implemented yet")
+	}
+
+	fetch := c.Query("fetch")
+	if fetch != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL with fetch not implemented yet")
+	}
+
+	offset := c.Query("offset")
+	if offset != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL with offset not implemented yet")
+	}
+
+	queryParametersStr := c.Query("query_parameters")
+	queryParametersURLValues, err := url.ParseQuery(queryParametersStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid query_parameters format")
+	}
+
+	queryParameters := make(map[string]any)
+	for key, values := range queryParametersURLValues {
+		if len(values) > 0 {
+			queryParameters[key] = values[0]
+		}
+	}
+
+	// Retrieve stored query by name
+	storedQuery, err := h.QueryService.GetQueryByName(ctx, name, "")
+	if err != nil {
+		if err == service.ErrQueryNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Stored query not found for the given name")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get stored query by name", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Execute AQL query
+	if err := h.QueryService.QueryAndCopyTo(ctx, c.Response().BodyWriter(), storedQuery.Query, nil); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to execute Stored AQL", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	c.Status(fiber.StatusOK)
+	return nil
+}
+
+type StoredAQLRequest struct {
+	EHRID           string         `json:"ehr_id,omitempty"`
+	Fetch           string         `json:"fetch,omitempty"`
+	Offset          int            `json:"offset,omitempty"`
+	QueryParameters map[string]any `json:"query_parameters,omitempty"`
 }
 
 func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Post not implemented yet")
+	ctx := c.Context()
+
+	name := c.Params("qualified_query_name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("qualified_query_name path parameter is required")
+	}
+
+	var aqlRequest StoredAQLRequest
+	if err := c.BodyParser(&aqlRequest); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse Stored AQL request body", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	if aqlRequest.EHRID != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Post with ehr_id not implemented yet")
+	}
+
+	if aqlRequest.Fetch != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Post with fetch not implemented yet")
+	}
+
+	if aqlRequest.Offset != 0 {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Post with offset not implemented yet")
+	}
+
+	// Retrieve stored query by name
+	storedQuery, err := h.QueryService.GetQueryByName(ctx, name, "")
+	if err != nil {
+		if err == service.ErrQueryNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Stored query not found for the given name")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get stored query by name", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Execute AQL query
+	if err := h.QueryService.QueryAndCopyTo(ctx, c.Response().BodyWriter(), storedQuery.Query, aqlRequest.QueryParameters); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to execute Stored AQL Post", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	c.Status(fiber.StatusOK)
+	return nil
 }
 
 func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Version not implemented yet")
+	ctx := c.Context()
+
+	name := c.Params("qualified_query_name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("qualified_query_name path parameter is required")
+	}
+
+	version := c.Params("version")
+	if version == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("version path parameter is required")
+	}
+
+	ehrID := c.Query("ehr_id")
+	if ehrID != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Version with ehr_id not implemented yet")
+	}
+
+	fetch := c.Query("fetch")
+	if fetch != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Version with fetch not implemented yet")
+	}
+
+	offset := c.Query("offset")
+	if offset != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Version with offset not implemented yet")
+	}
+
+	queryParametersStr := c.Query("query_parameters")
+	queryParametersURLValues, err := url.ParseQuery(queryParametersStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid query_parameters format")
+	}
+
+	queryParameters := make(map[string]any)
+	for key, values := range queryParametersURLValues {
+		if len(values) > 0 {
+			queryParameters[key] = values[0]
+		}
+	}
+
+	// Retrieve stored query by name and version
+	storedQuery, err := h.QueryService.GetQueryByName(ctx, name, version)
+	if err != nil {
+		if err == service.ErrQueryNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Stored query not found for the given name and version")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get stored query by name and version", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Execute AQL query
+	if err := h.QueryService.QueryAndCopyTo(ctx, c.Response().BodyWriter(), storedQuery.Query, queryParameters); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to execute Stored AQL Version", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	c.Status(fiber.StatusOK)
+	return nil
+}
+
+type StoredAQLVersionRequest struct {
+	EHRID           string         `json:"ehr_id,omitempty"`
+	Fetch           string         `json:"fetch,omitempty"`
+	Offset          int            `json:"offset,omitempty"`
+	QueryParameters map[string]any `json:"query_parameters,omitempty"`
 }
 
 func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Version Post not implemented yet")
+	ctx := c.Context()
+
+	name := c.Params("qualified_query_name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("qualified_query_name path parameter is required")
+	}
+
+	version := c.Params("version")
+	if version == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("version path parameter is required")
+	}
+
+	var aqlRequest StoredAQLVersionRequest
+	if err := c.BodyParser(&aqlRequest); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to parse Stored AQL Version request body", "error", err)
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	}
+
+	if aqlRequest.EHRID != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Version Post with ehr_id not implemented yet")
+	}
+
+	if aqlRequest.Fetch != "" {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Version Post with fetch not implemented yet")
+	}
+
+	if aqlRequest.Offset != 0 {
+		return c.Status(fiber.StatusNotImplemented).SendString("Execute Stored AQL Version Post with offset not implemented yet")
+	}
+
+	// Retrieve stored query by name and version
+	storedQuery, err := h.QueryService.GetQueryByName(ctx, name, version)
+	if err != nil {
+		if err == service.ErrQueryNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Stored query not found for the given name and version")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get stored query by name and version", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	// Execute AQL query
+	if err := h.QueryService.QueryAndCopyTo(ctx, c.Response().BodyWriter(), storedQuery.Query, aqlRequest.QueryParameters); err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to execute Stored AQL Version Post", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	c.Status(fiber.StatusOK)
+	return nil
 }
 
 func (h *Handler) GetTemplatesADL14(c *fiber.Ctx) error {
@@ -2606,19 +2976,129 @@ func (h *Handler) GetTemplateADL2AtVersion(c *fiber.Ctx) error {
 }
 
 func (h *Handler) ListStoredQueries(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("List Stored Queries not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("application/json")
+
+	name := c.Params("qualified_query_name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("qualified_query_name path parameter is required")
+	}
+
+	queriesAsJSON, err := h.QueryService.ListStoredQueriesAsJSON(ctx, name)
+	if err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to list stored queries", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(queriesAsJSON)
 }
 
 func (h *Handler) StoreQuery(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("Store Query not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("text/plain")
+
+	name := c.Params("qualified_query_name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("qualified_query_name path parameter is required")
+	}
+
+	queryType := c.Query("query_type")
+	if queryType != "" && queryType != "AQL" {
+		return c.Status(fiber.StatusBadRequest).SendString("Unsupported query_type. Only 'AQL' is supported.")
+	}
+
+	query := string(c.Body())
+	if query == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("Query in request body is required")
+	}
+
+	// Check if query with the same name already exists
+	_, err := h.QueryService.GetQueryByName(ctx, name, "")
+	if err == nil {
+		return c.Status(fiber.StatusConflict).SendString("Query with the given name already exists, system cannot update without knowing the target version, please use Store Query Version endpoint instead")
+	}
+	if err != service.ErrQueryNotFound {
+		h.Logger.ErrorContext(ctx, "Failed to check existing query by name", "error", err)
+		return c.Status(fiber.StatusInternalServerError).SendString("Failed to store query")
+	}
+
+	// Store the query
+	err = h.QueryService.StoreQuery(ctx, name, "1.0.0", query)
+	if err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to store query", "error", err)
+		return c.Status(fiber.StatusInternalServerError).SendString("Failed to store query")
+	}
+
+	c.Status(fiber.StatusOK)
+	return nil
 }
 
 func (h *Handler) StoreQueryVersion(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("Store Query Version not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("text/plain")
+
+	name := c.Params("qualified_query_name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("qualified_query_name path parameter is required")
+	}
+
+	version := c.Params("version")
+	if version == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("version path parameter is required")
+	}
+
+	queryType := c.Query("query_type")
+	if queryType != "" && queryType != "AQL" {
+		return c.Status(fiber.StatusBadRequest).SendString("Unsupported query_type. Only 'AQL' is supported.")
+	}
+
+	query := string(c.Body())
+	if query == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("Query in request body is required")
+	}
+
+	// Store the new version of the query
+	err := h.QueryService.StoreQuery(ctx, name, version, query)
+	if err != nil {
+		h.Logger.ErrorContext(ctx, "Failed to store query version", "error", err)
+		return c.Status(fiber.StatusInternalServerError).SendString("Failed to store query version")
+	}
+
+	c.Status(fiber.StatusOK)
+	return nil
 }
 
 func (h *Handler) GetStoredQueryAtVersion(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("Get Stored Query At Version not implemented yet")
+	ctx := c.Context()
+
+	c.Accepts("text/plain")
+
+	name := c.Params("qualified_query_name")
+	if name == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("qualified_query_name path parameter is required")
+	}
+
+	version := c.Params("version")
+	if version == "" {
+		return c.Status(fiber.StatusBadRequest).SendString("version path parameter is required")
+	}
+
+	storedQuery, err := h.QueryService.GetQueryByName(ctx, name, version)
+	if err != nil {
+		if err == service.ErrQueryNotFound {
+			return c.Status(fiber.StatusNotFound).SendString("Stored query not found for the given name and version")
+		}
+		h.Logger.ErrorContext(ctx, "Failed to get stored query by name and version", "error", err)
+		c.Status(http.StatusInternalServerError)
+		return nil
+	}
+
+	return c.Status(fiber.StatusOK).JSON(storedQuery)
 }
 
 func (h *Handler) DeleteEHRByID(c *fiber.Ctx) error {
@@ -2640,7 +3120,8 @@ func (h *Handler) DeleteEHRByID(c *fiber.Ctx) error {
 		return nil
 	}
 
-	return c.SendStatus(fiber.StatusNoContent)
+	c.Status(fiber.StatusNoContent)
+	return nil
 }
 
 func (h *Handler) DeleteMultipleEHRs(c *fiber.Ctx) error {
@@ -2661,7 +3142,9 @@ func (h *Handler) DeleteMultipleEHRs(c *fiber.Ctx) error {
 		c.Status(http.StatusInternalServerError)
 		return nil
 	}
-	return c.SendStatus(fiber.StatusNoContent)
+
+	c.Status(fiber.StatusNoContent)
+	return nil
 }
 
 type ValidationErrorResponse struct {

@@ -61,7 +61,7 @@ func (m *Migrator) Run(ctx context.Context, args []string) error {
 
 func (m *Migrator) CreateMigrationTable(ctx context.Context) error {
 	query := `
-	CREATE TABLE IF NOT EXISTS tbl_migration (
+	CREATE TABLE IF NOT EXISTS public.tbl_migration (
 		id SERIAL PRIMARY KEY,
 		name TEXT NOT NULL,
 		applied_at TIMESTAMP NOT NULL
@@ -132,7 +132,7 @@ func (m *Migrator) MigrateUpMigration(ctx context.Context, migration database.Mi
 	}()
 
 	var applied bool
-	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM tbl_migration WHERE name=$1)", migration.Name).Scan(&applied); err != nil {
+	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.tbl_migration WHERE name=$1)", migration.Name).Scan(&applied); err != nil {
 		return false, fmt.Errorf("failed to check migration %s: %w", migration.Name, err)
 	}
 
@@ -146,7 +146,7 @@ func (m *Migrator) MigrateUpMigration(ctx context.Context, migration database.Mi
 		return false, fmt.Errorf("failed to apply migration %s: %w", migration.Name, err)
 	}
 
-	if _, err := tx.Exec(ctx, "INSERT INTO tbl_migration (name, applied_at) VALUES ($1, NOW())", migration.Name); err != nil {
+	if _, err := tx.Exec(ctx, "INSERT INTO public.tbl_migration (name, applied_at) VALUES ($1, NOW())", migration.Name); err != nil {
 		return false, fmt.Errorf("failed to record applied migration %s: %w", migration.Name, err)
 	}
 
@@ -166,7 +166,7 @@ func (m *Migrator) MigrateDown(ctx context.Context, step int) error {
 	}
 
 	// Get applied migrations from database in reverse order (newest first)
-	rows, err := m.DB.Query(ctx, "SELECT name FROM tbl_migration ORDER BY name DESC")
+	rows, err := m.DB.Query(ctx, "SELECT name FROM public.tbl_migration ORDER BY name DESC")
 	if err != nil {
 		return fmt.Errorf("failed to get applied migrations: %w", err)
 	}
@@ -241,7 +241,7 @@ func (m *Migrator) MigrateDownMigration(ctx context.Context, migration database.
 	}()
 
 	var applied bool
-	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM tbl_migration WHERE name=$1)", migration.Name).Scan(&applied); err != nil {
+	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.tbl_migration WHERE name=$1)", migration.Name).Scan(&applied); err != nil {
 		return false, fmt.Errorf("failed to check migration %s: %w", migration.Name, err)
 	}
 
@@ -255,7 +255,7 @@ func (m *Migrator) MigrateDownMigration(ctx context.Context, migration database.
 		return false, fmt.Errorf("failed to rollback migration %s: %w", migration.Name, err)
 	}
 
-	if _, err := tx.Exec(ctx, "DELETE FROM tbl_migration WHERE name=$1", migration.Name); err != nil {
+	if _, err := tx.Exec(ctx, "DELETE FROM public.tbl_migration WHERE name=$1", migration.Name); err != nil {
 		return false, fmt.Errorf("failed to remove migration record %s: %w", migration.Name, err)
 	}
 

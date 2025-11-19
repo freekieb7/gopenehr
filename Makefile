@@ -9,3 +9,7 @@ lint:
 .PHONY: run
 run:
 	DATABASE_URL=${DATABASE_URL} go run -mod=vendor ./... serve
+
+.PHONY: aql-gen
+aql-gen:
+	docker run --rm -u $(id -u ${USER}):$(id -g ${USER}) --volume `pwd`/internal/openehr/aql:/work antlr/antlr4 -Dlanguage=Go AQL.g4 -o gen -package gen

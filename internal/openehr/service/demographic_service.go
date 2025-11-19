@@ -67,7 +67,7 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 
 		// Check if agent with the same UID already exists
 		var exists bool
-		err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM tbl_openehr_agent WHERE id = $1)", agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value).Scan(&exists)
+		err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM openehr.tbl_agent WHERE id = $1)", agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value).Scan(&exists)
 		if err != nil {
 			return openehr.AGENT{}, fmt.Errorf("failed to check existing agent: %w", err)
 		}
@@ -178,21 +178,21 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 	}()
 
 	// Insert versioned party
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_versioned_object (id, type, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, data) VALUES ($1, $2, $3)",
 		versionedParty.UID.Value, openehr.AGENT_MODEL_NAME, versionedParty)
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert versioned party: %w", err)
 	}
 
 	// Insert agent
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_agent (id, versioned_object_id, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_agent (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, versionedParty.UID.Value, agentVersion)
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert agent: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert contribution: %w", err)
@@ -210,9 +210,9 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 func (s *DemographicService) GetAgent(ctx context.Context, uidBasedID string) (openehr.AGENT, error) {
 	var agent openehr.AGENT
 
-	query := "SELECT data FROM tbl_openehr_agent WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
+	query := "SELECT data FROM openehr.tbl_agent WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
 	if strings.Contains(uidBasedID, "::") {
-		query = "SELECT data FROM tbl_openehr_agent WHERE id = $1 LIMIT 1"
+		query = "SELECT data FROM openehr.tbl_agent WHERE id = $1 LIMIT 1"
 	}
 
 	err := s.DB.QueryRow(ctx, query, uidBasedID).Scan(&agent)
@@ -230,9 +230,9 @@ func (s *DemographicService) GetAgent(ctx context.Context, uidBasedID string) (o
 func (s *DemographicService) GetAgentAsJSON(ctx context.Context, uidBasedID string) ([]byte, error) {
 	var rawAgentJSON []byte
 
-	query := "SELECT data FROM tbl_openehr_agent WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
+	query := "SELECT data FROM openehr.tbl_agent WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
 	if strings.Contains(uidBasedID, "::") {
-		query = "SELECT data FROM tbl_openehr_agent WHERE id = $1 LIMIT 1"
+		query = "SELECT data FROM openehr.tbl_agent WHERE id = $1 LIMIT 1"
 	}
 
 	err := s.DB.QueryRow(ctx, query, uidBasedID).Scan(&rawAgentJSON)
@@ -315,14 +315,14 @@ func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGEN
 	}()
 
 	// Update agent
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_agent (id, versioned_object_id, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_agent (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(), agent)
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert agent: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert contribution: %w", err)
@@ -394,12 +394,12 @@ func (s *DemographicService) DeleteAgent(ctx context.Context, versionedObjectID 
 	}()
 
 	// Delete agent
-	if _, err := tx.Exec(ctx, "DELETE FROM tbl_versioned_object WHERE id = $1 AND type = $2", versionedObjectID, openehr.AGENT_MODEL_NAME); err != nil {
+	if _, err := tx.Exec(ctx, "DELETE FROM openehr.tbl_versioned_object WHERE id = $1 AND type = $2", versionedObjectID, openehr.AGENT_MODEL_NAME); err != nil {
 		return fmt.Errorf("failed to delete agent: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return fmt.Errorf("failed to insert contribution: %w", err)
@@ -438,7 +438,7 @@ func (s *DemographicService) CreateGroup(ctx context.Context, group openehr.GROU
 
 		// Check if group with the same UID already exists
 		var exists bool
-		err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM tbl_openehr_group WHERE id = $1)", group.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value).Scan(&exists)
+		err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM openehr.tbl_group WHERE id = $1)", group.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value).Scan(&exists)
 		if err != nil {
 			return openehr.GROUP{}, fmt.Errorf("failed to check existing group: %w", err)
 		}
@@ -549,21 +549,21 @@ func (s *DemographicService) CreateGroup(ctx context.Context, group openehr.GROU
 	}()
 
 	// Insert versioned party
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_versioned_object (id, type, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, data) VALUES ($1, $2, $3)",
 		versionedParty.UID.Value, openehr.GROUP_MODEL_NAME, versionedParty)
 	if err != nil {
 		return openehr.GROUP{}, fmt.Errorf("failed to insert versioned party: %w", err)
 	}
 
 	// Insert group
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_group (id, versioned_object_id, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_group (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		group.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, versionedParty.UID.Value, groupVersion)
 	if err != nil {
 		return openehr.GROUP{}, fmt.Errorf("failed to insert group: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return openehr.GROUP{}, fmt.Errorf("failed to insert contribution: %w", err)
@@ -580,9 +580,9 @@ func (s *DemographicService) CreateGroup(ctx context.Context, group openehr.GROU
 func (s *DemographicService) GetGroup(ctx context.Context, uidBasedID string) (openehr.GROUP, error) {
 	var group openehr.GROUP
 
-	query := "SELECT data FROM tbl_openehr_group WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
+	query := "SELECT data FROM openehr.tbl_group WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
 	if strings.Contains(uidBasedID, "::") {
-		query = "SELECT data FROM tbl_openehr_group WHERE id = $1 LIMIT 1"
+		query = "SELECT data FROM openehr.tbl_group WHERE id = $1 LIMIT 1"
 	}
 
 	err := s.DB.QueryRow(ctx, query, uidBasedID).Scan(&group)
@@ -598,9 +598,9 @@ func (s *DemographicService) GetGroup(ctx context.Context, uidBasedID string) (o
 func (s *DemographicService) GetGroupAsJSON(ctx context.Context, uidBasedID string) ([]byte, error) {
 	var rawGroupJSON []byte
 
-	query := "SELECT data FROM tbl_openehr_group WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
+	query := "SELECT data FROM openehr.tbl_group WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
 	if strings.Contains(uidBasedID, "::") {
-		query = "SELECT data FROM tbl_openehr_group WHERE id = $1 LIMIT 1"
+		query = "SELECT data FROM openehr.tbl_group WHERE id = $1 LIMIT 1"
 	}
 
 	err := s.DB.QueryRow(ctx, query, uidBasedID).Scan(&rawGroupJSON)
@@ -683,14 +683,14 @@ func (s *DemographicService) UpdateGroup(ctx context.Context, group openehr.GROU
 	}()
 
 	// Update group
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_group (id, versioned_object_id, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_group (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		group.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, group.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(), group)
 	if err != nil {
 		return openehr.GROUP{}, fmt.Errorf("failed to insert group: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return openehr.GROUP{}, fmt.Errorf("failed to insert contribution: %w", err)
@@ -762,12 +762,12 @@ func (s *DemographicService) DeleteGroup(ctx context.Context, versionedObjectID 
 	}()
 
 	// Delete group
-	if _, err := tx.Exec(ctx, "DELETE FROM tbl_versioned_object WHERE id = $1 AND type = $2", versionedObjectID, openehr.GROUP_MODEL_NAME); err != nil {
+	if _, err := tx.Exec(ctx, "DELETE FROM openehr.tbl_versioned_object WHERE id = $1 AND type = $2", versionedObjectID, openehr.GROUP_MODEL_NAME); err != nil {
 		return fmt.Errorf("failed to delete group: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return fmt.Errorf("failed to insert contribution: %w", err)
@@ -806,7 +806,7 @@ func (s *DemographicService) CreatePerson(ctx context.Context, person openehr.PE
 
 		// Check if person with the same UID already exists
 		var exists bool
-		err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM tbl_openehr_person WHERE id = $1)", person.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value).Scan(&exists)
+		err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM openehr.tbl_person WHERE id = $1)", person.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value).Scan(&exists)
 		if err != nil {
 			return openehr.PERSON{}, fmt.Errorf("failed to check existing person: %w", err)
 		}
@@ -917,21 +917,21 @@ func (s *DemographicService) CreatePerson(ctx context.Context, person openehr.PE
 	}()
 
 	// Insert versioned party
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_versioned_object (id, type, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, data) VALUES ($1, $2, $3)",
 		versionedParty.UID.Value, openehr.PERSON_MODEL_NAME, versionedParty)
 	if err != nil {
 		return openehr.PERSON{}, fmt.Errorf("failed to insert versioned party: %w", err)
 	}
 
 	// Insert person
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_person (id, versioned_object_id, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_person (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		person.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, versionedParty.UID.Value, personVersion)
 	if err != nil {
 		return openehr.PERSON{}, fmt.Errorf("failed to insert person: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return openehr.PERSON{}, fmt.Errorf("failed to insert contribution: %w", err)
@@ -948,9 +948,9 @@ func (s *DemographicService) CreatePerson(ctx context.Context, person openehr.PE
 func (s *DemographicService) GetPerson(ctx context.Context, uidBasedID string) (openehr.PERSON, error) {
 	var person openehr.PERSON
 
-	query := "SELECT data FROM tbl_openehr_person WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
+	query := "SELECT data FROM openehr.tbl_person WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
 	if strings.Contains(uidBasedID, "::") {
-		query = "SELECT data FROM tbl_openehr_person WHERE id = $1 LIMIT 1"
+		query = "SELECT data FROM openehr.tbl_person WHERE id = $1 LIMIT 1"
 	}
 
 	err := s.DB.QueryRow(ctx, query, uidBasedID).Scan(&person)
@@ -966,9 +966,9 @@ func (s *DemographicService) GetPerson(ctx context.Context, uidBasedID string) (
 func (s *DemographicService) GetPersonAsJSON(ctx context.Context, uidBasedID string) ([]byte, error) {
 	var rawPersonJSON []byte
 
-	query := "SELECT data FROM tbl_openehr_person WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
+	query := "SELECT data FROM openehr.tbl_person WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
 	if strings.Contains(uidBasedID, "::") {
-		query = "SELECT data FROM tbl_openehr_person WHERE id = $1 LIMIT 1"
+		query = "SELECT data FROM openehr.tbl_person WHERE id = $1 LIMIT 1"
 	}
 
 	err := s.DB.QueryRow(ctx, query, uidBasedID).Scan(&rawPersonJSON)
@@ -1051,14 +1051,14 @@ func (s *DemographicService) UpdatePerson(ctx context.Context, person openehr.PE
 	}()
 
 	// Update person
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_person (id, versioned_object_id, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_person (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		person.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, person.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(), person)
 	if err != nil {
 		return openehr.PERSON{}, fmt.Errorf("failed to insert person: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return openehr.PERSON{}, fmt.Errorf("failed to insert contribution: %w", err)
@@ -1130,12 +1130,12 @@ func (s *DemographicService) DeletePerson(ctx context.Context, versionedObjectID
 	}()
 
 	// Delete person
-	if _, err := tx.Exec(ctx, "DELETE FROM tbl_versioned_object WHERE id = $1 AND type = $2", versionedObjectID, openehr.PERSON_MODEL_NAME); err != nil {
+	if _, err := tx.Exec(ctx, "DELETE FROM openehr.tbl_versioned_object WHERE id = $1 AND type = $2", versionedObjectID, openehr.PERSON_MODEL_NAME); err != nil {
 		return fmt.Errorf("failed to delete person: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return fmt.Errorf("failed to insert contribution: %w", err)
@@ -1174,7 +1174,7 @@ func (s *DemographicService) CreateOrganisation(ctx context.Context, organisatio
 
 		// Check if organisation with the same UID already exists
 		var exists bool
-		err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM tbl_openehr_organisation WHERE id = $1)", organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value).Scan(&exists)
+		err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM openehr.tbl_organisation WHERE id = $1)", organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value).Scan(&exists)
 		if err != nil {
 			return openehr.ORGANISATION{}, fmt.Errorf("failed to check existing organisation: %w", err)
 		}
@@ -1285,21 +1285,21 @@ func (s *DemographicService) CreateOrganisation(ctx context.Context, organisatio
 	}()
 
 	// Insert versioned party
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_versioned_object (id, type, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, data) VALUES ($1, $2, $3)",
 		versionedParty.UID.Value, openehr.ORGANISATION_MODEL_NAME, versionedParty)
 	if err != nil {
 		return openehr.ORGANISATION{}, fmt.Errorf("failed to insert versioned party: %w", err)
 	}
 
 	// Insert organisation
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_organisation (id, versioned_object_id, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_organisation (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, versionedParty.UID.Value, organisationVersion)
 	if err != nil {
 		return openehr.ORGANISATION{}, fmt.Errorf("failed to insert organisation: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return openehr.ORGANISATION{}, fmt.Errorf("failed to insert contribution: %w", err)
@@ -1316,9 +1316,9 @@ func (s *DemographicService) CreateOrganisation(ctx context.Context, organisatio
 func (s *DemographicService) GetOrganisation(ctx context.Context, uidBasedID string) (openehr.ORGANISATION, error) {
 	var organisation openehr.ORGANISATION
 
-	query := "SELECT data FROM tbl_openehr_organisation WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
+	query := "SELECT data FROM openehr.tbl_organisation WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
 	if strings.Contains(uidBasedID, "::") {
-		query = "SELECT data FROM tbl_openehr_organisation WHERE id = $1 LIMIT 1"
+		query = "SELECT data FROM openehr.tbl_organisation WHERE id = $1 LIMIT 1"
 	}
 
 	err := s.DB.QueryRow(ctx, query, uidBasedID).Scan(&organisation)
@@ -1334,9 +1334,9 @@ func (s *DemographicService) GetOrganisation(ctx context.Context, uidBasedID str
 func (s *DemographicService) GetOrganisationAsJSON(ctx context.Context, uidBasedID string) ([]byte, error) {
 	var rawOrganisationJSON []byte
 
-	query := "SELECT data FROM tbl_openehr_organisation WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
+	query := "SELECT data FROM openehr.tbl_organisation WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
 	if strings.Contains(uidBasedID, "::") {
-		query = "SELECT data FROM tbl_openehr_organisation WHERE id = $1 LIMIT 1"
+		query = "SELECT data FROM openehr.tbl_organisation WHERE id = $1 LIMIT 1"
 	}
 
 	err := s.DB.QueryRow(ctx, query, uidBasedID).Scan(&rawOrganisationJSON)
@@ -1419,14 +1419,14 @@ func (s *DemographicService) UpdateOrganisation(ctx context.Context, organisatio
 	}()
 
 	// Update organisation
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_organisation (id, versioned_object_id, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_organisation (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(), organisation)
 	if err != nil {
 		return fmt.Errorf("failed to insert organisation: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return fmt.Errorf("failed to insert contribution: %w", err)
@@ -1498,12 +1498,12 @@ func (s *DemographicService) DeleteOrganisation(ctx context.Context, versionedOb
 	}()
 
 	// Delete organisation
-	if _, err := tx.Exec(ctx, "DELETE FROM tbl_versioned_object WHERE id = $1 AND type = $2", versionedObjectID, openehr.ORGANISATION_MODEL_NAME); err != nil {
+	if _, err := tx.Exec(ctx, "DELETE FROM openehr.tbl_versioned_object WHERE id = $1 AND type = $2", versionedObjectID, openehr.ORGANISATION_MODEL_NAME); err != nil {
 		return fmt.Errorf("failed to delete organisation: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return fmt.Errorf("failed to insert contribution: %w", err)
@@ -1529,7 +1529,7 @@ func (s *DemographicService) CreateRole(ctx context.Context, role openehr.ROLE) 
 	} else {
 		// Check if role with the same UID already exists
 		var exists bool
-		err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM tbl_openehr_role WHERE id = $1)", role.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value).Scan(&exists)
+		err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM openehr.tbl_role WHERE id = $1)", role.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value).Scan(&exists)
 		if err != nil {
 			return openehr.ROLE{}, fmt.Errorf("failed to check existing role: %w", err)
 		}
@@ -1640,14 +1640,14 @@ func (s *DemographicService) CreateRole(ctx context.Context, role openehr.ROLE) 
 	}()
 
 	// Insert versioned party
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_versioned_object (id, type, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, data) VALUES ($1, $2, $3)",
 		versionedParty.UID.Value, openehr.ROLE_MODEL_NAME, versionedParty)
 	if err != nil {
 		return openehr.ROLE{}, fmt.Errorf("failed to insert versioned party: %w", err)
 	}
 
 	// Insert role
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_role (id, versioned_object_id, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_role (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		roleVersion.UID.Value, versionedParty.UID.Value, role)
 	if err != nil {
 		return openehr.ROLE{}, fmt.Errorf("failed to insert role: %w", err)
@@ -1663,9 +1663,9 @@ func (s *DemographicService) CreateRole(ctx context.Context, role openehr.ROLE) 
 func (s *DemographicService) GetRole(ctx context.Context, uidBasedID string) (openehr.ROLE, error) {
 	var role openehr.ROLE
 
-	query := "SELECT data FROM tbl_openehr_role WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
+	query := "SELECT data FROM openehr.tbl_role WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
 	if strings.Contains(uidBasedID, "::") {
-		query = "SELECT data FROM tbl_openehr_role WHERE id = $1 LIMIT 1"
+		query = "SELECT data FROM openehr.tbl_role WHERE id = $1 LIMIT 1"
 	}
 
 	err := s.DB.QueryRow(ctx, query, uidBasedID).Scan(&role)
@@ -1682,9 +1682,9 @@ func (s *DemographicService) GetRole(ctx context.Context, uidBasedID string) (op
 func (s *DemographicService) GetRoleAsJSON(ctx context.Context, uidBasedID string) ([]byte, error) {
 	var rawRoleJSON []byte
 
-	query := "SELECT data FROM tbl_openehr_role WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
+	query := "SELECT data FROM openehr.tbl_role WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
 	if strings.Contains(uidBasedID, "::") {
-		query = "SELECT data FROM tbl_openehr_role WHERE id = $1 LIMIT 1"
+		query = "SELECT data FROM openehr.tbl_role WHERE id = $1 LIMIT 1"
 	}
 
 	err := s.DB.QueryRow(ctx, query, uidBasedID).Scan(&rawRoleJSON)
@@ -1767,14 +1767,14 @@ func (s *DemographicService) UpdateRole(ctx context.Context, role openehr.ROLE) 
 	}()
 
 	// Update role
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_role (id, versioned_object_id, data) VALUES ($1, $2, $3)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_role (id, versioned_object_id, data) VALUES ($1, $2, $3)",
 		role.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, role.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(), role)
 	if err != nil {
 		return openehr.ROLE{}, fmt.Errorf("failed to insert role: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return openehr.ROLE{}, fmt.Errorf("failed to insert contribution: %w", err)
@@ -1846,12 +1846,12 @@ func (s *DemographicService) DeleteRole(ctx context.Context, versionedObjectID s
 	}()
 
 	// Delete role
-	if _, err := tx.Exec(ctx, "DELETE FROM tbl_versioned_object WHERE id = $1 AND type = $2", versionedObjectID, openehr.ROLE_MODEL_NAME); err != nil {
+	if _, err := tx.Exec(ctx, "DELETE FROM openehr.tbl_versioned_object WHERE id = $1 AND type = $2", versionedObjectID, openehr.ROLE_MODEL_NAME); err != nil {
 		return fmt.Errorf("failed to delete role: %w", err)
 	}
 
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)",
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
 		return fmt.Errorf("failed to insert contribution: %w", err)
@@ -1868,7 +1868,7 @@ func (s *DemographicService) DeleteRole(ctx context.Context, versionedObjectID s
 func (s *DemographicService) GetVersionedPartyAsJSON(ctx context.Context, uidBasedID string) ([]byte, error) {
 	var rawVersionedPartyJSON []byte
 
-	query := "SELECT data FROM tbl_openehr_versioned_object WHERE id = $1 AND data->>'_type' = $2 ORDER BY created_at DESC LIMIT 1"
+	query := "SELECT data FROM openehr.tbl_versioned_object WHERE id = $1 AND data->>'_type' = $2 ORDER BY created_at DESC LIMIT 1"
 
 	err := s.DB.QueryRow(ctx, query, uidBasedID, openehr.VERSIONED_PARTY_MODEL_NAME).Scan(&rawVersionedPartyJSON)
 	if err != nil {
@@ -1896,7 +1896,7 @@ func (s *DemographicService) GetVersionedPartyRevisionHistoryAsJSON(ctx context.
 			SELECT 
 				version->'id'->>'value' as version_id,
 				jsonb_agg(c.data->'audit' ORDER BY c.data->'audit'->'time_committed'->>'value') as audits
-			FROM tbl_openehr_contribution c,
+			FROM openehr.tbl_contribution c,
 				jsonb_array_elements(c.data->'versions') as version
 			WHERE c.ehr_id IS NULL
 				AND version->>'type' = ANY($1::text[])
@@ -1927,13 +1927,13 @@ func (s *DemographicService) GetVersionedPartyVersionAsJSON(ctx context.Context,
 	query.WriteString(`
 		SELECT data 
 		FROM (
-			SELECT * FROM tbl_openehr_agent
+			SELECT * FROM openehr.tbl_agent
 			UNION ALL
-			SELECT * FROM tbl_openehr_person
+			SELECT * FROM openehr.tbl_person
 			UNION ALL
-			SELECT * FROM tbl_openehr_group
+			SELECT * FROM openehr.tbl_group
 			UNION ALL
-			SELECT * FROM tbl_openehr_organisation
+			SELECT * FROM openehr.tbl_organisation
 		) as allparties
 		WHERE versioned_object_id = $1 `)
 	args = []any{versionedObjectID}
@@ -1976,7 +1976,7 @@ func (s *DemographicService) CreateContribution(ctx context.Context, contributio
 	}
 
 	// Insert Contribution
-	query := `INSERT INTO tbl_openehr_contribution (id, data) VALUES ($1, $2)`
+	query := `INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)`
 	args := []any{contribution.UID.Value, contribution}
 	if _, err := s.DB.Exec(ctx, query, args...); err != nil {
 		return openehr.CONTRIBUTION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
@@ -1988,7 +1988,7 @@ func (s *DemographicService) CreateContribution(ctx context.Context, contributio
 func (s *DemographicService) GetContributionAsJSON(ctx context.Context, contributionID string) ([]byte, error) {
 	query := `
 		SELECT c.data 
-		FROM tbl_openehr_contribution c
+		FROM openehr.tbl_contribution c
 		WHERE c.ehr_id IS NULL AND c.id = $1
 		LIMIT 1
 	`

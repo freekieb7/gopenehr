@@ -17,17 +17,19 @@ import (
 )
 
 var (
-	ErrAgentAlreadyExists        = fmt.Errorf("agent with the given UID already exists")
-	ErrAgentNotFound             = fmt.Errorf("agent not found")
-	ErrGroupAlreadyExists        = fmt.Errorf("group with the given UID already exists")
-	ErrGroupNotFound             = fmt.Errorf("group not found")
-	ErrOrganisationAlreadyExists = fmt.Errorf("organisation with the given UID already exists")
-	ErrOrganisationNotFound      = fmt.Errorf("organisation not found")
-	ErrPersonAlreadyExists       = fmt.Errorf("person with the given UID already exists")
-	ErrPersonNotFound            = fmt.Errorf("person not found")
-	ErrRoleAlreadyExists         = fmt.Errorf("role with the given UID already exists")
-	ErrRoleNotFound              = fmt.Errorf("role not found")
-	ErrVersionedPartyNotFound    = fmt.Errorf("versioned party not found")
+	ErrAgentAlreadyExists                = fmt.Errorf("agent with the given UID already exists")
+	ErrAgentNotFound                     = fmt.Errorf("agent not found")
+	ErrGroupAlreadyExists                = fmt.Errorf("group with the given UID already exists")
+	ErrGroupNotFound                     = fmt.Errorf("group not found")
+	ErrOrganisationAlreadyExists         = fmt.Errorf("organisation with the given UID already exists")
+	ErrOrganisationNotFound              = fmt.Errorf("organisation not found")
+	ErrPersonAlreadyExists               = fmt.Errorf("person with the given UID already exists")
+	ErrPersonNotFound                    = fmt.Errorf("person not found")
+	ErrRoleAlreadyExists                 = fmt.Errorf("role with the given UID already exists")
+	ErrRoleNotFound                      = fmt.Errorf("role not found")
+	ErrVersionedPartyNotFound            = fmt.Errorf("versioned party not found")
+	ErrRevisionHistoryNotFound           = fmt.Errorf("revision history not found")
+	ErrAgentVersionLowerOrEqualToCurrent = fmt.Errorf("agent version is lower than or equal to the current version")
 )
 
 type DemographicService struct {
@@ -46,34 +48,33 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 	// If UID is not provided, generate a new one
 	if !agent.UID.E {
 		agent.UID = util.Some(openehr.X_UID_BASED_ID{
-			Value: &openehr.OBJECT_VERSION_ID{
-				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
-				Value: fmt.Sprintf("%s::%s::1", uuid.NewString(), config.SYSTEM_ID_GOPENEHR),
+			Value: &openehr.HIER_OBJECT_ID{
+				Type_: util.Some(openehr.HIER_OBJECT_ID_MODEL_NAME),
+				Value: uuid.NewString(),
 			},
 		})
-	} else {
-		// Convert HIER_OBJECT_ID to OBJECT_VERSION_ID if necessary
-		switch agent.UID.V.Value.(type) {
-		case *openehr.HIER_OBJECT_ID:
-			agent.UID.V.Value = &openehr.OBJECT_VERSION_ID{
-				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
-				Value: fmt.Sprintf("%s::%s::1", agent.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value, config.SYSTEM_ID_GOPENEHR),
-			}
-		case *openehr.OBJECT_VERSION_ID:
-		// valid type
-		default:
-			return openehr.AGENT{}, errors.New("agent UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID")
-		}
+	}
 
-		// Check if agent with the same UID already exists
-		var exists bool
-		err := s.DB.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM openehr.tbl_agent WHERE id = $1)", agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value).Scan(&exists)
-		if err != nil {
-			return openehr.AGENT{}, fmt.Errorf("failed to check existing agent: %w", err)
+	// Convert HIER_OBJECT_ID to OBJECT_VERSION_ID if necessary
+	switch agent.UID.V.Value.(type) {
+	case *openehr.HIER_OBJECT_ID:
+		agent.UID.V.Value = &openehr.OBJECT_VERSION_ID{
+			Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
+			Value: fmt.Sprintf("%s::%s::1", agent.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value, config.SYSTEM_ID_GOPENEHR),
 		}
-		if exists {
-			return openehr.AGENT{}, ErrAgentAlreadyExists
-		}
+	case *openehr.OBJECT_VERSION_ID:
+	// valid type
+	default:
+		return openehr.AGENT{}, errors.New("agent UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID")
+	}
+
+	// Check if agent with the same UID already exists
+	_, err := s.GetAgent(ctx, agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID())
+	if err == nil {
+		return openehr.AGENT{}, ErrAgentAlreadyExists
+	}
+	if !errors.Is(err, ErrAgentNotFound) {
+		return openehr.AGENT{}, fmt.Errorf("failed to check existing agent: %w", err)
 	}
 
 	// Build Versioned object for the agent
@@ -155,7 +156,7 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 			Committer: openehr.X_PARTY_PROXY{
 				Value: &openehr.PARTY_SELF{
 					Type_: util.Some(openehr.PARTY_SELF_MODEL_NAME),
-				}, // TODO make this configurable, could also be set to internal person
+				},
 			},
 		},
 	}
@@ -177,25 +178,40 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 		}
 	}()
 
+	// Insert contribution
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, NULL)",
+		contribution.UID.Value)
+	if err != nil {
+		return openehr.AGENT{}, fmt.Errorf("failed to insert contribution: %w", err)
+	}
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
+		contribution.UID.Value, contribution)
+	if err != nil {
+		return openehr.AGENT{}, fmt.Errorf("failed to insert contribution data: %w", err)
+	}
+
 	// Insert versioned party
-	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, data) VALUES ($1, $2, $3)",
-		versionedParty.UID.Value, openehr.AGENT_MODEL_NAME, versionedParty)
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id, contribution_id) VALUES ($1, $2, NULL, $3)",
+		versionedParty.UID.Value, openehr.VERSIONED_PARTY_MODEL_NAME, contribution.UID.Value)
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert versioned party: %w", err)
 	}
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object_data (id, data) VALUES ($1, $2)",
+		versionedParty.UID.Value, versionedParty)
+	if err != nil {
+		return openehr.AGENT{}, fmt.Errorf("failed to insert versioned party data: %w", err)
+	}
 
 	// Insert agent
-	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_agent (id, versioned_object_id, data) VALUES ($1, $2, $3)",
-		agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, versionedParty.UID.Value, agentVersion)
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version (id, versioned_object_id, type, ehr_id, contribution_id) VALUES ($1, $2, $3, NULL, $4)",
+		agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, versionedParty.UID.Value, openehr.AGENT_MODEL_NAME, contribution.UID.Value)
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert agent: %w", err)
 	}
-
-	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
-		contribution.UID.Value, contribution)
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version_data (id, data) VALUES ($1, $2)",
+		agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, agent)
 	if err != nil {
-		return openehr.AGENT{}, fmt.Errorf("failed to insert contribution: %w", err)
+		return openehr.AGENT{}, fmt.Errorf("failed to insert agent data: %w", err)
 	}
 
 	// Commit transaction
@@ -206,54 +222,79 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 	return agent, nil
 }
 
-// GetAgent retrieves the agent as the latest version when providing versioned object id, or the specified ID version.
+// GetAgent retrieves the agent as the latest version when providing versioned object id, or the specified ID version, and returns it as the raw JSON representation.
 func (s *DemographicService) GetAgent(ctx context.Context, uidBasedID string) (openehr.AGENT, error) {
-	var agent openehr.AGENT
+	query := `
+		SELECT ovd.data 
+		FROM openehr.tbl_object_version ov
+		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
+		WHERE 
+	`
+	var args []any
+	argNum := 1
 
-	query := "SELECT data FROM openehr.tbl_agent WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
-	if strings.Contains(uidBasedID, "::") {
-		query = "SELECT data FROM openehr.tbl_agent WHERE id = $1 LIMIT 1"
+	if strings.Count(uidBasedID, "::") == 2 {
+		// It's an OBJECT_VERSION_ID
+		query += fmt.Sprintf("ov.id = $%d ", argNum)
+	} else {
+		// It's a versioned object ID
+		query += fmt.Sprintf("ov.versioned_object_id = $%d ORDER BY ov.created_at DESC", argNum)
 	}
+	args = append(args, uidBasedID)
 
-	err := s.DB.QueryRow(ctx, query, uidBasedID).Scan(&agent)
+	query += " LIMIT 1"
+
+	var agent openehr.AGENT
+	err := s.DB.QueryRow(ctx, query, args...).Scan(&agent)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return openehr.AGENT{}, ErrAgentNotFound
 		}
 		return openehr.AGENT{}, fmt.Errorf("failed to get agent by ID: %w", err)
 	}
+
 	return agent, nil
 }
 
-// GetAgentAsJSON retrieves the agent as the latest version when providing versioned object id, or the specified ID version, and returns it as the raw JSON representation.
-// This is useful for scenarios where the raw JSON is needed without unmarshalling into Go structs.
-func (s *DemographicService) GetAgentAsJSON(ctx context.Context, uidBasedID string) ([]byte, error) {
-	var rawAgentJSON []byte
-
-	query := "SELECT data FROM openehr.tbl_agent WHERE versioned_object_id = $1 ORDER BY created_at DESC LIMIT 1"
-	if strings.Contains(uidBasedID, "::") {
-		query = "SELECT data FROM openehr.tbl_agent WHERE id = $1 LIMIT 1"
-	}
-
-	err := s.DB.QueryRow(ctx, query, uidBasedID).Scan(&rawAgentJSON)
-	if err != nil {
-		if errors.Is(err, database.ErrNoRows) {
-			return nil, ErrAgentNotFound
-		}
-		return nil, fmt.Errorf("failed to get agent by ID: %w", err)
-	}
-	return rawAgentJSON, nil
-}
-
 func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGENT) (openehr.AGENT, error) {
-	// Validate agent
+	// Validate Composition
 	if !agent.UID.E {
-		return openehr.AGENT{}, fmt.Errorf("agent UID is required for update")
+		return openehr.AGENT{}, fmt.Errorf("agent UID must be provided for update")
 	}
 
-	agentVersionID, ok := agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
-	if !ok {
-		return openehr.AGENT{}, fmt.Errorf("agent UID must be of type OBJECT_VERSION_ID, got %T", agent.UID.V.Value)
+	switch agent.UID.V.Value.(type) {
+	case *openehr.OBJECT_VERSION_ID:
+		// Check if version is being updated
+		currentAgent, err := s.GetAgent(ctx, agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID())
+		if err != nil {
+			return openehr.AGENT{}, fmt.Errorf("failed to get current Agent: %w", err)
+		}
+
+		currentVersionID := currentAgent.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+		newVersionID := agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+		if newVersionID.VersionTreeID().CompareTo(currentVersionID.VersionTreeID()) <= 0 {
+			return openehr.AGENT{}, ErrAgentVersionLowerOrEqualToCurrent
+		}
+		// valid type
+	case *openehr.HIER_OBJECT_ID:
+		// Add namespace and version to convert to OBJECT_VERSION_ID
+		currentAgent, err := s.GetAgent(ctx, agent.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value)
+		if err != nil {
+			return openehr.AGENT{}, fmt.Errorf("failed to get current Agent: %w", err)
+		}
+
+		hierID := agent.UID.V.Value.(*openehr.HIER_OBJECT_ID)
+		versionTreeID := currentAgent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).VersionTreeID()
+		versionTreeID.Major++
+
+		agent.UID = util.Some(openehr.X_UID_BASED_ID{
+			Value: &openehr.OBJECT_VERSION_ID{
+				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
+				Value: fmt.Sprintf("%s::%s::%s", hierID.Value, config.SYSTEM_ID_GOPENEHR, versionTreeID.String()),
+			},
+		})
+	default:
+		return openehr.AGENT{}, fmt.Errorf("agent UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID, got %T", agent.UID.V.Value)
 	}
 
 	if errs := agent.Validate("$"); len(errs) > 0 {
@@ -270,7 +311,7 @@ func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGEN
 				Namespace: config.NAMESPACE_LOCAL,
 				Type:      openehr.AGENT_MODEL_NAME,
 				ID: openehr.X_OBJECT_ID{
-					Value: agentVersionID,
+					Value: agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
 				},
 			},
 		},
@@ -292,13 +333,12 @@ func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGEN
 			Committer: openehr.X_PARTY_PROXY{
 				Value: &openehr.PARTY_SELF{
 					Type_: util.Some(openehr.PARTY_SELF_MODEL_NAME),
-				}, // TODO make this configurable, could also be set to internal person
+				},
 			},
 		},
 	}
 
 	contribution.SetModelName()
-
 	if errs := contribution.Validate("$"); len(errs) > 0 {
 		return openehr.AGENT{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
 	}
@@ -314,18 +354,28 @@ func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGEN
 		}
 	}()
 
+	// Insert contribution
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, NULL)",
+		contribution.UID.Value)
+	if err != nil {
+		return openehr.AGENT{}, fmt.Errorf("failed to insert contribution: %w", err)
+	}
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
+		contribution.UID.Value, contribution)
+	if err != nil {
+		return openehr.AGENT{}, fmt.Errorf("failed to insert contribution data: %w", err)
+	}
+
 	// Update agent
-	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_agent (id, versioned_object_id, data) VALUES ($1, $2, $3)",
-		agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(), agent)
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version (id, versioned_object_id, type, ehr_id, contribution_id) VALUES ($1, $2, $3, NULL, $4)",
+		agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(), openehr.AGENT_MODEL_NAME, contribution.UID.Value)
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert agent: %w", err)
 	}
-
-	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
-		contribution.UID.Value, contribution)
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version_data (id, data) VALUES ($1, $2)",
+		agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, agent)
 	if err != nil {
-		return openehr.AGENT{}, fmt.Errorf("failed to insert contribution: %w", err)
+		return openehr.AGENT{}, fmt.Errorf("failed to insert agent data: %w", err)
 	}
 
 	// Commit transaction
@@ -393,16 +443,27 @@ func (s *DemographicService) DeleteAgent(ctx context.Context, versionedObjectID 
 		}
 	}()
 
-	// Delete agent
-	if _, err := tx.Exec(ctx, "DELETE FROM openehr.tbl_versioned_object WHERE id = $1 AND type = $2", versionedObjectID, openehr.AGENT_MODEL_NAME); err != nil {
-		return fmt.Errorf("failed to delete agent: %w", err)
-	}
-
 	// Insert contribution
-	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, data) VALUES ($1, $2)",
-		contribution.UID.Value, contribution)
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, NULL)",
+		contribution.UID.Value)
 	if err != nil {
 		return fmt.Errorf("failed to insert contribution: %w", err)
+	}
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
+		contribution.UID.Value, contribution)
+	if err != nil {
+		return fmt.Errorf("failed to insert contribution data: %w", err)
+	}
+
+	// Delete agent
+	var deleted uint8
+	row := tx.QueryRow(ctx, "DELETE FROM openehr.tbl_versioned_object WHERE id = $1 AND type = $2 RETURNING 1", strings.Split(versionedObjectID, "::")[0], openehr.VERSIONED_PARTY_MODEL_NAME)
+	err = row.Scan(&deleted)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return ErrAgentNotFound
+		}
+		return fmt.Errorf("failed to delete agent: %w", err)
 	}
 
 	// Commit transaction
@@ -1865,19 +1926,24 @@ func (s *DemographicService) DeleteRole(ctx context.Context, versionedObjectID s
 	return nil
 }
 
-func (s *DemographicService) GetVersionedPartyAsJSON(ctx context.Context, uidBasedID string) ([]byte, error) {
-	var rawVersionedPartyJSON []byte
+func (s *DemographicService) GetVersionedParty(ctx context.Context, id string) (openehr.VERSIONED_PARTY, error) {
+	query := `
+		SELECT data 
+		FROM openehr.tbl_versioned_object vo
+		JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.versioned_object_id
+		WHERE vo.id = $1 AND vo.type = $2 
+		LIMIT 1
+	`
 
-	query := "SELECT data FROM openehr.tbl_versioned_object WHERE id = $1 AND data->>'_type' = $2 ORDER BY created_at DESC LIMIT 1"
-
-	err := s.DB.QueryRow(ctx, query, uidBasedID, openehr.VERSIONED_PARTY_MODEL_NAME).Scan(&rawVersionedPartyJSON)
+	var versionedParty openehr.VERSIONED_PARTY
+	err := s.DB.QueryRow(ctx, query, id, openehr.VERSIONED_PARTY_MODEL_NAME).Scan(&versionedParty)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get versioned party by ID: %w", err)
+		return openehr.VERSIONED_PARTY{}, fmt.Errorf("failed to get versioned party by ID: %w", err)
 	}
-	return rawVersionedPartyJSON, nil
+	return versionedParty, nil
 }
 
-func (s *DemographicService) GetVersionedPartyRevisionHistoryAsJSON(ctx context.Context, versionedObjectID string) ([]byte, error) {
+func (s *DemographicService) GetVersionedPartyRevisionHistory(ctx context.Context, versionedObjectID string) (openehr.REVISION_HISTORY, error) {
 	// Fetch Revision History
 	// Build array of REVISION_HISTORY_ITEM objects
 	query := `
@@ -1895,9 +1961,10 @@ func (s *DemographicService) GetVersionedPartyRevisionHistoryAsJSON(ctx context.
 		FROM (
 			SELECT 
 				version->'id'->>'value' as version_id,
-				jsonb_agg(c.data->'audit' ORDER BY c.data->'audit'->'time_committed'->>'value') as audits
-			FROM openehr.tbl_contribution c,
-				jsonb_array_elements(c.data->'versions') as version
+				jsonb_agg(cd.data->'audit' ORDER BY cd.data->'audit'->'time_committed'->>'value') as audits
+			FROM openehr.tbl_contribution c
+			JOIN openehr.tbl_contribution_data cd ON c.id = cd.contribution_id,
+				jsonb_array_elements(cd.data->'versions') as version
 			WHERE c.ehr_id IS NULL
 				AND version->>'type' = ANY($1::text[])
 				AND version->'id'->>'value' LIKE $2 || '%'
@@ -1907,50 +1974,43 @@ func (s *DemographicService) GetVersionedPartyRevisionHistoryAsJSON(ctx context.
 	args := []any{[]string{openehr.AGENT_MODEL_NAME, openehr.PERSON_MODEL_NAME, openehr.GROUP_MODEL_NAME, openehr.ORGANISATION_MODEL_NAME}, versionedObjectID}
 	row := s.DB.QueryRow(ctx, query, args...)
 
-	var rawRevisionHistoryDataJSON []byte
-	if err := row.Scan(&rawRevisionHistoryDataJSON); err != nil {
+	var revisionHistory openehr.REVISION_HISTORY
+	if err := row.Scan(&revisionHistory); err != nil {
 		if err == database.ErrNoRows {
-			return nil, ErrCompositionNotFound
+			return openehr.REVISION_HISTORY{}, ErrRevisionHistoryNotFound
 		}
-		return nil, fmt.Errorf("failed to fetch Revision History from database: %w", err)
+		return openehr.REVISION_HISTORY{}, fmt.Errorf("failed to fetch Revision History from database: %w", err)
 	}
 
-	return rawRevisionHistoryDataJSON, nil
+	return revisionHistory, nil
 }
 
-func (s *DemographicService) GetVersionedPartyVersionAsJSON(ctx context.Context, versionedObjectID string, filterAtTime time.Time, filterVersionID string) ([]byte, error) {
-	// Fetch EHR Status at given time
+func (s *DemographicService) GetVersionedPartyVersion(ctx context.Context, versionedObjectID string, filterAtTime time.Time, filterVersionID string) ([]byte, error) {
 	var query strings.Builder
 	var args []any
 	argNum := 1
 
 	query.WriteString(`
 		SELECT data 
-		FROM (
-			SELECT * FROM openehr.tbl_agent
-			UNION ALL
-			SELECT * FROM openehr.tbl_person
-			UNION ALL
-			SELECT * FROM openehr.tbl_group
-			UNION ALL
-			SELECT * FROM openehr.tbl_organisation
-		) as allparties
-		WHERE versioned_object_id = $1 `)
+		FROM openehr.tbl_versioned_object vo
+		JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.versioned_object_id
+		WHERE versioned_object_id = $1
+	`)
 	args = []any{versionedObjectID}
 	argNum++
 
 	if !filterAtTime.IsZero() {
-		query.WriteString(fmt.Sprintf(` AND created_at <= $%d`, argNum))
+		query.WriteString(fmt.Sprintf(`AND created_at <= $%d `, argNum))
 		args = append(args, filterAtTime)
 		argNum++
 	}
 
 	if filterVersionID != "" {
-		query.WriteString(fmt.Sprintf(` AND id = $%d`, argNum))
+		query.WriteString(fmt.Sprintf(`AND id = $%d `, argNum))
 		args = append(args, filterVersionID)
 	}
 
-	query.WriteString(` ORDER BY created_at DESC LIMIT 1`)
+	query.WriteString(`ORDER BY created_at DESC LIMIT 1`)
 	row := s.DB.QueryRow(ctx, query.String(), args...)
 
 	var rawEhrStatusJSON []byte
@@ -1958,7 +2018,7 @@ func (s *DemographicService) GetVersionedPartyVersionAsJSON(ctx context.Context,
 		if err == database.ErrNoRows {
 			return nil, ErrEHRNotFound
 		}
-		return nil, fmt.Errorf("failed to fetch EHR Status at time from database: %w", err)
+		return nil, fmt.Errorf("failed to fetch Party version at time from database: %w", err)
 	}
 
 	return rawEhrStatusJSON, nil
@@ -1985,7 +2045,7 @@ func (s *DemographicService) CreateContribution(ctx context.Context, contributio
 	return contribution, nil
 }
 
-func (s *DemographicService) GetContributionAsJSON(ctx context.Context, contributionID string) ([]byte, error) {
+func (s *DemographicService) GetContribution(ctx context.Context, contributionID string) (openehr.CONTRIBUTION, error) {
 	query := `
 		SELECT c.data 
 		FROM openehr.tbl_contribution c
@@ -1995,13 +2055,13 @@ func (s *DemographicService) GetContributionAsJSON(ctx context.Context, contribu
 	args := []any{contributionID}
 	row := s.DB.QueryRow(ctx, query, args...)
 
-	var rawContributionJSON []byte
-	if err := row.Scan(&rawContributionJSON); err != nil {
+	var contribution openehr.CONTRIBUTION
+	if err := row.Scan(&contribution); err != nil {
 		if err == database.ErrNoRows {
-			return nil, ErrContributionNotFound
+			return openehr.CONTRIBUTION{}, ErrContributionNotFound
 		}
-		return nil, fmt.Errorf("failed to fetch Contribution by ID from database: %w", err)
+		return openehr.CONTRIBUTION{}, fmt.Errorf("failed to fetch Contribution from database: %w", err)
 	}
 
-	return rawContributionJSON, nil
+	return contribution, nil
 }

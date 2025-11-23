@@ -65,7 +65,7 @@ func runServer(ctx context.Context) error {
 	}))
 
 	// Init database
-	db := database.Database{}
+	db := database.New()
 	if err := db.Connect(ctx, cfg.DatabaseURL); err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}

@@ -2,6 +2,7 @@ package openehr
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
@@ -115,6 +116,67 @@ func (o OBJECT_VERSION_ID) SystemID() string {
 	return strings.Split(o.Value, "::")[1]
 }
 
-func (o OBJECT_VERSION_ID) VersionTreeID() string {
-	return strings.Split(o.Value, "::")[2]
+func (o OBJECT_VERSION_ID) VersionTreeID() VersionTreeID {
+	versionTreeIDStr := strings.Split(o.Value, "::")[2]
+
+	parseVersionTreeIDPart := func(versionTreeIDStr string, partIndex int) uint8 {
+		parts := strings.Split(versionTreeIDStr, ".")
+		if partIndex >= len(parts) {
+			return 0
+		}
+		partValue, err := strconv.ParseUint(parts[partIndex], 10, 8)
+		if err != nil {
+			return 0
+		}
+		return uint8(partValue)
+	}
+
+	return VersionTreeID{
+		Major: parseVersionTreeIDPart(versionTreeIDStr, 0),
+		Minor: parseVersionTreeIDPart(versionTreeIDStr, 1),
+		Patch: parseVersionTreeIDPart(versionTreeIDStr, 2),
+	}
+}
+
+type VersionTreeID struct {
+	Major uint8
+	Minor uint8
+	Patch uint8
+}
+
+func (v VersionTreeID) String() string {
+	if v.Minor == 0 && v.Patch == 0 {
+		return fmt.Sprintf("%d", v.Major)
+	}
+
+	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
+}
+
+func (v VersionTreeID) CompareTo(other VersionTreeID) int8 {
+	if v == other {
+		return 0
+	}
+
+	if v.Major != other.Major {
+		if v.Major > other.Major {
+			return 1
+		}
+		return -1
+	}
+
+	if v.Minor != other.Minor {
+		if v.Minor > other.Minor {
+			return 1
+		}
+		return -1
+	}
+
+	if v.Patch != other.Patch {
+		if v.Patch > other.Patch {
+			return 1
+		}
+		return -1
+	}
+
+	return 0
 }

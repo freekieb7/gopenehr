@@ -83,7 +83,7 @@ func (s *QueryService) QueryAndCopyTo(ctx context.Context, w io.Writer, aqlQuery
 	return nil
 }
 
-func (s *QueryService) ListStoredQueriesAsJSON(ctx context.Context, filterName string) ([]byte, error) {
+func (s *QueryService) ListStoredQueries(ctx context.Context, filterName string) ([]StoredQuery, error) {
 	var query strings.Builder
 	var args []any
 
@@ -109,7 +109,7 @@ func (s *QueryService) ListStoredQueriesAsJSON(ctx context.Context, filterName s
 		args = append(args, filterName)
 	}
 
-	var queries []byte
+	var queries []StoredQuery
 	if err := s.DB.QueryRow(ctx, query.String(), args...).Scan(&queries); err != nil {
 		return nil, fmt.Errorf("error querying stored AQL queries: %w", err)
 	}

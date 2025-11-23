@@ -206,7 +206,7 @@ func runHealthcheck(ctx context.Context) error {
 	}
 
 	// Check health endpoint
-	url := fmt.Sprintf("http://localhost:%s/health", cfg.Port)
+	url := fmt.Sprintf("http://127.0.0.1:%s/health/healthz", cfg.Port)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)

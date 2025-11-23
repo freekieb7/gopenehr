@@ -1,7 +1,7 @@
 name: gopenehr
 services:
   migrate:
-    image: ghcr.io/freekieb7/gopenehr:latest
+    image: gopenehr:test
     environment:
       DATABASE_URL: "postgres://gopenehr:gopenehrpass@postgres:5432/gopenehr?sslmode=disable"
     depends_on:
@@ -10,7 +10,7 @@ services:
     command: ["migrate", "up"]
 
   gopenehr:
-    image: ghcr.io/freekieb7/gopenehr:latest
+    image: gopenehr:test
     ports:
       - "3000:3000"
     environment:
@@ -21,7 +21,7 @@ services:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "/app/gopenehr", "healthcheck"]
-      interval: 30s
+      interval: 5s
       timeout: 3s
       retries: 3
       start_period: 5s

@@ -7,5 +7,9 @@ services:
       POSTGRES_DB: gopenehr
     ports:
       - "5432:5432"
-    # volumes:
-    #   - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 30s
+      timeout: 60s
+      retries: 5
+      start_period: 80s  

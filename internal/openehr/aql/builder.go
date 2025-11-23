@@ -60,7 +60,7 @@ func BuildSelectQuery(ctx gen.ISelectQueryContext, params map[string]any) (strin
 	}
 
 	// SELECT
-	selectClause, columnNames, selectHelperTables, aggregatedLimited, err := BuildSelectClause(ctx.SelectClause(), params, sources)
+	selectClause, columnNames, selectHelperTables, singleRow, err := BuildSelectClause(ctx.SelectClause(), params, sources)
 	if err != nil {
 		return "", nil, err
 	}
@@ -69,7 +69,7 @@ func BuildSelectQuery(ctx gen.ISelectQueryContext, params map[string]any) (strin
 	orderByClause := ""
 
 	// LIMIT / OFFSET
-	limitOffsetClause, err := BuildLimitOffsetClause(ctx.LimitClause(), params, aggregatedLimited)
+	limitOffsetClause, err := BuildLimitOffsetClause(ctx.LimitClause(), params, singleRow)
 	if err != nil {
 		return "", nil, err
 	}
@@ -93,17 +93,16 @@ func BuildSelectClause(ctx gen.ISelectClauseContext, params map[string]any, sour
 
 	columnNames := make([]string, 0)
 	helperTables := make([]string, 0)
-	columnNum := 0
-	aggregateLimited := true
+	singleRow := true
 
 	for idx, expr := range ctx.AllSelectExpr() {
 		if idx > 0 {
 			clause += ", "
 		}
 
-		selectExpressions, selectColumnNames, helperTable, err := BuildSelectExpr(expr, params, sources, &columnNum)
+		selectExpressions, selectColumnNames, helperTable, singleRowExpr, err := BuildSelectExpr(expr, params, sources, len(columnNames))
 		if err != nil {
-			return "", nil, nil, false, err
+			return "", nil, nil, singleRow, err
 		}
 
 		clause += strings.Join(selectExpressions, ", ")
@@ -112,71 +111,74 @@ func BuildSelectClause(ctx gen.ISelectClauseContext, params map[string]any, sour
 		}
 
 		columnNames = append(columnNames, selectColumnNames...)
-		if expr.ColumnExpr() != nil && expr.ColumnExpr().AggregateFunctionCall() != nil && expr.ColumnExpr().Primitive() != nil {
-			aggregateLimited = false
+		if !singleRowExpr {
+			singleRow = false
 		}
 	}
 
-	return clause, columnNames, helperTables, aggregateLimited, nil
+	return clause, columnNames, helperTables, singleRow, nil
 }
 
-func BuildSelectExpr(ctx gen.ISelectExprContext, params map[string]any, sources []Source, columnNum *int) ([]string, []string, string, error) {
+func BuildSelectExpr(ctx gen.ISelectExprContext, params map[string]any, sources []Source, columnNumber int) ([]string, []string, string, bool, error) {
 	switch true {
 	case ctx.SYM_ASTERISK() != nil:
 		expressions := make([]string, 0)
 		columnNames := make([]string, 0)
-		for _, source := range sources {
-			name := fmt.Sprintf(`"#%d"`, *columnNum)
+		for i, source := range sources {
+			name := fmt.Sprintf(`f%d`, columnNumber+i)
 			if source.Alias != "" {
 				name = source.Alias
 			}
 			expr := fmt.Sprintf("%s.data AS %s", source.Table, name)
 			expressions = append(expressions, expr)
 			columnNames = append(columnNames, name)
-			*columnNum++
 		}
-		return expressions, columnNames, "", nil
+		return expressions, columnNames, "", false, nil
 	case ctx.ColumnExpr() != nil:
-		column, helperTable, err := BuildColumnExpr(ctx.ColumnExpr(), params, sources, columnNum)
+		column, helperTable, singleRow, err := BuildColumnExpr(ctx.ColumnExpr(), params, sources, columnNumber)
 		if err != nil {
-			return nil, nil, "", err
+			return nil, nil, "", false, err
 		}
 
-		name := fmt.Sprintf(`"#%d"`, *columnNum)
+		name := fmt.Sprintf(`f%d`, columnNumber)
 		if ctx.GetAliasName() != nil {
 			name = ctx.GetAliasName().GetText()
 		}
 		expr := fmt.Sprintf("%s AS %s", column, name)
-		*columnNum++
-		return []string{expr}, []string{name}, helperTable, nil
+		return []string{expr}, []string{name}, helperTable, singleRow, nil
 	default:
-		return nil, nil, "", fmt.Errorf("unsupported select expression")
+		return nil, nil, "", false, fmt.Errorf("unsupported select expression")
 	}
 }
 
-func BuildColumnExpr(ctx gen.IColumnExprContext, params map[string]any, sources []Source, columnNum *int) (string, string, error) {
+func BuildColumnExpr(ctx gen.IColumnExprContext, params map[string]any, sources []Source, columnNumber int) (string, string, bool, error) {
 	switch true {
 	case ctx.Primitive() != nil:
 		value, err := BuildPrimitive(ctx.Primitive(), true)
-		return value, "", err
+		return value, "", true, err
 	case ctx.IdentifiedPath() != nil:
 		source, path, _, _, err := BuildIdentifiedPath(ctx.IdentifiedPath(), params, sources)
 		if err != nil {
-			return "", "", err
+			return "", "", false, err
 		}
 
-		return fmt.Sprintf("jsonb_path_query(%s.data, '%s')", source.Table, path), "", nil
+		return fmt.Sprintf("jsonb_path_query(%s.data, '%s')", source.Table, path), "", false, nil
 	case ctx.FunctionCall() != nil:
 		value, err := BuildFunctionCall(ctx.FunctionCall(), params, sources)
-		return value, "", err
+		return value, "", false, err
 	case ctx.AggregateFunctionCall() != nil:
-		return BuildAggregateFunctionCall(ctx.AggregateFunctionCall(), params, sources, columnNum)
+		source, path, err := BuildAggregateFunctionCall(ctx.AggregateFunctionCall(), params, sources, columnNumber)
+		if err != nil {
+			return "", "", false, err
+		}
+
+		return source, path, true, nil
 	default:
-		return "", "", fmt.Errorf("unsupported column expression")
+		return "", "", false, fmt.Errorf("unsupported column expression")
 	}
 }
 
-func BuildAggregateFunctionCall(ctx gen.IAggregateFunctionCallContext, params map[string]any, sources []Source, columnNum *int) (string, string, error) {
+func BuildAggregateFunctionCall(ctx gen.IAggregateFunctionCallContext, params map[string]any, sources []Source, columnNumber int) (string, string, error) {
 	switch true {
 	case ctx.COUNT() != nil:
 		switch true {
@@ -202,8 +204,8 @@ func BuildAggregateFunctionCall(ctx gen.IAggregateFunctionCallContext, params ma
 				return fmt.Sprintf("COUNT(DISTINCT %s)", expression), "", nil
 			}
 
-			return fmt.Sprintf("SUM(ag_source_%d.data)", *columnNum),
-				fmt.Sprintf("LEFT JOIN LATERAL (SELECT COALESCE((jsonb_path_query_first(%s.data, '%s.size()') #>> '{}')::int, 0) data) agg_source_%d ON TRUE", source.Table, path, *columnNum),
+			return fmt.Sprintf("SUM(ag_source_%d.data)", columnNumber),
+				fmt.Sprintf("LEFT JOIN LATERAL (SELECT COALESCE((jsonb_path_query_first(%s.data, '%s.size()') #>> '{}')::int, 0) data) agg_source_%d ON TRUE", source.Table, path, columnNumber),
 				nil
 		default:
 			return "", "", fmt.Errorf("unsupported COUNT argument")
@@ -217,8 +219,8 @@ func BuildAggregateFunctionCall(ctx gen.IAggregateFunctionCallContext, params ma
 		// Worst case scenario, we need to do a switch case for every possible comparable object model.
 		switchExpression := BuildSlowValueExtractionExpr(endsWith)
 		if endsWith == nil {
-			return fmt.Sprintf("FIRST_VALUE(agg_source_%d.data) OVER (ORDER BY agg_source_%d.data ASC)", *columnNum, *columnNum),
-				fmt.Sprintf("LEFT JOIN LATERAL (SELECT (%s) data FROM %s target) agg_source_%d ON TRUE", switchExpression, source.Table, *columnNum),
+			return fmt.Sprintf("FIRST_VALUE(agg_source_%d.data) OVER (ORDER BY agg_source_%d.data ASC)", columnNumber, columnNumber),
+				fmt.Sprintf("LEFT JOIN LATERAL (SELECT (%s) data FROM %s target) agg_source_%d ON TRUE", switchExpression, source.Table, columnNumber),
 				nil
 
 		}
@@ -228,8 +230,8 @@ func BuildAggregateFunctionCall(ctx gen.IAggregateFunctionCallContext, params ma
 			return "", "", err
 		}
 
-		return fmt.Sprintf("FIRST_VALUE(agg_source_%d.data) OVER (ORDER BY agg_source_%d.sortable_data ASC)", *columnNum, *columnNum),
-			fmt.Sprintf("LEFT JOIN LATERAL (SELECT target.data data, (%s) sortable_data FROM JSON_TABLE(%s.data, '%s' COLUMNS(data JSONB PATH '$')) parent, JSON_TABLE(parent.data, '%s' COLUMNS(data JSONB PATH '$')) target) agg_source_%d ON TRUE", switchExpression, source.Table, pathWithoutEnd, pathEnding, *columnNum),
+		return fmt.Sprintf("FIRST_VALUE(agg_source_%d.data) OVER (ORDER BY agg_source_%d.sortable_data ASC)", columnNumber, columnNumber),
+			fmt.Sprintf("LEFT JOIN LATERAL (SELECT target.data data, (%s) sortable_data FROM JSON_TABLE(%s.data, '%s' COLUMNS(data JSONB PATH '$')) parent, JSON_TABLE(parent.data, '%s' COLUMNS(data JSONB PATH '$')) target) agg_source_%d ON TRUE", switchExpression, source.Table, pathWithoutEnd, pathEnding, columnNumber),
 			nil
 	case ctx.MAX() != nil:
 		source, _, pathWithoutEnd, endsWith, err := BuildIdentifiedPath(ctx.IdentifiedPath(), params, sources)
@@ -240,8 +242,8 @@ func BuildAggregateFunctionCall(ctx gen.IAggregateFunctionCallContext, params ma
 		// Worst case scenario, we need to do a switch case for every possible comparable object model.
 		switchExpression := BuildSlowValueExtractionExpr(endsWith)
 		if endsWith == nil {
-			return fmt.Sprintf("FIRST_VALUE(agg_source_%d.data) OVER (ORDER BY agg_source_%d.data DESC)", *columnNum, *columnNum),
-				fmt.Sprintf("LEFT JOIN LATERAL (SELECT (%s) data FROM %s target) agg_source_%d ON TRUE", switchExpression, source.Table, *columnNum),
+			return fmt.Sprintf("FIRST_VALUE(agg_source_%d.data) OVER (ORDER BY agg_source_%d.data DESC)", columnNumber, columnNumber),
+				fmt.Sprintf("LEFT JOIN LATERAL (SELECT (%s) data FROM %s target) agg_source_%d ON TRUE", switchExpression, source.Table, columnNumber),
 				nil
 		}
 
@@ -250,8 +252,8 @@ func BuildAggregateFunctionCall(ctx gen.IAggregateFunctionCallContext, params ma
 			return "", "", err
 		}
 
-		return fmt.Sprintf("FIRST_VALUE(agg_source_%d.data) OVER (ORDER BY agg_source_%d.sortable_data DESC)", *columnNum, *columnNum),
-			fmt.Sprintf("LEFT JOIN LATERAL (SELECT target.data data, (%s) sortable_data FROM JSON_TABLE(%s.data, '%s' COLUMNS(data JSONB PATH '$')) parent, JSON_TABLE(parent.data, '%s' COLUMNS(data JSONB PATH '$')) target) agg_source_%d ON TRUE", switchExpression, source.Table, pathWithoutEnd, pathEnding, *columnNum),
+		return fmt.Sprintf("FIRST_VALUE(agg_source_%d.data) OVER (ORDER BY agg_source_%d.sortable_data DESC)", columnNumber, columnNumber),
+			fmt.Sprintf("LEFT JOIN LATERAL (SELECT target.data data, (%s) sortable_data FROM JSON_TABLE(%s.data, '%s' COLUMNS(data JSONB PATH '$')) parent, JSON_TABLE(parent.data, '%s' COLUMNS(data JSONB PATH '$')) target) agg_source_%d ON TRUE", switchExpression, source.Table, pathWithoutEnd, pathEnding, columnNumber),
 			nil
 	case ctx.SUM() != nil:
 		source, _, pathWithoutEnd, endsWith, err := BuildIdentifiedPath(ctx.IdentifiedPath(), params, sources)
@@ -262,8 +264,8 @@ func BuildAggregateFunctionCall(ctx gen.IAggregateFunctionCallContext, params ma
 		switchExpression := BuildSlowValueExtractionExpr(endsWith)
 
 		if endsWith == nil {
-			return fmt.Sprintf("SUM(agg_source_%d.data)", *columnNum),
-				fmt.Sprintf("LEFT JOIN LATERAL (SELECT ((%s) #>> '{}')::decimal data FROM %s target) agg_source_%d ON TRUE", switchExpression, source.Table, *columnNum),
+			return fmt.Sprintf("SUM(agg_source_%d.data)", columnNumber),
+				fmt.Sprintf("LEFT JOIN LATERAL (SELECT ((%s) #>> '{}')::decimal data FROM %s target) agg_source_%d ON TRUE", switchExpression, source.Table, columnNumber),
 				nil
 		}
 
@@ -272,8 +274,8 @@ func BuildAggregateFunctionCall(ctx gen.IAggregateFunctionCallContext, params ma
 			return "", "", err
 		}
 
-		return fmt.Sprintf("SUM(agg_source_%d.data)", *columnNum),
-			fmt.Sprintf("LEFT JOIN LATERAL (SELECT ((%s) #>> '{}')::decimal data FROM JSON_TABLE(%s.data, '%s' COLUMNS(data JSONB PATH '$')) parent, JSON_TABLE(parent.data, '%s' COLUMNS(data JSONB PATH '$')) target) agg_source_%d ON TRUE", switchExpression, source.Table, pathWithoutEnd, pathEnding, *columnNum),
+		return fmt.Sprintf("SUM(agg_source_%d.data)", columnNumber),
+			fmt.Sprintf("LEFT JOIN LATERAL (SELECT ((%s) #>> '{}')::decimal data FROM JSON_TABLE(%s.data, '%s' COLUMNS(data JSONB PATH '$')) parent, JSON_TABLE(parent.data, '%s' COLUMNS(data JSONB PATH '$')) target) agg_source_%d ON TRUE", switchExpression, source.Table, pathWithoutEnd, pathEnding, columnNumber),
 			nil
 	case ctx.AVG() != nil:
 		source, _, pathWithoutEnd, endsWith, err := BuildIdentifiedPath(ctx.IdentifiedPath(), params, sources)
@@ -283,8 +285,8 @@ func BuildAggregateFunctionCall(ctx gen.IAggregateFunctionCallContext, params ma
 
 		switchExpression := BuildSlowValueExtractionExpr(endsWith)
 		if endsWith == nil {
-			return fmt.Sprintf("AVG(agg_source_%d.data)", *columnNum),
-				fmt.Sprintf("LEFT JOIN LATERAL (SELECT ((%s) #>> '{}')::decimal data FROM %s target) agg_source_%d ON TRUE", switchExpression, source.Table, *columnNum),
+			return fmt.Sprintf("AVG(agg_source_%d.data)", columnNumber),
+				fmt.Sprintf("LEFT JOIN LATERAL (SELECT ((%s) #>> '{}')::decimal data FROM %s target) agg_source_%d ON TRUE", switchExpression, source.Table, columnNumber),
 				nil
 		}
 
@@ -293,8 +295,8 @@ func BuildAggregateFunctionCall(ctx gen.IAggregateFunctionCallContext, params ma
 			return "", "", err
 		}
 
-		return fmt.Sprintf("AVG(agg_source_%d.data)", *columnNum),
-			fmt.Sprintf("LEFT JOIN LATERAL (SELECT ((%s) #>> '{}')::decimal data FROM JSON_TABLE(%s.data, '%s' COLUMNS(data JSONB PATH '$')) parent, JSON_TABLE(parent.data, '%s' COLUMNS(data JSONB PATH '$')) target) agg_source_%d ON TRUE", switchExpression, source.Table, pathWithoutEnd, pathEnding, *columnNum),
+		return fmt.Sprintf("AVG(agg_source_%d.data)", columnNumber),
+			fmt.Sprintf("LEFT JOIN LATERAL (SELECT ((%s) #>> '{}')::decimal data FROM JSON_TABLE(%s.data, '%s' COLUMNS(data JSONB PATH '$')) parent, JSON_TABLE(parent.data, '%s' COLUMNS(data JSONB PATH '$')) target) agg_source_%d ON TRUE", switchExpression, source.Table, pathWithoutEnd, pathEnding, columnNumber),
 			nil
 	default:
 		return "", "", fmt.Errorf("unsupported aggregate function call")
@@ -443,7 +445,6 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 			whereExpression = fmt.Sprintf("data @?? '$ ? (%s)'", condition)
 		}
 	}
-	_ = allVersions
 
 	if searchInModel {
 		// [Freek] Allow for generic searches where you want inheriting models to be included
@@ -466,28 +467,23 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 
 	switch model {
 	case openehr.EHR_MODEL_NAME:
-		expression := "openehr.tbl_ehr"
+		expression := "SELECT id, data FROM openehr.tbl_ehr_data"
 		if whereExpression != "" {
-			expression = fmt.Sprintf("(SELECT * FROM %s WHERE %s)", expression, whereExpression)
+			expression += " WHERE " + whereExpression
 		}
-		expression += " " + source.Table
+		expression = "(" + expression + ") " + source.Table
 
 		if !prevSource.E {
 			return expression, nil
 		}
 
-		switch prevSource.V.Model {
-		case openehr.PERSON_MODEL_NAME:
-			return fmt.Sprintf("LEFT JOIN openehr.tbl_ehr_status tmp_%s ON tmp_%s -> 'subject' -> 'external_ref' -> 'id' ->> 'value' = %s.versioned_object_id AND -> 'subject' -> 'external_ref' ->> 'type' == 'PERSON' LEFT JOIN %s ON %s.id = tmp_%s.ehr_id", source.Table, source.Table, prevSource.V.Table, expression, source.Table, source.Table), nil
-		default:
-			return "", nil
-		}
+		return "", nil
 	case openehr.CONTRIBUTION_MODEL_NAME:
-		expression := "openehr.tbl_contribution"
+		expression := "SELECT c.id, c.ehr_id, cd.data FROM openehr.tbl_contribution c JOIN openehr.tbl_contribution_data cd ON c.id = cd.id"
 		if whereExpression != "" {
-			expression = fmt.Sprintf("(SELECT * FROM %s WHERE %s)", expression, whereExpression)
+			expression += " WHERE " + whereExpression
 		}
-		expression += " " + source.Table
+		expression = "(" + expression + ") " + source.Table
 
 		if !prevSource.E {
 			return expression, nil
@@ -496,21 +492,15 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 		switch prevSource.V.Model {
 		case openehr.EHR_MODEL_NAME:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.ehr_id = %s.id", expression, source.Table, prevSource.V.Table), nil
-		case openehr.VERSIONED_COMPOSITION_MODEL_NAME:
-			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
-	case openehr.VERSIONED_EHR_STATUS_MODEL_NAME,
-		openehr.VERSIONED_EHR_ACCESS_MODEL_NAME,
-		openehr.VERSIONED_COMPOSITION_MODEL_NAME,
-		openehr.VERSIONED_FOLDER_MODEL_NAME,
-		openehr.VERSIONED_PARTY_MODEL_NAME:
-		expression := fmt.Sprintf("SELECT * FROM openehr.tbl_versioned_object WHERE data ->> '_type' = '%s'", model)
+	case openehr.VERSIONED_EHR_STATUS_MODEL_NAME:
+		expression := fmt.Sprintf("SELECT vo.id, vo.ehr_id, vo.contribution_id, vod.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id WHERE vo.type = '%s'", openehr.VERSIONED_EHR_STATUS_MODEL_NAME)
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
 		}
-		expression = fmt.Sprintf("(%s) %s", expression, source.Table)
+		expression = "(" + expression + ") " + source.Table
 
 		if !prevSource.E {
 			return expression, nil
@@ -518,18 +508,116 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 
 		switch prevSource.V.Model {
 		case openehr.EHR_MODEL_NAME:
-			return fmt.Sprintf("LEFT JOIN %s ON %s.ehr_id = %s.id", expression, source.Table, prevSource.V.Table), nil
-		case openehr.FOLDER_MODEL_NAME:
-			return fmt.Sprintf(`LEFT JOIN LATERAL (SELECT composition_id FROM JSON_TABLE(%s.data, '$.** ? (@._type == "FOLDER") .items ? (@.type == "VERSIONED_COMPOSITION")' columns (composition_id text path '$.id.value'))) AS tmp_%s ON TRUE LEFT JOIN %s ON %s.id = tmp_%s.composition_id`, prevSource.V.Table, source.Table, expression, source.Table, source.Table), nil
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.ehr_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+		default:
+			return "", nil
+		}
+	case openehr.VERSIONED_EHR_ACCESS_MODEL_NAME:
+		expression := fmt.Sprintf("SELECT vo.id, vo.ehr_id, vo.contribution_id, vod.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id WHERE vo.type = '%s'", openehr.VERSIONED_EHR_ACCESS_MODEL_NAME)
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		expression = "(" + expression + ") " + source.Table
+
+		if !prevSource.E {
+			return expression, nil
+		}
+
+		switch prevSource.V.Model {
+		case openehr.EHR_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.ehr_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+		default:
+			return "", nil
+		}
+	case openehr.VERSIONED_COMPOSITION_MODEL_NAME:
+		expression := fmt.Sprintf("SELECT vo.id, vo.ehr_id, vo.contribution_id, vod.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id WHERE vo.type = '%s'", openehr.VERSIONED_COMPOSITION_MODEL_NAME)
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		expression = "(" + expression + ") " + source.Table
+
+		if !prevSource.E {
+			return expression, nil
+		}
+
+		switch prevSource.V.Model {
+		case openehr.EHR_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.ehr_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+		default:
+			return "", nil
+		}
+	case openehr.VERSIONED_FOLDER_MODEL_NAME:
+		expression := fmt.Sprintf("SELECT vo.id, vo.ehr_id, vo.contribution_id, vod.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id WHERE vo.type = '%s'", openehr.VERSIONED_FOLDER_MODEL_NAME)
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		expression = "(" + expression + ") " + source.Table
+
+		if !prevSource.E {
+			return expression, nil
+		}
+
+		switch prevSource.V.Model {
+		case openehr.EHR_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.ehr_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+		default:
+			return "", nil
+		}
+	case openehr.VERSIONED_PARTY_MODEL_NAME:
+		expression := fmt.Sprintf("SELECT vo.id, vo.ehr_id, vo.contribution_id, vod.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id WHERE vo.type = '%s'", openehr.VERSIONED_PARTY_MODEL_NAME)
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		expression = "(" + expression + ") " + source.Table
+
+		if !prevSource.E {
+			return expression, nil
+		}
+
+		switch prevSource.V.Model {
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.EHR_MODEL_NAME:
+			return fmt.Sprintf(`
+				LEFT JOIN openehr.tbl_object_version tmp_es_%[2]s ON tmp_es_%[2]s.ehr_id = %[3]s.id AND tmp_es_%[2]s.type = '%[4]s'
+				LEFT JOIN openehr.tbl_object_version_data tmp_esd_%[2]s ON tmp_es_%[2]s.id = tmp_esd_%[2]s.id
+				LEFT JOIN %[1]s
+					ON %[2]s.id = tmp_esd_%[2]s.object_data->'subject'->'external_ref'->'id'->>'value'
+					AND tmp_esd_%[2]s.object_data->'subject'->'external_ref'->>'namespace' = 'local'
+					AND tmp_esd_%[2]s.object_data->'subject'->'external_ref'->>'type' = '%[5]s'
+			`, expression, source.Table, prevSource.V.Table, openehr.EHR_STATUS_MODEL_NAME, openehr.VERSIONED_PARTY_MODEL_NAME), nil
+		case openehr.EHR_STATUS_MODEL_NAME:
+			return fmt.Sprintf(`
+				LEFT JOIN %[1]s
+					ON %[2]s.id = %[3]s.data->'subject'->'external_ref'->'id'->>'value'
+					AND %[3]s.data->'subject'->'external_ref'->>'namespace' = 'local'
+					AND %[3]s.data->'subject'->'external_ref'->>'type' = '%[4]s'
+			`, expression, source.Table, prevSource.V.Table, openehr.VERSIONED_PARTY_MODEL_NAME), nil
 		default:
 			return "", nil
 		}
 	case openehr.COMPOSITION_MODEL_NAME:
-		expression := "openehr.tbl_composition"
-		if whereExpression != "" {
-			expression = fmt.Sprintf("(SELECT * FROM %s WHERE %s)", expression, whereExpression)
+		expression := "SELECT "
+		if !allVersions {
+			expression += "DISTINCT ON (vo.versioned_object_id) "
 		}
-		expression += " " + source.Table
+		expression += "vo.id, vo.ehr_id, vo.versioned_object_id, vo.contribution_id, ovd.object_data data FROM openehr.tbl_object_version vo JOIN openehr.tbl_object_version_data ovd ON vo.id = ovd.id WHERE vo.type = 'COMPOSITION'"
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		if !allVersions {
+			expression += " ORDER BY vo.versioned_object_id, vo.id DESC"
+		}
+		expression = "(" + expression + ") " + source.Table
+
 		if !prevSource.E {
 			return expression, nil
 		}
@@ -539,53 +627,86 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 			return fmt.Sprintf("LEFT JOIN %s ON %s.ehr_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case openehr.VERSIONED_COMPOSITION_MODEL_NAME:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		case openehr.FOLDER_MODEL_NAME:
-			return fmt.Sprintf(`LEFT JOIN LATERAL (SELECT composition_id FROM JSON_TABLE(%s.data, '$.** ? (@._type == "FOLDER") .items ? (@.type == "COMPOSITION")' columns (composition_id text path '$.id.value'))) AS tmp_%s ON TRUE LEFT JOIN %s ON %s.id = tmp_%s.composition_id`, prevSource.V.Table, source.Table, expression, source.Table, source.Table), nil
+			return fmt.Sprintf(`LEFT JOIN LATERAL (SELECT composition_id FROM JSON_TABLE(%s.data, '$.**.items ? (@.type == "COMPOSITION")' COLUMNS (composition_id text PATH '$.id.value'))) AS tmp_%s ON TRUE LEFT JOIN %s ON %s.id = tmp_%s.composition_id`, prevSource.V.Table, source.Table, expression, source.Table, source.Table), nil
 		default:
 			return "", nil
 		}
 	case openehr.EHR_STATUS_MODEL_NAME:
-		expression := "openehr.tbl_ehr_status"
-		if whereExpression != "" {
-			expression = fmt.Sprintf("(SELECT * FROM %s WHERE %s)", expression, whereExpression)
+		expression := "SELECT "
+		if !allVersions {
+			expression += "DISTINCT ON (ov.versioned_object_id) "
 		}
-		expression += " " + source.Table
+		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'EHR_STATUS'"
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		if !allVersions {
+			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
+		}
+		expression = "(" + expression + ") " + source.Table
 
 		if !prevSource.E {
 			return expression, nil
 		}
+
 		switch prevSource.V.Model {
 		case openehr.EHR_MODEL_NAME:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.ehr_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case openehr.VERSIONED_EHR_STATUS_MODEL_NAME:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case openehr.EHR_ACCESS_MODEL_NAME:
-		expression := "openehr.tbl_ehr_access"
-		if whereExpression != "" {
-			expression = fmt.Sprintf("(SELECT * FROM %s WHERE %s)", expression, whereExpression)
+		expression := "SELECT "
+		if !allVersions {
+			expression += "DISTINCT ON (ov.versioned_object_id) "
 		}
-		expression += " " + source.Table
+		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'EHR_ACCESS'"
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		if !allVersions {
+			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
+		}
+		expression = "(" + expression + ") " + source.Table
 
 		if !prevSource.E {
 			return expression, nil
 		}
+
 		switch prevSource.V.Model {
 		case openehr.EHR_MODEL_NAME:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.ehr_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case openehr.VERSIONED_EHR_ACCESS_MODEL_NAME:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case openehr.FOLDER_MODEL_NAME:
-		expression := "openehr.tbl_folder"
-		if whereExpression != "" {
-			expression = fmt.Sprintf("(SELECT * FROM %s WHERE %s)", expression, whereExpression)
+		expression := "SELECT "
+		if !allVersions {
+			expression += "DISTINCT ON (ov.versioned_object_id) "
 		}
-		expression += " " + source.Table
+		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'FOLDER'"
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		if !allVersions {
+			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
+		}
+		expression = "(" + expression + ") " + source.Table
+
+		if !prevSource.E {
+			return expression, nil
+		}
 
 		if !prevSource.E {
 			return expression, nil
@@ -595,15 +716,24 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 			return fmt.Sprintf("LEFT JOIN %s ON %s.ehr_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case openehr.VERSIONED_FOLDER_MODEL_NAME:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case openehr.ROLE_MODEL_NAME:
-		expression := "openehr.tbl_role"
-		if whereExpression != "" {
-			expression = fmt.Sprintf("(SELECT * FROM %s WHERE %s)", expression, whereExpression)
+		expression := "SELECT "
+		if !allVersions {
+			expression += "DISTINCT ON (ov.versioned_object_id) "
 		}
-		expression += " " + source.Table
+		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'ROLE'"
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		if !allVersions {
+			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
+		}
+		expression = "(" + expression + ") " + source.Table
 
 		if !prevSource.E {
 			return expression, nil
@@ -612,17 +742,24 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 		switch prevSource.V.Model {
 		case openehr.VERSIONED_PARTY_MODEL_NAME:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
-		// case openehr.PERSON_MODEL_NAME:
-		// 	return fmt.Sprintf("LEFT JOIN %s ON %s.party_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case openehr.PERSON_MODEL_NAME:
-		expression := "openehr.tbl_person"
-		if whereExpression != "" {
-			expression = fmt.Sprintf("(SELECT * FROM %s WHERE %s)", expression, whereExpression)
+		expression := "SELECT "
+		if !allVersions {
+			expression += "DISTINCT ON (ov.versioned_object_id) "
 		}
-		expression += " " + source.Table
+		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'PERSON'"
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		if !allVersions {
+			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
+		}
+		expression = "(" + expression + ") " + source.Table
 
 		if !prevSource.E {
 			return expression, nil
@@ -631,17 +768,40 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 		switch prevSource.V.Model {
 		case openehr.VERSIONED_PARTY_MODEL_NAME:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
-		// case openehr.ROLE_MODEL_NAME:
-		// 	return fmt.Sprintf("LEFT JOIN %s ON %s.id = %s.party_id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.EHR_MODEL_NAME:
+			return fmt.Sprintf(`
+				LEFT JOIN openehr.tbl_object_version tmp_es_%[2]s ON tmp_es_%[2]s.ehr_id = %[3]s.id AND tmp_es_%[2]s.type = '%[4]s'
+				LEFT JOIN openehr.tbl_object_version_data tmp_esd_%[2]s ON tmp_es_%[2]s.id = tmp_esd_%[2]s.id
+				LEFT JOIN %[1]s
+					ON %[2]s.id = tmp_esd_%[2]s.object_data->'subject'->'external_ref'->'id'->>'value'
+					AND tmp_esd_%[2]s.object_data->'subject'->'external_ref'->>'namespace' = 'local'
+					AND tmp_esd_%[2]s.object_data->'subject'->'external_ref'->>'type' = '%[5]s'
+			`, expression, source.Table, prevSource.V.Table, openehr.EHR_STATUS_MODEL_NAME, openehr.PERSON_MODEL_NAME), nil
+		case openehr.EHR_STATUS_MODEL_NAME:
+			return fmt.Sprintf(`
+				LEFT JOIN %[1]s
+					ON %[2]s.id = %[3]s.data->'subject'->'external_ref'->'id'->>'value'
+					AND %[3]s.data->'subject'->'external_ref'->>'namespace' = 'local'
+					AND %[3]s.data->'subject'->'external_ref'->>'type' = '%[4]s'
+			`, expression, source.Table, prevSource.V.Table, openehr.PERSON_MODEL_NAME), nil
 		default:
 			return "", nil
 		}
 	case openehr.AGENT_MODEL_NAME:
-		expression := "openehr.tbl_agent"
-		if whereExpression != "" {
-			expression = fmt.Sprintf("(SELECT * FROM %s WHERE %s)", expression, whereExpression)
+		expression := "SELECT "
+		if !allVersions {
+			expression += "DISTINCT ON (ov.versioned_object_id) "
 		}
-		expression += " " + source.Table
+		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'AGENT'"
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		if !allVersions {
+			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
+		}
+		expression = "(" + expression + ") " + source.Table
 
 		if !prevSource.E {
 			return expression, nil
@@ -650,43 +810,60 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 		switch prevSource.V.Model {
 		case openehr.VERSIONED_PARTY_MODEL_NAME:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
-		// case openehr.PERSON_MODEL_NAME:
-		// 	return fmt.Sprintf("LEFT JOIN %s ON %s.party_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case openehr.ORGANISATION_MODEL_NAME:
-		expression := "openehr.tbl_organisation"
-		if whereExpression != "" {
-			expression = fmt.Sprintf("(SELECT * FROM %s WHERE %s)", expression, whereExpression)
+		expression := "SELECT "
+		if !allVersions {
+			expression += "DISTINCT ON (ov.versioned_object_id) "
 		}
-		expression += " " + source.Table
+		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'ORGANISATION'"
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		if !allVersions {
+			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
+		}
+		expression = "(" + expression + ") " + source.Table
 
 		if !prevSource.E {
 			return expression, nil
 		}
+
 		switch prevSource.V.Model {
 		case openehr.VERSIONED_PARTY_MODEL_NAME:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
-		// case openehr.AGENT_MODEL_NAME:
-		// 	return fmt.Sprintf("LEFT JOIN %s ON %s.party_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case openehr.GROUP_MODEL_NAME:
-		expression := "openehr.tbl_group"
-		if whereExpression != "" {
-			expression = fmt.Sprintf("(SELECT * FROM %s WHERE %s)", expression, whereExpression)
+		expression := "SELECT "
+		if !allVersions {
+			expression += "DISTINCT ON (ov.versioned_object_id) "
 		}
-		expression += " " + source.Table
+		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'GROUP'"
+		if whereExpression != "" {
+			expression += " AND " + whereExpression
+		}
+		if !allVersions {
+			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
+		}
+		expression = "(" + expression + ") " + source.Table
 
 		if !prevSource.E {
 			return expression, nil
 		}
+
 		switch prevSource.V.Model {
 		case openehr.VERSIONED_PARTY_MODEL_NAME:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
-		// case openehr.AGENT_MODEL_NAME:
+		case openehr.CONTRIBUTION_MODEL_NAME:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
@@ -752,9 +929,9 @@ func BuildWhereExpr(ctx gen.IWhereExprContext, params map[string]any, sources []
 	}
 }
 
-func BuildLimitOffsetClause(ctx gen.ILimitClauseContext, params map[string]any, aggregatedLimited bool) (string, error) {
+func BuildLimitOffsetClause(ctx gen.ILimitClauseContext, params map[string]any, singleRow bool) (string, error) {
 	if ctx == nil {
-		if aggregatedLimited {
+		if singleRow {
 			return "LIMIT 1", nil
 		}
 		return "", nil
@@ -767,7 +944,7 @@ func BuildLimitOffsetClause(ctx gen.ILimitClauseContext, params map[string]any, 
 			return "", err
 		}
 
-		if aggregatedLimited && limitOperand > "1" {
+		if singleRow && limitOperand > "1" {
 			limitOperand = "1"
 		}
 
@@ -852,23 +1029,7 @@ func BuildIdentifiedExpr(ctx gen.IIdentifiedExprContext, params map[string]any, 
 			return "", err
 		}
 
-		operand = strings.ReplaceAll(operand, "%", "\\%") // Escape % characters
-		operand = strings.ReplaceAll(operand, "_", "\\_") // Escape _ characters
-
-		// Replace unescaped ? with _
-		operand = strings.ReplaceAll(operand, `\?`, "\x00") // Temporarily replace escaped ?
-		operand = strings.ReplaceAll(operand, "?", "_")
-		operand = strings.ReplaceAll(operand, "\x00", `\?`) // Restore escaped ?
-
-		// Replace unescaped * with %
-		operand = strings.ReplaceAll(operand, `\*`, "\x01") // Temporarily replace escaped *
-		operand = strings.ReplaceAll(operand, "*", "%")
-		operand = strings.ReplaceAll(operand, "\x01", `\*`) // Restore escaped *
-
-		operand = strings.ReplaceAll(operand, "\\\\%", "\\%") //remove the extra escaped backslashes
-		operand = strings.ReplaceAll(operand, "\\\\_", "\\_") //remove the extra escaped backslashes
-
-		return fmt.Sprintf("EXISTS (SELECT 1 FROM JSON_TABLE(%s.data, '%s' COLUMNS(data JSONB PATH '$')) WHERE data #>> '{}' LIKE '%s')", source.Table, path, operand), nil
+		return fmt.Sprintf("EXISTS (SELECT 1 FROM JSON_TABLE(%s.data, '%s' COLUMNS(data JSONB PATH '$')) WHERE data #>> '{}' LIKE %s)", source.Table, path, operand), nil
 
 	case ctx.MATCHES() != nil:
 		source, path, _, _, err := BuildIdentifiedPath(ctx.IdentifiedPath(), params, sources)
@@ -889,15 +1050,105 @@ func BuildIdentifiedExpr(ctx gen.IIdentifiedExprContext, params map[string]any, 
 	}
 }
 
+// convertAQLWildcardToPostgres converts AQL wildcard patterns to PostgreSQL LIKE patterns
+// AQL wildcards:
+//   - ? matches any single character
+//   - * matches any sequence of zero or more characters
+//
+// PostgreSQL LIKE wildcards:
+//   - _ matches any single character
+//   - % matches any sequence of zero or more characters
+func convertAQLWildcardToPostgres(aqlPattern string) string {
+	var result strings.Builder
+	escaped := false
+
+	for i, char := range aqlPattern {
+		// Handle escape sequences
+		if char == '\\' && i+1 < len(aqlPattern) {
+			nextChar := rune(aqlPattern[i+1])
+			// If backslash is escaping a wildcard or another backslash
+			if nextChar == '?' || nextChar == '*' || nextChar == '\\' {
+				escaped = true
+				continue
+			}
+		}
+
+		if escaped {
+			// Escaped characters are treated literally
+			// We need to escape them for PostgreSQL LIKE
+			switch char {
+			case '?', '*':
+				// Escaped AQL wildcards become literal characters
+				result.WriteRune('\\')
+				result.WriteRune(char)
+			case '\\':
+				// Escaped backslash
+				result.WriteString("\\\\")
+			case '%', '_':
+				// These need escaping in PostgreSQL LIKE
+				result.WriteRune('\\')
+				result.WriteRune(char)
+			default:
+				result.WriteRune(char)
+			}
+			escaped = false
+			continue
+		}
+
+		// Convert unescaped wildcards
+		switch char {
+		case '?':
+			// AQL single-character wildcard → PostgreSQL single-character wildcard
+			result.WriteRune('_')
+		case '*':
+			// AQL multi-character wildcard → PostgreSQL multi-character wildcard
+			result.WriteRune('%')
+		case '%', '_':
+			// Escape PostgreSQL special characters that appear literally in the pattern
+			result.WriteRune('\\')
+			result.WriteRune(char)
+		case '\\':
+			// Literal backslash in PostgreSQL LIKE
+			result.WriteString("\\\\")
+		default:
+			result.WriteRune(char)
+		}
+	}
+
+	return result.String()
+}
+
 func BuildLikeOperand(ctx gen.ILikeOperandContext, params map[string]any) (string, error) {
+	var value string
 	switch true {
 	case ctx.STRING() != nil:
-		return ctx.STRING().GetText(), nil
+		value = ctx.STRING().GetText()
+		value = value[1 : len(value)-1] // Remove quotes
 	case ctx.PARAMETER() != nil:
-		return BuildParameter(ctx.PARAMETER(), params, false, "string")
+		paramName := ctx.PARAMETER().GetText()
+		paramName = paramName[1:] // Remove leading '$'
+		paramValue, ok := params[paramName]
+		if !ok {
+			return "", fmt.Errorf("missing parameter: %s", paramName)
+		}
+
+		strValue, ok := paramValue.(string)
+		if !ok {
+			return "", fmt.Errorf("parameter %s must be a string for LIKE operation", paramName)
+		}
+		value = strValue
 	default:
 		return "", fmt.Errorf("unsupported like operand")
 	}
+
+	// Convert AQL wildcards to PostgreSQL LIKE patterns
+	// AQL: ? = single character, * = zero or more characters
+	// PostgreSQL: _ = single character, % = zero or more characters
+	// We also need to escape existing % and _ in the value
+
+	pgPattern := convertAQLWildcardToPostgres(value)
+
+	return fmt.Sprintf("'%s'", pgPattern), nil
 }
 
 func BuildMatchedOperand(ctx gen.IMatchesOperandContext, params map[string]any) (string, error) {

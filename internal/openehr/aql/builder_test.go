@@ -3,7 +3,7 @@ package aql
 import "testing"
 
 func TestToSQL(t *testing.T) {
-	sql, _, err := ToSQL("SELECT e, c FROM EHR e CONTAINS COMPOSITION c", nil)
+	sql, _, err := ToSQL("SELECT * FROM EHR e CONTAINS EHR_STATUS[ALL_VERSIONS]", nil)
 	if err != nil {
 		t.Fatalf("ToSQL returned an error: %v", err)
 	}

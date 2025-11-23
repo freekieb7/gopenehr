@@ -9,14 +9,14 @@ import (
 const PARTY_IDENTITY_MODEL_NAME string = "PARTY_IDENTITY"
 
 type PARTY_IDENTITY struct {
-	Type_            util.Optional[string]           `json:"_type,omitzero"`
-	Name             X_DV_TEXT                       `json:"name"`
-	ArchetypeNodeID  string                          `json:"archetype_node_id"`
-	UID              util.Optional[X_UID_BASED_ID]   `json:"uid,omitzero"`
-	Links            util.Optional[[]LINK]           `json:"links,omitzero"`
-	ArchetypeDetails util.Optional[ARCHETYPED]       `json:"archetype_details,omitzero"`
-	FeederAudit      util.Optional[FEEDER_AUDIT]     `json:"feeder_audit,omitzero"`
-	Details          util.Optional[X_ITEM_STRUCTURE] `json:"details,omitzero"`
+	Type_            util.Optional[string]         `json:"_type,omitzero"`
+	Name             X_DV_TEXT                     `json:"name"`
+	ArchetypeNodeID  string                        `json:"archetype_node_id"`
+	UID              util.Optional[X_UID_BASED_ID] `json:"uid,omitzero"`
+	Links            util.Optional[[]LINK]         `json:"links,omitzero"`
+	ArchetypeDetails util.Optional[ARCHETYPED]     `json:"archetype_details,omitzero"`
+	FeederAudit      util.Optional[FEEDER_AUDIT]   `json:"feeder_audit,omitzero"`
+	Details          X_ITEM_STRUCTURE              `json:"details"`
 }
 
 func (p *PARTY_IDENTITY) SetModelName() {
@@ -36,9 +36,7 @@ func (p *PARTY_IDENTITY) SetModelName() {
 	if p.FeederAudit.E {
 		p.FeederAudit.V.SetModelName()
 	}
-	if p.Details.E {
-		p.Details.V.SetModelName()
-	}
+	p.Details.SetModelName()
 }
 
 func (p *PARTY_IDENTITY) Validate(path string) []util.ValidationError {
@@ -98,10 +96,8 @@ func (p *PARTY_IDENTITY) Validate(path string) []util.ValidationError {
 	}
 
 	// Validate Details
-	if p.Details.E {
-		attrPath = path + ".details"
-		errors = append(errors, p.Details.V.Validate(attrPath)...)
-	}
+	attrPath = path + ".details"
+	errors = append(errors, p.Details.Validate(attrPath)...)
 
 	return errors
 }

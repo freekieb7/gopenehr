@@ -92,7 +92,7 @@ func TestValidateInvalidEHR(t *testing.T) {
 	}
 
 	errors := ehr.Validate("$")
-	if len(errors) != 5 {
+	if len(errors) != 6 {
 		t.Errorf("Expected 5 validation errors, got %d", len(errors))
 		for _, err := range errors {
 			t.Logf("Validation error: %s", err.Message)

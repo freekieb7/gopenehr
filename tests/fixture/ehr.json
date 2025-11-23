@@ -1,4 +1,8 @@
 {
+    "system_id": {
+        "_type": "HIER_OBJECT_ID",
+        "value": "gopenehr"
+    },
     "ehr_id": {
         "value": "e7f6a728-df40-47a1-ac60-938210eac904"
     },

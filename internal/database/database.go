@@ -16,6 +16,10 @@ type Database struct {
 	*pgxpool.Pool
 }
 
+func New() Database {
+	return Database{}
+}
+
 func (db *Database) Connect(ctx context.Context, url string) error {
 	pool, err := pgxpool.New(ctx, url)
 	if err != nil {

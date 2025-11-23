@@ -52,7 +52,7 @@ func (s *QueryService) QueryAndCopyTo(ctx context.Context, w io.Writer, aqlQuery
 
 	rows, err := s.DB.Query(ctx, sqlQuery)
 	if err != nil {
-		s.Logger.Error("query error", "error", err, "aql", aqlQuery, "sql", sqlQuery)
+		s.Logger.Error("query error", "error", err, "aql", aqlQuery, "sql", strings.ReplaceAll(strings.ReplaceAll(sqlQuery, "\n", " "), "\t", " "))
 		return err
 	}
 
@@ -83,7 +83,7 @@ func (s *QueryService) QueryAndCopyTo(ctx context.Context, w io.Writer, aqlQuery
 	return nil
 }
 
-func (s *QueryService) ListStoredQueriesAsJSON(ctx context.Context, filterName string) ([]byte, error) {
+func (s *QueryService) ListStoredQueries(ctx context.Context, filterName string) ([]StoredQuery, error) {
 	var query strings.Builder
 	var args []any
 
@@ -96,7 +96,7 @@ func (s *QueryService) ListStoredQueriesAsJSON(ctx context.Context, filterName s
 				'saved', to_char(created_at, 'YYYY-MM-DD"T"HH24:MI:SS.MSTZH:TZM'),
 				'q', query
 			)), '[]'::jsonb) as queries
-		FROM openehr.tbl_aql_query
+		FROM openehr.tbl_query
 	`)
 
 	if filterName != "" {
@@ -109,7 +109,7 @@ func (s *QueryService) ListStoredQueriesAsJSON(ctx context.Context, filterName s
 		args = append(args, filterName)
 	}
 
-	var queries []byte
+	var queries []StoredQuery
 	if err := s.DB.QueryRow(ctx, query.String(), args...).Scan(&queries); err != nil {
 		return nil, fmt.Errorf("error querying stored AQL queries: %w", err)
 	}
@@ -121,7 +121,7 @@ func (s *QueryService) GetQueryByName(ctx context.Context, name string, filterVe
 	var query strings.Builder
 	var args []any
 
-	query.WriteString(`SELECT name, version, query, created_at FROM openehr.tbl_aql_query WHERE name = $1 `)
+	query.WriteString(`SELECT name, version, query, created_at FROM openehr.tbl_query WHERE name = $1 `)
 	args = append(args, name)
 
 	if filterVersion != "" {
@@ -145,7 +145,7 @@ func (s *QueryService) GetQueryByName(ctx context.Context, name string, filterVe
 
 func (s *QueryService) StoreQuery(ctx context.Context, name, version, aqlQuery string) error {
 	// Store the new query
-	_, err := s.DB.Exec(ctx, `INSERT INTO openehr.tbl_aql_query (id, name, version, query) VALUES ($1, $2, $3, $4) ON CONFLICT (name, version) DO UPDATE SET query = EXCLUDED.query`,
+	_, err := s.DB.Exec(ctx, `INSERT INTO openehr.tbl_query (id, name, version, query) VALUES ($1, $2, $3, $4) ON CONFLICT (name, version) DO UPDATE SET query = EXCLUDED.query`,
 		uuid.New(),
 		name,
 		version,

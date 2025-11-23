@@ -7,10 +7,19 @@ ARG VERSION=dev
 ARG GIT_COMMIT=unknown
 ARG BUILD_TIME=unknown
 
-# Copy source
+# Copy go.mod and go.sum first (for verification)
+COPY go.mod go.sum ./
+
+# Copy vendor directory (contains all dependencies)
+COPY vendor/ ./vendor/
+
+# Copy source code
 COPY . .
 
-# Build static binary for linux
+# Verify vendor directory is in sync (fails if vendor is outdated)
+RUN go mod verify
+
+# Build static binary using vendored dependencies (no network needed)
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -mod=vendor \
     -ldflags="-s -w \

@@ -1,10 +1,21 @@
 DATABASE_URL=postgres://gopenehr:gopenehrpass@localhost:5432/gopenehr
 
+.PHONY: up
+up:
+	docker compose up -d --wait
+
+.PHONY: down
+down:
+	docker compose down
 
 .PHONY: lint
 lint:
 # 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.6.1
 	~/go/bin/golangci-lint run
+
+.PHONY: migrate
+migrate:
+	DATABASE_URL=${DATABASE_URL} go run -mod=vendor ./... migrate up
 
 .PHONY: run
 run:

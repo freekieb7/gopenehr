@@ -70,5 +70,45 @@ func (o *OBJECT_REF) Validate(path string) []util.ValidationError {
 	attrPath = path + ".id"
 	errs = append(errs, o.ID.Validate(attrPath)...)
 
+	// Validated overal object values
+	switch o.Type {
+	case EHR_MODEL_NAME,
+		VERSIONED_EHR_STATUS_MODEL_NAME,
+		VERSIONED_EHR_ACCESS_MODEL_NAME,
+		VERSIONED_COMPOSITION_MODEL_NAME,
+		VERSIONED_FOLDER_MODEL_NAME,
+		VERSIONED_PARTY_MODEL_NAME:
+		// Valid type
+		_, ok := o.ID.Value.(*HIER_OBJECT_ID)
+		if !ok {
+			attrPath = path + ".id"
+			errs = append(errs, util.ValidationError{
+				Model:          OBJECT_REF_MODEL_NAME,
+				Path:           attrPath,
+				Message:        fmt.Sprintf("invalid id type for object ref type %s: expected HIER_OBJECT_ID", o.Type),
+				Recommendation: fmt.Sprintf("Ensure id is of type HIER_OBJECT_ID for object ref type %s", o.Type),
+			})
+		}
+	case EHR_STATUS_MODEL_NAME,
+		EHR_ACCESS_MODEL_NAME,
+		COMPOSITION_MODEL_NAME,
+		FOLDER_MODEL_NAME,
+		PERSON_MODEL_NAME,
+		AGENT_MODEL_NAME,
+		GROUP_MODEL_NAME,
+		ORGANISATION_MODEL_NAME:
+		// Valid type
+		_, ok := o.ID.Value.(*OBJECT_VERSION_ID)
+		if !ok {
+			attrPath = path + ".id"
+			errs = append(errs, util.ValidationError{
+				Model:          OBJECT_REF_MODEL_NAME,
+				Path:           attrPath,
+				Message:        fmt.Sprintf("invalid id type for object ref type %s: expected OBJECT_VERSION_ID", o.Type),
+				Recommendation: fmt.Sprintf("Ensure id is of type OBJECT_VERSION_ID for object ref type %s", o.Type),
+			})
+		}
+	}
+
 	return errs
 }

@@ -55,9 +55,6 @@ LABEL org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.vendor="freekieb7" \
       org.opencontainers.image.licenses="MIT"
 
-# Expose port
-EXPOSE 3000
-
 # Run as non-root user (UID 65532)
 USER nonroot:nonroot
 

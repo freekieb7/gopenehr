@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -206,7 +204,7 @@ func runHealthcheck(ctx context.Context) error {
 	}
 
 	// Check health endpoint
-	url := fmt.Sprintf("http://localhost:%s/health", cfg.Port)
+	url := fmt.Sprintf("http://localhost:%s/health/readyz", cfg.Port)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -224,23 +222,6 @@ func runHealthcheck(ctx context.Context) error {
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unhealthy: status code %d", resp.StatusCode)
-	}
-
-	// Parse the response
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var healthResp struct {
-		Status string `json:"status"`
-	}
-	if err := json.Unmarshal(body, &healthResp); err != nil {
-		return fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	if healthResp.Status != "healthy" {
-		return fmt.Errorf("unhealthy: status=%s", healthResp.Status)
 	}
 
 	fmt.Println("✓ Server is healthy")

@@ -34,6 +34,7 @@ func (e Environment) IsProduction() bool {
 
 type Config struct {
 	Host          string
+	Port          string
 	Version       string
 	Environment   Environment
 	DatabaseURL   string
@@ -54,6 +55,12 @@ func (c *Config) Load() error {
 		return err
 	}
 	c.Environment = env
+
+	port, err := getEnvString("PORT", "3000", false)
+	if err != nil {
+		return err
+	}
+	c.Port = port
 
 	dbURL, err := getEnvString("DATABASE_URL", "", true)
 	if err != nil {

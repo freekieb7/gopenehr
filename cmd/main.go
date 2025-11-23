@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -32,12 +35,13 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	if len(args) < 1 {
-		fmt.Println("Usage: ")
-		fmt.Println("  [command]")
+		fmt.Println("Usage: gopenehr [command]")
 		fmt.Println()
 		fmt.Println("Commands:")
 		fmt.Println("  serve          - Start the web server")
 		fmt.Println("  migrate [cmd]  - Run database migrations (up/down)")
+		fmt.Println("  healthcheck    - Check if the server is healthy")
+		fmt.Println("  version        - Show version information")
 		return nil
 	}
 
@@ -46,10 +50,14 @@ func run(ctx context.Context, args []string) error {
 		return runServer(ctx)
 	case "migrate":
 		return runMigrate(ctx, args[1:])
-	default:
+	case "healthcheck":
+		return runHealthcheck(ctx)
+	case "version":
+		fmt.Printf("Version: %s\n", config.Version)
 		return nil
+	default:
+		return fmt.Errorf("unknown command: %s", args[0])
 	}
-
 }
 
 func runServer(ctx context.Context) error {
@@ -127,7 +135,8 @@ func runServer(ctx context.Context) error {
 
 	// Start server
 	go func() {
-		if err := srv.Listen(":3000"); err != nil {
+		logger.InfoContext(ctx, "Starting server", "port", cfg.Port)
+		if err := srv.Listen(":" + cfg.Port); err != nil {
 			serverErrChan <- err
 		}
 	}()
@@ -178,4 +187,62 @@ func runMigrate(ctx context.Context, args []string) error {
 	}
 
 	return migrate.Run(ctx, args)
+}
+
+func runHealthcheck(ctx context.Context) error {
+	// Get port from environment variable (default: 3000)
+	cfg := config.Config{}
+	if err := cfg.Load(); err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+	}
+
+	// Check health endpoint
+	url := fmt.Sprintf("http://localhost:%s/health", cfg.Port)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("health check failed: %w", err)
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logger.ErrorContext(ctx, "Failed to close response body", "error", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unhealthy: status code %d", resp.StatusCode)
+	}
+
+	// Parse the response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var healthResp struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(body, &healthResp); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	if healthResp.Status != "healthy" {
+		return fmt.Errorf("unhealthy: status=%s", healthResp.Status)
+	}
+
+	fmt.Println("✓ Server is healthy")
+	return nil
 }

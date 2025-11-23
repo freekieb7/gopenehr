@@ -33,10 +33,11 @@ func (e Environment) IsProduction() bool {
 }
 
 type Config struct {
-	Host        string
-	Version     string
-	Environment Environment
-	DatabaseURL string
+	Host          string
+	Version       string
+	Environment   Environment
+	DatabaseURL   string
+	MigrationsDir string
 }
 
 func (c *Config) Load() error {
@@ -59,6 +60,12 @@ func (c *Config) Load() error {
 		return err
 	}
 	c.DatabaseURL = dbURL
+
+	migrationsDir, err := getEnvString("MIGRATIONS_DIR", "./migrations", false)
+	if err != nil {
+		return err
+	}
+	c.MigrationsDir = migrationsDir
 
 	return nil
 }

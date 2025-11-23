@@ -174,7 +174,7 @@ func runMigrate(ctx context.Context, args []string) error {
 	migrate := cli.Migrator{
 		DB:            &db,
 		Logger:        logger,
-		MigrationsDir: "./internal/database/migrations",
+		MigrationsDir: cfg.MigrationsDir,
 	}
 
 	return migrate.Run(ctx, args)

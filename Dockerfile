@@ -40,6 +40,7 @@ ARG BUILD_TIME=unknown
 
 # Copy binary
 COPY --from=builder /app/gopenehr .
+COPY --from=builder /app/internal/database/migrations ./migrations
 
 # Labels for metadata
 LABEL org.opencontainers.image.version="${VERSION}"

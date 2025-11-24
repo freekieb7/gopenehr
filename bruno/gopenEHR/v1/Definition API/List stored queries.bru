@@ -1,0 +1,20 @@
+meta {
+  name: List stored queries
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/definition/query/:qualified_query_name
+  body: none
+  auth: inherit
+}
+
+params:path {
+  qualified_query_name: 
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

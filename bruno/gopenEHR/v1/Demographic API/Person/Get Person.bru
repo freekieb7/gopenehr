@@ -1,0 +1,20 @@
+meta {
+  name: Get Person
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/demographic/person/:uid_based_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  uid_based_id: d45384c5-76a8-4b8a-b966-0e986c1fece7::gopenehr::1
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

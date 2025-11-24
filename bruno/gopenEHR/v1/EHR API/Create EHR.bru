@@ -1,0 +1,43 @@
+meta {
+  name: Create EHR
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/openehr/v1/ehr
+  body: json
+  auth: inherit
+}
+
+headers {
+  Prefer: return=representation
+}
+
+body:json {
+  {
+      "name": {
+          "_type": "DV_TEXT",
+          "value": "EHR Status"
+      },
+      "archetype_node_id": "openEHR-EHR-EHR_STATUS.generic.v1",
+      "subject": {
+          "_type": "PARTY_SELF",
+          "external_ref": {
+              "namespace": "local",
+              "type": "PERSON",
+              "id": {
+                  "_type": "OBJECT_VERSION_ID",
+                  "value": "d45384c5-76a8-4b8a-b966-0e986c1fece7::gopenehr::1"
+              }
+          }
+      },
+      "is_queryable": true,
+      "is_modifiable": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

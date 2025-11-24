@@ -1,0 +1,48 @@
+meta {
+  name: Update Directory
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id/directory
+  body: json
+  auth: inherit
+}
+
+params:path {
+  ehr_id: 2ac8189d-697a-4e06-93d2-b073c7d0a14a
+}
+
+headers {
+  If-Match: 
+}
+
+body:json {
+  {
+    "archetype_node_id": "openEHR-EHR-FOLDER.directory.v1",
+    "name": {
+      "value": "Directory"
+    },
+    "uid": {
+      "_type": "OBJECT_VERSION_ID",
+      "value": "{{$randomUUID}}::openEHRSys.example.com::1"
+    },
+    "items": [
+      {
+        "id": {
+          "_type": "HIER_OBJECT_ID",
+          "value": "71cc4577-59c3-4b59-90c0-5a448221d3cb"
+        },
+        "type": "COMPOSITION",
+        "namespace": "local"
+      }
+    ],
+    "folders": []
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

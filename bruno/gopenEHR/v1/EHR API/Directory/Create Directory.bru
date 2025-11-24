@@ -1,0 +1,131 @@
+meta {
+  name: Create Directory
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id/directory
+  body: json
+  auth: inherit
+}
+
+params:path {
+  ehr_id: c82da992-015c-4554-b879-f7db7a51cd21
+}
+
+body:json {
+  {
+    "archetype_node_id": "openEHR-EHR-FOLDER.directory.v1",
+    "name": {
+      "value": "Directory"
+    },
+    "uid": {
+      "_type": "OBJECT_VERSION_ID",
+      "value": "{{$randomUUID}}::openEHRSys.example.com::1"
+    },
+    "items": [
+      {
+        "id": {
+          "_type": "OBJECT_VERSION_ID",
+          "value": "9279857c-7ae1-4a9d-8f28-597885190006::gopenehr::1"
+        },
+        "type": "COMPOSITION",
+        "namespace": "local"
+      }
+    ],
+    "folders": [
+      {
+        "archetype_node_id": "openEHR-EHR-FOLDER.directory.v1",
+        "name": {
+          "value": "Sub folder 1"
+        },
+        "uid": {
+          "_type": "OBJECT_VERSION_ID",
+          "value": "{{$randomUUID}}::openEHRSys.example.com::1"
+        },
+        "items": [
+          {
+            "id": {
+              "_type": "HIER_OBJECT_ID",
+              "value": "71cc4577-59c3-4b59-90c0-5a448221d3cb"
+            },
+            "type": "VERSIONED_COMPOSITION",
+            "namespace": "local"
+          }
+        ],
+        "folders": [
+          {
+            "archetype_node_id": "openEHR-EHR-FOLDER.directory.v1",
+            "name": {
+              "value": "Sub folder 1.1"
+            },
+            "uid": {
+              "_type": "OBJECT_VERSION_ID",
+              "value": "{{$randomUUID}}::openEHRSys.example.com::1"
+            },
+            "items": [
+              {
+                "id": {
+                  "_type": "OBJECT_VERSION_ID",
+                  "value": "9279857c-7ae1-4a9d-8f28-597885190006::gopenehr::1"
+                },
+                "type": "COMPOSITION",
+                "namespace": "local"
+              }
+            ],
+            "folders": []
+          }
+        ]
+      },
+      {
+        "archetype_node_id": "openEHR-EHR-FOLDER.directory.v1",
+        "name": {
+          "value": "Sub folder 2"
+        },
+        "uid": {
+          "_type": "OBJECT_VERSION_ID",
+          "value": "{{$randomUUID}}::openEHRSys.example.com::1"
+        },
+        "items": [
+          {
+            "id": {
+              "_type": "HIER_OBJECT_ID",
+              "value": "71cc4577-59c3-4b59-90c0-5a448221d3cb"
+            },
+            "type": "VERSIONED_COMPOSITION",
+            "namespace": "local"
+          }
+        ],
+        "folders": [
+          {
+            "archetype_node_id": "openEHR-EHR-FOLDER.directory.v1",
+            "name": {
+              "value": "Sub folder 2.1"
+            },
+            "uid": {
+              "_type": "OBJECT_VERSION_ID",
+              "value": "{{$randomUUID}}::openEHRSys.example.com::1"
+            },
+            "items": [
+              {
+                "id": {
+                  "_type": "HIER_OBJECT_ID",
+                  "value": "71cc4577-59c3-4b59-90c0-5a448221d3cb"
+                },
+                "type": "VERSIONED_COMPOSITION",
+                "namespace": "local"
+              }
+            ],
+            "folders": []
+          }
+        ]
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

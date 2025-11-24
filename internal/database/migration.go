@@ -5,6 +5,7 @@ import (
 )
 
 type Migration struct {
+	Version   uint64
 	Name      string
 	UpSQL     string
 	DownSQL   string

@@ -1,0 +1,32 @@
+meta {
+  name: gopenEHR
+}
+
+auth {
+  mode: oauth2
+}
+
+auth:oauth2 {
+  grant_type: client_credentials
+  access_token_url: https://dev-1y8cwz7ig7g6dsqj.us.auth0.com/oauth/token
+  refresh_token_url: 
+  client_id: WGrIMjUJWLVRuN83zQNPROjhACOYMBHF
+  client_secret: QzDPT0IESr3WJvs45xHpKdGl1zo0mbN4kFSki4MP8FPEeps-7qW8y1yHrHuS8QmH
+  scope: openid profile email somerandomscope
+  credentials_placement: basic_auth_header
+  credentials_id: credentials
+  token_placement: header
+  token_header_prefix: 
+  auto_fetch_token: true
+  auto_refresh_token: false
+}
+
+vars:pre-request {
+  baseUrl: http://localhost:3000
+}
+
+docs {
+  OpenPlatform is platform which standardizes patient-centered health data with the help of [openEHR](https://openehr.org/).
+  
+  Supports openEHR API v1.0.3
+}

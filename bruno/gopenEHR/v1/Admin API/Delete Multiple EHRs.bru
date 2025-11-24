@@ -1,0 +1,22 @@
+meta {
+  name: Delete Multiple EHRs
+  type: http
+  seq: 2
+}
+
+delete {
+  url: {{baseUrl}}/openehr/v1/admin/ehr/all?ehr_id=9fa83160-7831-4e68-ad02-d66ba940502a&ehr_id=dd9e24b5-9fa0-478e-b540-645861f0e9ce&ehr_id=9a695fbe-c608-46fc-a2af-9adafd6f966e
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ehr_id: 9fa83160-7831-4e68-ad02-d66ba940502a
+  ehr_id: dd9e24b5-9fa0-478e-b540-645861f0e9ce
+  ehr_id: 9a695fbe-c608-46fc-a2af-9adafd6f966e
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

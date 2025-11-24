@@ -1,0 +1,21 @@
+meta {
+  name: Get Composition
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id/composition/:uid_based_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  ehr_id: 63575490-97cc-478a-bd68-6d54044d9c3b
+  uid_based_id: 5889d169-22ca-43bf-a265-5f97bd302f46::gopenehr::1
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

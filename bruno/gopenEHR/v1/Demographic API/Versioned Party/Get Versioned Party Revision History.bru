@@ -1,0 +1,20 @@
+meta {
+  name: Get Versioned Party Revision History
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/demographic/versioned_party/:versioned_object_uid/revision_history
+  body: none
+  auth: inherit
+}
+
+params:path {
+  versioned_object_uid: b74e6162-a3c4-43c1-a174-4ce0db398378
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

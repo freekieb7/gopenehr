@@ -1,0 +1,53 @@
+meta {
+  name: Update EHR Status
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id/ehr_status
+  body: json
+  auth: inherit
+}
+
+params:path {
+  ehr_id: 593c0087-ed10-4fbe-8f9f-8853aae3dbe4
+}
+
+headers {
+  If-Match: 793b6a50-dc2e-4ffd-96f4-923284741f54::gopenehr::2
+}
+
+body:json {
+  {
+    "_type": "EHR_STATUS",
+    "name": {
+      "_type": "DV_TEXT",
+      "value": "EHR Status updated"
+    },
+    "archetype_node_id": "openEHR-EHR-EHR_STATUS.generic.v1",
+    "uid": {
+      "_type": "OBJECT_VERSION_ID",
+      "value": "793b6a50-dc2e-4ffd-96f4-923284741f54::gopenehr::2"
+    },
+    "subject": {
+      "_type": "PARTY_SELF",
+      "external_ref": {
+        "_type": "PARTY_REF",
+        "namespace": "local",
+        "type": "PERSON",
+        "id": {
+          "_type": "HIER_OBJECT_ID",
+          "value": "dafc3b1c-2cf5-41e1-add0-904d1f59c132"
+        }
+      }
+    },
+    "is_queryable": true,
+    "is_modifiable": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

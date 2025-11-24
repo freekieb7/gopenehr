@@ -1,0 +1,21 @@
+meta {
+  name: Get Versioned Composition Revision History
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id/versioned_composition/:versioned_object_uid/revision_history
+  body: none
+  auth: inherit
+}
+
+params:path {
+  ehr_id: 45bcabd9-9a5a-45ba-97ee-66e6ad30303c
+  versioned_object_uid: 608f6403-ac89-4ea3-8abd-98e8b9579024
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

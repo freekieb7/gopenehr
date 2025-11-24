@@ -1,0 +1,24 @@
+meta {
+  name: Delete Directory
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id/directory
+  body: none
+  auth: inherit
+}
+
+params:path {
+  ehr_id: 63575490-97cc-478a-bd68-6d54044d9c3b
+}
+
+headers {
+  If-Match: 31d12960-2d60-4bae-a3d4-053532d54050::openEHRSys.example.com::1
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

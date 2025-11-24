@@ -1,0 +1,21 @@
+meta {
+  name: EHR Status by Version ID
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id/ehr_status/:version_uid
+  body: none
+  auth: inherit
+}
+
+params:path {
+  ehr_id: 593c0087-ed10-4fbe-8f9f-8853aae3dbe4
+  version_uid: 793b6a50-dc2e-4ffd-96f4-923284741f54::gopenehr::1
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

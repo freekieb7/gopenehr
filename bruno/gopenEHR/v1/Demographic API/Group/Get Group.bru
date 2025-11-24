@@ -1,0 +1,20 @@
+meta {
+  name: Get Group
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/demographic/person/:uid_based_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  uid_based_id: 
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

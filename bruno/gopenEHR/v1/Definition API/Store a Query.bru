@@ -1,0 +1,24 @@
+meta {
+  name: Store a Query
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/openehr/v1/definition/query/:qualified_query_name
+  body: text
+  auth: inherit
+}
+
+params:path {
+  qualified_query_name: test
+}
+
+body:text {
+  select 1 from ehr
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

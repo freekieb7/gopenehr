@@ -1,0 +1,24 @@
+meta {
+  name: Get Versioned Party Version at Time
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/demographic/versioned_party/:versioned_object_uid/version?version_at_time
+  body: none
+  auth: inherit
+}
+
+params:query {
+  version_at_time: 
+}
+
+params:path {
+  versioned_object_uid: b74e6162-a3c4-43c1-a174-4ce0db398378
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

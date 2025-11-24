@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "name": "gopenEHR",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ],
+  "size": 0.15410232543945312,
+  "filesCount": 80
+}

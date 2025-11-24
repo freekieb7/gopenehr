@@ -1,0 +1,21 @@
+meta {
+  name: Get EHR by Subject
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/ehr?subject_id=d45384c5-76a8-4b8a-b966-0e986c1fece7::gopenehr::1&subject_namespace=local
+  body: none
+  auth: inherit
+}
+
+params:query {
+  subject_id: d45384c5-76a8-4b8a-b966-0e986c1fece7::gopenehr::1
+  subject_namespace: local
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

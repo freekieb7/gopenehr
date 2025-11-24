@@ -7,6 +7,8 @@ import (
 	"github.com/freekieb7/gopenehr/internal/database"
 )
 
+const TARGET_MIGRATION_VERSION uint64 = 20251113195000
+
 type Checker struct {
 	Version string
 	DB      *database.Database
@@ -46,6 +48,20 @@ func (c *Checker) CheckDatabaseHealth(ctx context.Context) ComponentStatus {
 	}
 
 	latency := time.Since(start)
+
+	// Check if migrations table exists
+	err := c.DB.QueryRow(ctx, `SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='tbl_migration'`).Scan(new(int))
+	if err != nil {
+		status = ServiceStatusUnhealthy
+		message = "migrations table check failed: " + err.Error()
+	}
+
+	// Check if there is a migration migration is applied based on current time
+	err = c.DB.QueryRow(ctx, `SELECT 1 FROM public.tbl_migration WHERE version = $1 FROM public.tbl_migration)`, TARGET_MIGRATION_VERSION).Scan(new(int))
+	if err != nil {
+		status = ServiceStatusUnhealthy
+		message = "required migration not applied"
+	}
 
 	return ComponentStatus{
 		Status:              status,

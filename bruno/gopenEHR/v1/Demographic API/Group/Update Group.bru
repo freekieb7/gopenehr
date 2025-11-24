@@ -1,0 +1,45 @@
+meta {
+  name: Update Group
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/openehr/v1/demographic/group/:uid_based_id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  uid_based_id: 
+}
+
+headers {
+  If-Match: 
+}
+
+body:json {
+  {
+    "name": {
+      "_type": "DV_TEXT",
+      "value": "My group updated"
+    },
+    "_type": "GROUP",
+    "identities": [
+      {
+        "name": {
+          "_type": "DV_TEXT",
+          "value": "New Group"
+        },
+        "_type": "PARTY_IDENTITY",
+        "archetype_node_id": "openEHR-EHR-PARTY_IDENTITY.group.v1"
+      }
+    ],
+    "archetype_node_id": "openEHR-EHR-Group.group.v1"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

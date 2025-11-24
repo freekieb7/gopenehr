@@ -62,7 +62,7 @@ func (m *Migrator) Run(ctx context.Context, args []string) error {
 func (m *Migrator) CreateMigrationTable(ctx context.Context) error {
 	query := `
 	CREATE TABLE IF NOT EXISTS public.tbl_migration (
-		id SERIAL PRIMARY KEY,
+		version BIGINT PRIMARY KEY,
 		name TEXT NOT NULL,
 		applied_at TIMESTAMP NOT NULL
 	);`
@@ -132,13 +132,12 @@ func (m *Migrator) MigrateUpMigration(ctx context.Context, migration database.Mi
 	}()
 
 	var applied bool
-	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.tbl_migration WHERE name=$1)", migration.Name).Scan(&applied); err != nil {
+	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.tbl_migration WHERE version=$1)", migration.Version).Scan(&applied); err != nil {
 		return false, fmt.Errorf("failed to check migration %s: %w", migration.Name, err)
 	}
 
 	if applied {
-		m.Logger.InfoContext(ctx, "Skipping migration (already applied)",
-			slog.String("migration", migration.Name))
+		m.Logger.InfoContext(ctx, "Skipping migration (already applied)", slog.String("migration", migration.Name))
 		return false, nil
 	}
 
@@ -146,7 +145,7 @@ func (m *Migrator) MigrateUpMigration(ctx context.Context, migration database.Mi
 		return false, fmt.Errorf("failed to apply migration %s: %w", migration.Name, err)
 	}
 
-	if _, err := tx.Exec(ctx, "INSERT INTO public.tbl_migration (name, applied_at) VALUES ($1, NOW())", migration.Name); err != nil {
+	if _, err := tx.Exec(ctx, "INSERT INTO public.tbl_migration (version, name, applied_at) VALUES ($1, $2, NOW())", migration.Version, migration.Name); err != nil {
 		return false, fmt.Errorf("failed to record applied migration %s: %w", migration.Name, err)
 	}
 
@@ -166,19 +165,20 @@ func (m *Migrator) MigrateDown(ctx context.Context, step int) error {
 	}
 
 	// Get applied migrations from database in reverse order (newest first)
-	rows, err := m.DB.Query(ctx, "SELECT name FROM public.tbl_migration ORDER BY name DESC")
+	rows, err := m.DB.Query(ctx, "SELECT version, name FROM public.tbl_migration ORDER BY version DESC")
 	if err != nil {
 		return fmt.Errorf("failed to get applied migrations: %w", err)
 	}
 	defer rows.Close()
 
-	var appliedNames []string
+	appliedVersions := map[uint64]string{}
 	for rows.Next() {
+		var version uint64
 		var name string
-		if err := rows.Scan(&name); err != nil {
-			return fmt.Errorf("failed to scan migration name: %w", err)
+		if err := rows.Scan(&version, &name); err != nil {
+			return fmt.Errorf("failed to scan migration version and name: %w", err)
 		}
-		appliedNames = append(appliedNames, name)
+		appliedVersions[version] = name
 	}
 
 	if err := rows.Err(); err != nil {
@@ -187,19 +187,20 @@ func (m *Migrator) MigrateDown(ctx context.Context, step int) error {
 
 	// Roll back migrations in reverse order, reading only needed files
 	count := 0
-	for _, name := range appliedNames {
+	for version, name := range appliedVersions {
 		if step > 0 && count >= step {
 			break
 		}
 
 		// Read only the specific down migration file needed
-		downFile := filepath.Join(m.MigrationsDir, name+"_down.sql")
+		downFile := filepath.Join(m.MigrationsDir, fmt.Sprintf("%d_%s_down.sql", version, name))
 		content, err := os.ReadFile(downFile)
 		if err != nil {
 			return fmt.Errorf("migration file not found for: %s", name)
 		}
 
 		migration := database.Migration{
+			Version: version,
 			Name:    name,
 			DownSQL: string(content),
 		}
@@ -241,13 +242,12 @@ func (m *Migrator) MigrateDownMigration(ctx context.Context, migration database.
 	}()
 
 	var applied bool
-	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.tbl_migration WHERE name=$1)", migration.Name).Scan(&applied); err != nil {
+	if err := tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM public.tbl_migration WHERE version=$1)", migration.Version).Scan(&applied); err != nil {
 		return false, fmt.Errorf("failed to check migration %s: %w", migration.Name, err)
 	}
 
 	if !applied {
-		m.Logger.InfoContext(ctx, "Skipping migration (not applied)",
-			slog.String("migration", migration.Name))
+		m.Logger.InfoContext(ctx, "Skipping migration (not applied)", slog.String("migration", migration.Name))
 		return false, nil
 	}
 
@@ -255,7 +255,7 @@ func (m *Migrator) MigrateDownMigration(ctx context.Context, migration database.
 		return false, fmt.Errorf("failed to rollback migration %s: %w", migration.Name, err)
 	}
 
-	if _, err := tx.Exec(ctx, "DELETE FROM public.tbl_migration WHERE name=$1", migration.Name); err != nil {
+	if _, err := tx.Exec(ctx, "DELETE FROM public.tbl_migration WHERE version=$1", migration.Version); err != nil {
 		return false, fmt.Errorf("failed to remove migration record %s: %w", migration.Name, err)
 	}
 
@@ -263,8 +263,7 @@ func (m *Migrator) MigrateDownMigration(ctx context.Context, migration database.
 		return false, fmt.Errorf("failed to commit rollback for migration %s: %w", migration.Name, err)
 	}
 
-	m.Logger.InfoContext(ctx, "Rolled back migration successfully",
-		slog.String("migration", migration.Name))
+	m.Logger.InfoContext(ctx, "Rolled back migration successfully", slog.String("migration", migration.Name))
 
 	return true, nil
 }
@@ -275,7 +274,7 @@ func (m *Migrator) getMigrationsFromDir() ([]database.Migration, error) {
 		return nil, fmt.Errorf("failed to read migrations directory: %w", err)
 	}
 
-	migrationsByName := make(map[string]database.Migration)
+	migrationsByVersion := make(map[uint64]database.Migration)
 	for _, file := range files {
 		if !file.IsDir() {
 			// filename format: {timestamp}_{name}_[up|down].sql
@@ -290,11 +289,11 @@ func (m *Migrator) getMigrationsFromDir() ([]database.Migration, error) {
 				return nil, fmt.Errorf("failed to read migration file %s: %w", fileName, err)
 			}
 
-			fullName := fmt.Sprintf("%d_%s", timestamp, name)
-			migration, exists := migrationsByName[fullName]
+			migration, exists := migrationsByVersion[timestamp]
 			if !exists {
 				migration = database.Migration{
-					Name: fullName,
+					Version: timestamp,
+					Name:    name,
 				}
 			}
 
@@ -305,13 +304,13 @@ func (m *Migrator) getMigrationsFromDir() ([]database.Migration, error) {
 				migration.DownSQL = string(content)
 			}
 
-			migrationsByName[fullName] = migration
+			migrationsByVersion[timestamp] = migration
 		}
 	}
 
 	// Pre-allocate slice with correct capacity
-	migrations := make([]database.Migration, 0, len(migrationsByName))
-	for _, migration := range migrationsByName {
+	migrations := make([]database.Migration, 0, len(migrationsByVersion))
+	for _, migration := range migrationsByVersion {
 		// Validate that both up and down migrations exist
 		if migration.UpSQL == "" || migration.DownSQL == "" {
 			return nil, fmt.Errorf("migration %s missing up or down SQL file", migration.Name)

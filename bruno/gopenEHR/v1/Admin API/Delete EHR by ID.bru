@@ -1,0 +1,20 @@
+meta {
+  name: Delete EHR by ID
+  type: http
+  seq: 1
+}
+
+delete {
+  url: {{baseUrl}}/openehr/v1/admin/ehr/:ehr_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  ehr_id: a2685c67-a103-457e-b6b4-c1d8bc01f6c6
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

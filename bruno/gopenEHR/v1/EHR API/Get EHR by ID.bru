@@ -1,0 +1,20 @@
+meta {
+  name: Get EHR by ID
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  ehr_id: 63575490-97cc-478a-bd68-6d54044d9c3b
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,21 @@
+meta {
+  name: Execute ad-hoc AQL
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/query/aql?q=SELECT * FROM EHR e WHERE e/ehr_id/value LIKE '17*'
+  body: none
+  auth: inherit
+}
+
+params:query {
+  q: SELECT * FROM EHR e WHERE e/ehr_id/value LIKE '17*'
+  ~query_parameters: 
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

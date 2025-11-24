@@ -1,0 +1,24 @@
+meta {
+  name: EHR Status at Time
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id/ehr_status
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~version_at_time: 
+}
+
+params:path {
+  ehr_id: dcbe393e-c993-4942-95cd-68f7053be9b4
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

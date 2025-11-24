@@ -1,0 +1,25 @@
+meta {
+  name: Get Folder in Directory Version at Time
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id/directory?path=Sub folder 1/
+  body: none
+  auth: inherit
+}
+
+params:query {
+  path: Sub folder 1/
+  ~version_at_time: 
+}
+
+params:path {
+  ehr_id: 63575490-97cc-478a-bd68-6d54044d9c3b
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,40 @@
+meta {
+  name: Get Versioned EHR Status Version by ID
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id/versioned_ehr_status/version/:version_uid
+  body: json
+  auth: inherit
+}
+
+params:path {
+  version_uid: 793b6a50-dc2e-4ffd-96f4-923284741f54::gopenehr::2
+  ehr_id: 593c0087-ed10-4fbe-8f9f-8853aae3dbe4
+}
+
+body:json {
+  {
+      "name": {
+          "_type": "DV_TEXT",
+          "value": "EHR Status"
+      },
+      "archetype_node_id": "openEHR-EHR-EHR_STATUS.generic.v1",
+      "uid": {
+          "_type": "OBJECT_VERSION_ID",
+          "value": "19411c25-ba34-4cf7-bb26-064f8f5e66e6::gopenehr::2"
+      },
+      "subject": {
+          "_type": "PARTY_SELF"
+      },
+      "is_queryable": true,
+      "is_modifiable": true
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

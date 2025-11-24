@@ -1,0 +1,326 @@
+meta {
+  name: Update Person
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/openehr/v1/demographic/person/:uid_based_id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  uid_based_id: d45384c5-76a8-4b8a-b966-0e986c1fece7
+}
+
+headers {
+  If-Match: d45384c5-76a8-4b8a-b966-0e986c1fece7::gopenehr::1
+}
+
+body:json {
+  {
+    "_type": "PERSON",
+    "name": {
+      "_type": "DV_TEXT",
+      "value": "Text value 2"
+    },
+    "archetype_node_id": "string",
+    "uid": {
+      "_type": "OBJECT_VERSION_ID",
+      "value": "d45384c5-76a8-4b8a-b966-0e986c1fece7::gopenehr::2"
+    },
+    "links": [
+      {
+        "_type": "LINK",
+        "meaning": {
+          "_type": "DV_TEXT",
+          "value": "Text value"
+        },
+        "type": {
+          "_type": "DV_TEXT",
+          "value": "Text value"
+        },
+        "target": {
+          "_type": "DV_EHR_URI",
+          "value": "ehr://system_id/ehr_id/top_level_structure_locator/path_inside_top_level_structure"
+        }
+      }
+    ],
+    "archetype_details": {
+      "_type": "ARCHETYPED",
+      "archetype_id": {
+        "_type": "ARCHETYPE_ID",
+        "value": "openEHR-EHR-COMPOSITION.encounter.v1"
+      },
+      "template_id": {
+        "_type": "TEMPLATE_ID",
+        "value": "Example.v1::c7ec861c-c413-39ff-9965-a198ebf44747"
+      },
+      "rm_version": "1.0.2"
+    },
+    "feeder_audit": {
+      "_type": "FEEDER_AUDIT",
+      "originating_system_item_ids": [
+        {
+          "_type": "DV_IDENTIFIER",
+          "id": "16b74749-e6aa-4945-b760-b42bdc07098a",
+          "type": "Patient"
+        }
+      ],
+      "feeder_system_item_ids": [
+        {
+          "_type": "DV_IDENTIFIER",
+          "id": "16b74749-e6aa-4945-b760-b42bdc07098a",
+          "type": "Patient"
+        }
+      ],
+      "original_content": {
+        "_type": "DV_MULTIMEDIA",
+        "charset": {
+          "_type": "CODE_PHRASE",
+          "terminology_id": {
+            "_type": "TERMINOLOGY_ID",
+            "value": "local"
+          },
+          "code_string": "at0001"
+        },
+        "language": {
+          "_type": "CODE_PHRASE",
+          "terminology_id": {
+            "_type": "TERMINOLOGY_ID",
+            "value": "local"
+          },
+          "code_string": "at0001"
+        },
+        "alternate_text": "string",
+        "uri": {
+          "_type": "DV_URI",
+          "value": "https://www.example.com"
+        },
+        "data": "string",
+        "media_type": {
+          "terminology_id": {
+            "value": "local"
+          },
+          "code_string": "at0001"
+        },
+        "compression_algorithm": {
+          "_type": "CODE_PHRASE",
+          "terminology_id": {
+            "_type": "TERMINOLOGY_ID",
+            "value": "local"
+          },
+          "code_string": "at0001"
+        },
+        "integrity_check": "string",
+        "integrity_check_algorithm": {
+          "_type": "CODE_PHRASE",
+          "terminology_id": {
+            "_type": "TERMINOLOGY_ID",
+            "value": "local"
+          },
+          "code_string": "at0001"
+        },
+        "thumbnail": {
+          "_type": "DV_MULTIMEDIA",
+          "charset": {
+            "_type": "CODE_PHRASE",
+            "terminology_id": {
+              "_type": "TERMINOLOGY_ID",
+              "value": "local"
+            },
+            "code_string": "at0001"
+          },
+          "language": {
+            "_type": "CODE_PHRASE",
+            "terminology_id": {
+              "_type": "TERMINOLOGY_ID",
+              "value": "local"
+            },
+            "code_string": "at0001"
+          },
+          "alternate_text": "string",
+          "uri": {
+            "_type": "DV_URI",
+            "value": "https://www.example.com"
+          },
+          "data": "string",
+          "media_type": {
+            "terminology_id": {
+              "value": "local"
+            },
+            "code_string": "at0001"
+          },
+          "compression_algorithm": {
+            "_type": "CODE_PHRASE",
+            "terminology_id": {
+              "_type": "TERMINOLOGY_ID",
+              "value": "local"
+            },
+            "code_string": "at0001"
+          },
+          "integrity_check": "string",
+          "integrity_check_algorithm": {
+            "_type": "CODE_PHRASE",
+            "terminology_id": {
+              "_type": "TERMINOLOGY_ID",
+              "value": "local"
+            },
+            "code_string": "at0001"
+          },
+          "thumbnail": {
+            "_type": "DV_MULTIMEDIA",
+            "media_type": {
+              "terminology_id": {
+                "value": ""
+              },
+              "code_string": ""
+            },
+            "size": 0
+          },
+          "size": 0
+        },
+        "size": 0
+      },
+      "originating_system_audit": {
+        "_type": "FEEDER_AUDIT_DETAILS",
+        "system_id": "string",
+        "location": {
+          "_type": "PARTY_IDENTIFIED",
+          "external_ref": {
+            "_type": "PARTY_REF",
+            "namespace": "openEHRSys.example.com",
+            "type": "PERSON",
+            "id": {
+              "_type": "GENERIC_ID",
+              "value": "16b74749-e6aa-4945-b760-b42bdc07098a",
+              "scheme": "pid"
+            }
+          },
+          "name": "A name"
+        },
+        "subject": {
+          "_type": "PARTY_SELF",
+          "external_ref": {
+            "_type": "PARTY_REF",
+            "namespace": "local",
+            "type": "PERSON",
+            "id": {
+              "_type": "HIER_OBJECT_ID",
+              "value": "b52b9408-7048-4ec8-94bd-831fb0727e67"
+            }
+          }
+        },
+        "provider": {
+          "_type": "PARTY_IDENTIFIED",
+          "external_ref": {
+            "_type": "PARTY_REF",
+            "namespace": "openEHRSys.example.com",
+            "type": "PERSON",
+            "id": {
+              "_type": "GENERIC_ID",
+              "value": "16b74749-e6aa-4945-b760-b42bdc07098a",
+              "scheme": "pid"
+            }
+          },
+          "name": "A name"
+        },
+        "time": {
+          "_type": "DV_DATE_TIME",
+          "value": "2017-08-15T10:37:15.422Z"
+        },
+        "version_id": "string"
+      },
+      "feeder_system_audit": {
+        "_type": "FEEDER_AUDIT_DETAILS",
+        "system_id": "string",
+        "location": {
+          "_type": "PARTY_IDENTIFIED",
+          "external_ref": {
+            "_type": "PARTY_REF",
+            "namespace": "openEHRSys.example.com",
+            "type": "PERSON",
+            "id": {
+              "_type": "GENERIC_ID",
+              "value": "16b74749-e6aa-4945-b760-b42bdc07098a",
+              "scheme": "pid"
+            }
+          },
+          "name": "A name"
+        },
+        "subject": {
+          "_type": "PARTY_SELF",
+          "external_ref": {
+            "_type": "PARTY_REF",
+            "namespace": "local",
+            "type": "PERSON",
+            "id": {
+              "_type": "HIER_OBJECT_ID",
+              "value": "b52b9408-7048-4ec8-94bd-831fb0727e67"
+            }
+          }
+        },
+        "provider": {
+          "_type": "PARTY_IDENTIFIED",
+          "external_ref": {
+            "_type": "PARTY_REF",
+            "namespace": "openEHRSys.example.com",
+            "type": "PERSON",
+            "id": {
+              "_type": "GENERIC_ID",
+              "value": "16b74749-e6aa-4945-b760-b42bdc07098a",
+              "scheme": "pid"
+            }
+          },
+          "name": "A name"
+        },
+        "time": {
+          "_type": "DV_DATE_TIME",
+          "value": "2017-08-15T10:37:15.422Z"
+        },
+        "version_id": "string"
+      }
+    },
+    "identities": [
+      {
+        "_type": "PARTY_IDENTITY",
+        "name": {
+          "_type": "DV_TEXT",
+          "value": "Bob"
+        },
+        "archetype_node_id": "something",
+        "details": {
+          "_type": "ITEM_LIST",
+          "name": {
+            "_type": "DV_TEXT",
+            "value": "please stop"
+          },
+          "archetype_node_id": "asdf"
+        }
+      }
+    ],
+    "languages": [
+      {
+        "_type": "DV_TEXT",
+        "value": "Text value"
+      }
+    ],
+    "roles": [
+      {
+        "_type": "PARTY_REF",
+        "namespace": "local",
+        "type": "PERSON",
+        "id": {
+          "_type": "HIER_OBJECT_ID",
+          "value": "b52b9408-7048-4ec8-94bd-831fb0727e67"
+        }
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

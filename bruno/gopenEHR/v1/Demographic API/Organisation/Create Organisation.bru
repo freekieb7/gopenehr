@@ -1,0 +1,37 @@
+meta {
+  name: Create Organisation
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/openehr/v1/demographic/organisation
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": {
+      "_type": "DV_TEXT",
+      "value": "My org"
+    },
+    "_type": "ORGANISATION",
+    "identities": [
+      {
+        "name": {
+          "_type": "DV_TEXT",
+          "value": "New Org"
+        },
+        "_type": "PARTY_IDENTITY",
+        "archetype_node_id": "openEHR-EHR-PARTY_IDENTITY.org.v1"
+      }
+    ],
+    "archetype_node_id": "openEHR-EHR-ORGANISATION.org.v1"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,274 @@
+meta {
+  name: Create Agent
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/openehr/v1/demographic/agent
+  body: json
+  auth: inherit
+}
+
+headers {
+  Prefer: return=representation
+}
+
+body:json {
+  {
+    "_type": "AGENT",
+    "name": {
+      "_type": "DV_TEXT",
+      "value": "Text value"
+    },
+    "archetype_node_id": "string",
+    "identities": [
+      {
+        "name": {
+          "value": "Bob"
+        },
+        "archetype_node_id": "something",
+        "details": {
+            "_type": "ITEM_LIST",
+            "name": {
+              "value": "please stop"
+            },
+            "archetype_node_id": "asdf"
+        }
+      }
+    ],
+    "links": [
+      {
+        "meaning": {
+          "_type": "DV_TEXT",
+          "value": "Text value"
+        },
+        "type": {
+          "_type": "DV_TEXT",
+          "value": "Text value"
+        },
+        "target": {
+          "_type": "DV_EHR_URI",
+          "value": "ehr://system_id/ehr_id/top_level_structure_locator/path_inside_top_level_structure"
+        }
+      }
+    ],
+    "archetype_details": {
+      "archetype_id": {
+        "value": "openEHR-EHR-COMPOSITION.encounter.v1"
+      },
+      "template_id": {
+        "value": "Example.v1::c7ec861c-c413-39ff-9965-a198ebf44747"
+      },
+      "rm_version": "1.0.2"
+    },
+    "feeder_audit": {
+      "originating_system_item_ids": [
+        {
+          "id": "16b74749-e6aa-4945-b760-b42bdc07098a",
+          "type": "Patient"
+        }
+      ],
+      "feeder_system_item_ids": [
+        {
+          "id": "16b74749-e6aa-4945-b760-b42bdc07098a",
+          "type": "Patient"
+        }
+      ],
+      "original_content": {
+        "_type": "DV_MULTIMEDIA",
+        "charset": {
+          "terminology_id": {
+            "value": "local"
+          },
+          "code_string": "at0001"
+        },
+        "language": {
+          "terminology_id": {
+            "value": "local"
+          },
+          "code_string": "at0001"
+        },
+        "alternate_text": "string",
+        "uri": {
+          "_type": "DV_URI",
+          "value": "https://www.example.com"
+        },
+        "data": "string",
+        "media_type": {
+          "terminology_id": {
+            "value": "local"
+          },
+          "code_string": "at0001"
+        },
+        "compression_algorithm": {
+          "terminology_id": {
+            "value": "local"
+          },
+          "code_string": "at0001"
+        },
+        "integrity_check": "string",
+        "integrity_check_algorithm": {
+          "terminology_id": {
+            "value": "local"
+          },
+          "code_string": "at0001"
+        },
+        "thumbnail": {
+          "_type": "DV_MULTIMEDIA",
+          "charset": {
+            "terminology_id": {
+              "value": "local"
+            },
+            "code_string": "at0001"
+          },
+          "language": {
+            "terminology_id": {
+              "value": "local"
+            },
+            "code_string": "at0001"
+          },
+          "alternate_text": "string",
+          "uri": {
+            "_type": "DV_URI",
+            "value": "https://www.example.com"
+          },
+          "data": "string",
+          "media_type": {
+            "terminology_id": {
+              "value": "local"
+            },
+            "code_string": "at0001"
+          },
+          "compression_algorithm": {
+            "terminology_id": {
+              "value": "local"
+            },
+            "code_string": "at0001"
+          },
+          "integrity_check": "string",
+          "integrity_check_algorithm": {
+            "terminology_id": {
+              "value": "local"
+            },
+            "code_string": "at0001"
+          },
+          "thumbnail": {},
+          "size": 0
+        },
+        "size": 0
+      },
+      "originating_system_audit": {
+        "system_id": "string",
+        "location": {
+          "_type": "PARTY_IDENTIFIED",
+          "external_ref": {
+            "id": {
+              "_type": "GENERIC_ID",
+              "value": "16b74749-e6aa-4945-b760-b42bdc07098a",
+              "scheme": "pid"
+            },
+            "namespace": "openEHRSys.example.com",
+            "type": "PERSON"
+          },
+          "name": "A name"
+        },
+        "subject": {
+          "_type": "PARTY_SELF",
+          "external_ref": {
+            "id": {
+              "_type": "HIER_OBJECT_ID",
+              "value": "b52b9408-7048-4ec8-94bd-831fb0727e67"
+            },
+            "namespace": "local",
+            "type": "PERSON"
+          }
+        },
+        "provider": {
+          "_type": "PARTY_IDENTIFIED",
+          "external_ref": {
+            "id": {
+              "_type": "GENERIC_ID",
+              "value": "16b74749-e6aa-4945-b760-b42bdc07098a",
+              "scheme": "pid"
+            },
+            "namespace": "openEHRSys.example.com",
+            "type": "PERSON"
+          },
+          "name": "A name"
+        },
+        "time": {
+          "_type": "DV_DATE_TIME",
+          "value": "2017-08-15T10:37:15.422Z"
+        },
+        "version_id": "string"
+      },
+      "feeder_system_audit": {
+        "system_id": "string",
+        "location": {
+          "_type": "PARTY_IDENTIFIED",
+          "external_ref": {
+            "id": {
+              "_type": "GENERIC_ID",
+              "value": "16b74749-e6aa-4945-b760-b42bdc07098a",
+              "scheme": "pid"
+            },
+            "namespace": "openEHRSys.example.com",
+            "type": "PERSON"
+          },
+          "name": "A name"
+        },
+        "subject": {
+          "_type": "PARTY_SELF",
+          "external_ref": {
+            "id": {
+              "_type": "HIER_OBJECT_ID",
+              "value": "b52b9408-7048-4ec8-94bd-831fb0727e67"
+            },
+            "namespace": "local",
+            "type": "PERSON"
+          }
+        },
+        "provider": {
+          "_type": "PARTY_IDENTIFIED",
+          "external_ref": {
+            "id": {
+              "_type": "GENERIC_ID",
+              "value": "16b74749-e6aa-4945-b760-b42bdc07098a",
+              "scheme": "pid"
+            },
+            "namespace": "openEHRSys.example.com",
+            "type": "PERSON"
+          },
+          "name": "A name"
+        },
+        "time": {
+          "_type": "DV_DATE_TIME",
+          "value": "2017-08-15T10:37:15.422Z"
+        },
+        "version_id": "string"
+      }
+    },
+    "languages": [
+      {
+        "_type": "DV_TEXT",
+        "value": "Text value"
+      }
+    ],
+    "roles": [
+      {
+        "id": {
+          "_type": "HIER_OBJECT_ID",
+          "value": "b52b9408-7048-4ec8-94bd-831fb0727e67"
+        },
+        "namespace": "local",
+        "type": "PERSON"
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

@@ -1,0 +1,37 @@
+meta {
+  name: Create Group
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/openehr/v1/demographic/group
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": {
+      "_type": "DV_TEXT",
+      "value": "My group"
+    },
+    "_type": "GROUP",
+    "identities": [
+      {
+        "name": {
+          "_type": "DV_TEXT",
+          "value": "New Group"
+        },
+        "_type": "PARTY_IDENTITY",
+        "archetype_node_id": "openEHR-EHR-PARTY_IDENTITY.group.v1"
+      }
+    ],
+    "archetype_node_id": "openEHR-EHR-Group.group.v1"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

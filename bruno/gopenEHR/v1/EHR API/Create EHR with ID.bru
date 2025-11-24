@@ -1,0 +1,24 @@
+meta {
+  name: Create EHR with ID
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  ehr_id: {{$randomUUID}}
+}
+
+headers {
+  Prefer: return=representation
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

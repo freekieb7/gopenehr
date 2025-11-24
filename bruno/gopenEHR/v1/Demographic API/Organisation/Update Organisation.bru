@@ -1,0 +1,45 @@
+meta {
+  name: Update Organisation
+  type: http
+  seq: 3
+}
+
+put {
+  url: {{baseUrl}}/openehr/v1/demographic/organisation/:uid_based_id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  uid_based_id: 
+}
+
+headers {
+  If-Match: 
+}
+
+body:json {
+  {
+    "_type": "ORGANISATION",
+    "name": {
+      "_type": "DV_TEXT",
+      "value": "My org updated"
+    },
+    "archetype_node_id": "openEHR-EHR-ORGANISATION.org.v1",
+    "identities": [
+      {
+        "_type": "PARTY_IDENTITY",
+        "name": {
+          "_type": "DV_TEXT",
+          "value": "New Org"
+        },
+        "archetype_node_id": "openEHR-EHR-PARTY_IDENTITY.org.v1"
+      }
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

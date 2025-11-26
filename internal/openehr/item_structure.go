@@ -34,7 +34,7 @@ type ItemStructureModel interface {
 	isItemStructureModel()
 	HasModelName() bool
 	SetModelName()
-	Validate(path string) []util.ValidationError
+	Validate(path string) util.ValidateError
 }
 
 type X_ITEM_STRUCTURE struct {
@@ -45,25 +45,27 @@ func (x *X_ITEM_STRUCTURE) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x *X_ITEM_STRUCTURE) Validate(path string) []util.ValidationError {
+func (x *X_ITEM_STRUCTURE) Validate(path string) util.ValidateError {
 	if x.Value == nil {
-		return []util.ValidationError{
-			{
-				Model:          ITEM_STRUCTURE_MODEL_NAME,
-				Path:           path,
-				Message:        "value is not known ITEM_STRUCTURE subtype",
-				Recommendation: "Ensure value is properly set",
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          ITEM_STRUCTURE_MODEL_NAME,
+					Path:           path,
+					Message:        "value is not known ITEM_STRUCTURE subtype",
+					Recommendation: "Ensure value is properly set",
+				},
 			},
 		}
 	}
 
-	var errs []util.ValidationError
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Abstract model requires _type to be defined
 	if !x.Value.HasModelName() {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ITEM_STRUCTURE_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "empty _type field",
@@ -71,7 +73,9 @@ func (x *X_ITEM_STRUCTURE) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return append(errs, x.Value.Validate(path)...)
+	validateErr.Errs = append(validateErr.Errs, x.Value.Validate(path).Errs...)
+
+	return validateErr
 }
 
 func (x X_ITEM_STRUCTURE) MarshalJSON() ([]byte, error) {
@@ -94,10 +98,17 @@ func (x *X_ITEM_STRUCTURE) UnmarshalJSON(data []byte) error {
 		x.Value = new(ITEM_TABLE)
 	case ITEM_TREE_MODEL_NAME:
 		x.Value = new(ITEM_TREE)
-	case "":
-		return fmt.Errorf("missing ITEM_STRUCTURE _type field")
 	default:
-		return fmt.Errorf("ITEM_STRUCTURE unexpected _type %s", t)
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          ITEM_STRUCTURE_MODEL_NAME,
+					Path:           "$.**._type",
+					Message:        fmt.Sprintf("unexpected ITEM_STRUCTURE _type %s", t),
+					Recommendation: "Ensure _type field is one of the known ITEM_STRUCTURE subtypes",
+				},
+			},
+		}
 	}
 
 	return json.Unmarshal(data, x.Value)

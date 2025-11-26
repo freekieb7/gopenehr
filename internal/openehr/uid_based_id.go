@@ -29,7 +29,7 @@ type UIDBasedIDModel interface {
 	isUidBasedIDModel()
 	HasModelName() bool
 	SetModelName()
-	Validate(path string) []util.ValidationError
+	Validate(path string) util.ValidateError
 }
 
 type X_UID_BASED_ID struct {
@@ -40,25 +40,27 @@ func (x *X_UID_BASED_ID) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x *X_UID_BASED_ID) Validate(path string) []util.ValidationError {
+func (x *X_UID_BASED_ID) Validate(path string) util.ValidateError {
 	if x.Value == nil {
-		return []util.ValidationError{
-			{
-				Model:          UID_BASED_ID_MODEL_NAME,
-				Path:           path,
-				Message:        "value is not known UID_BASED_ID subtype",
-				Recommendation: "Ensure value is properly set",
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          UID_BASED_ID_MODEL_NAME,
+					Path:           path,
+					Message:        "value is not known UID_BASED_ID subtype",
+					Recommendation: "Ensure value is properly set",
+				},
 			},
 		}
 	}
 
-	var errs []util.ValidationError
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Abstract model requires _type to be defined
 	if !x.Value.HasModelName() {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          UID_BASED_ID_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "empty _type field",
@@ -66,7 +68,8 @@ func (x *X_UID_BASED_ID) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return append(errs, x.Value.Validate(path)...)
+	validateErr.Errs = append(validateErr.Errs, x.Value.Validate(path).Errs...)
+	return validateErr
 }
 
 func (a X_UID_BASED_ID) MarshalJSON() ([]byte, error) {
@@ -85,10 +88,17 @@ func (a *X_UID_BASED_ID) UnmarshalJSON(data []byte) error {
 		a.Value = new(HIER_OBJECT_ID)
 	case OBJECT_VERSION_ID_MODEL_NAME:
 		a.Value = new(OBJECT_VERSION_ID)
-	case "":
-		return fmt.Errorf("missing DV_TEXT _type field")
 	default:
-		return fmt.Errorf("DV_TEXT unexpected _type %s", t)
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          UID_BASED_ID_MODEL_NAME,
+					Path:           "$.**._type",
+					Message:        fmt.Sprintf("unexpected UID_BASED_ID _type %s", t),
+					Recommendation: "Ensure _type field is one of the known UID_BASED_ID subtypes",
+				},
+			},
+		}
 	}
 
 	return json.Unmarshal(data, a.Value)

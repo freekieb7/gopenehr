@@ -28,14 +28,14 @@ func (d *DV_INTERVAL) SetModelName() {
 	d.Type_ = util.Some(DV_INTERVAL_MODEL_NAME)
 }
 
-func (d *DV_INTERVAL) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (d *DV_INTERVAL) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if d.Type_.E && d.Type_.V != DV_INTERVAL_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_INTERVAL_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_INTERVAL_MODEL_NAME, d.Type_.V),
@@ -43,5 +43,5 @@ func (d *DV_INTERVAL) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return errors
+	return validateErr
 }

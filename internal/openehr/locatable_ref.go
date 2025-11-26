@@ -21,14 +21,14 @@ func (l *LOCATABLE_REF) SetModelName() {
 	l.ID.SetModelName()
 }
 
-func (l *LOCATABLE_REF) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (l *LOCATABLE_REF) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if l.Type_.E && l.Type_.V != LOCATABLE_REF_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          LOCATABLE_REF_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + LOCATABLE_REF_MODEL_NAME,
@@ -49,7 +49,7 @@ func (l *LOCATABLE_REF) Validate(path string) []util.ValidationError {
 
 	// Validate id
 	attrPath = path + ".id"
-	errs = append(errs, l.ID.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, l.ID.Validate(attrPath).Errs...)
 
-	return errs
+	return validateErr
 }

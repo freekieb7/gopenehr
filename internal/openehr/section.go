@@ -49,14 +49,14 @@ func (s *SECTION) SetModelName() {
 	}
 }
 
-func (s *SECTION) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (s *SECTION) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if s.Type_.E && s.Type_.V != SECTION_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          SECTION_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + SECTION_MODEL_NAME,
@@ -66,41 +66,41 @@ func (s *SECTION) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errs = append(errs, s.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, s.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if s.UID.E {
 		attrPath = path + ".uid"
-		errs = append(errs, s.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, s.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if s.Links.E {
 		for i := range s.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
-			errs = append(errs, s.Links.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, s.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if s.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errs = append(errs, s.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, s.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate feeder_audit
 	if s.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errs = append(errs, s.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, s.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate items
 	if s.Items.E {
 		for i := range s.Items.V {
 			attrPath = fmt.Sprintf("%s.items[%d]", path, i)
-			errs = append(errs, s.Items.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, s.Items.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
-	return errs
+	return validateErr
 }

@@ -31,14 +31,14 @@ func (d *DV_PARSABLE) SetModelName() {
 	}
 }
 
-func (d *DV_PARSABLE) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (d *DV_PARSABLE) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if d.Type_.E && d.Type_.V != DV_PARSABLE_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_PARSABLE_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -51,7 +51,7 @@ func (d *DV_PARSABLE) Validate(path string) []util.ValidationError {
 		attrPath = path + ".charset"
 
 		if !terminology.IsValidCharsetTerminologyID(d.Charset.V.TerminologyID.Value) {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_PARSABLE_MODEL_NAME,
 				Path:           attrPath,
 				Message:        "invalid charset terminology ID",
@@ -60,7 +60,7 @@ func (d *DV_PARSABLE) Validate(path string) []util.ValidationError {
 		}
 
 		if !terminology.IsValidCharset(d.Charset.V.CodeString) {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_PARSABLE_MODEL_NAME,
 				Path:           attrPath,
 				Message:        "invalid charset code string",
@@ -68,14 +68,14 @@ func (d *DV_PARSABLE) Validate(path string) []util.ValidationError {
 			})
 		}
 
-		errors = append(errors, d.Charset.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.Charset.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate language
 	if d.Language.E {
 		attrPath = path + ".language"
 		if !terminology.IsValidLanguageTerminologyID(d.Language.V.TerminologyID.Value) {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_PARSABLE_MODEL_NAME,
 				Path:           attrPath,
 				Message:        "invalid language terminology ID",
@@ -83,7 +83,7 @@ func (d *DV_PARSABLE) Validate(path string) []util.ValidationError {
 			})
 		}
 		if !terminology.IsValidLanguageCode(d.Language.V.CodeString) {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_PARSABLE_MODEL_NAME,
 				Path:           attrPath,
 				Message:        "invalid language code string",
@@ -91,13 +91,13 @@ func (d *DV_PARSABLE) Validate(path string) []util.ValidationError {
 			})
 		}
 
-		errors = append(errors, d.Language.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.Language.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate value
 	if d.Value == "" {
 		attrPath = path + ".value"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_PARSABLE_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "value cannot be empty",
@@ -108,7 +108,7 @@ func (d *DV_PARSABLE) Validate(path string) []util.ValidationError {
 	// Validate formalism
 	if d.Formalism == "" {
 		attrPath = path + ".formalism"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_PARSABLE_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "formalism cannot be empty",
@@ -116,5 +116,5 @@ func (d *DV_PARSABLE) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return errors
+	return validateErr
 }

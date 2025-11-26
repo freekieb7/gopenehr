@@ -51,14 +51,14 @@ func (p *POINT_EVENT) SetModelName() {
 	p.Data.SetModelName()
 }
 
-func (p *POINT_EVENT) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (p *POINT_EVENT) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if p.Type_.E && p.Type_.V != POINT_EVENT_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          POINT_EVENT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + POINT_EVENT_MODEL_NAME,
@@ -68,47 +68,47 @@ func (p *POINT_EVENT) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errs = append(errs, p.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, p.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if p.UID.E {
 		attrPath = path + ".uid"
-		errs = append(errs, p.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, p.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if p.Links.E {
 		for i := range p.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
-			errs = append(errs, p.Links.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, p.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if p.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errs = append(errs, p.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, p.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate feeder_audit
 	if p.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errs = append(errs, p.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, p.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate time
 	attrPath = path + ".time"
-	errs = append(errs, p.Time.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, p.Time.Validate(attrPath).Errs...)
 
 	// Validate state
 	if p.State.E {
 		attrPath = path + ".state"
-		errs = append(errs, p.State.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, p.State.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate data
 	attrPath = path + ".data"
-	errs = append(errs, p.Data.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, p.Data.Validate(attrPath).Errs...)
 
-	return errs
+	return validateErr
 }

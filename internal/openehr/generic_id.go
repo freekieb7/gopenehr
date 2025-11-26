@@ -20,18 +20,22 @@ func (g *GENERIC_ID) HasModelName() bool {
 	return g.Type_.E
 }
 
+func (g *GENERIC_ID) GetModelName() string {
+	return GENERIC_ID_MODEL_NAME
+}
+
 func (g *GENERIC_ID) SetModelName() {
 	g.Type_ = util.Some(GENERIC_ID_MODEL_NAME)
 }
 
-func (g *GENERIC_ID) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (g *GENERIC_ID) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if g.Type_.E && g.Type_.V != GENERIC_ID_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          GENERIC_ID_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", GENERIC_ID_MODEL_NAME, g.Type_.V),
@@ -42,7 +46,7 @@ func (g *GENERIC_ID) Validate(path string) []util.ValidationError {
 	// Validate value
 	if g.Value == "" {
 		attrPath = path + ".value"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          GENERIC_ID_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "value field cannot be empty",
@@ -53,7 +57,7 @@ func (g *GENERIC_ID) Validate(path string) []util.ValidationError {
 	// Validate scheme
 	if g.Scheme == "" {
 		attrPath = path + ".scheme"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          GENERIC_ID_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "scheme field cannot be empty",
@@ -61,5 +65,5 @@ func (g *GENERIC_ID) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return errors
+	return validateErr
 }

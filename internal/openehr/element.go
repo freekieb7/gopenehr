@@ -55,14 +55,14 @@ func (e *ELEMENT) SetModelName() {
 	}
 }
 
-func (e *ELEMENT) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (e *ELEMENT) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if e.Type_.E && e.Type_.V != ELEMENT_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ELEMENT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -72,51 +72,51 @@ func (e *ELEMENT) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errors = append(errors, e.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if e.UID.E {
 		attrPath = path + ".uid"
-		errors = append(errors, e.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if e.Links.E {
 		for i := range e.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
-			errors = append(errors, e.Links.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, e.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if e.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errors = append(errors, e.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate feeder_audit
 	if e.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errors = append(errors, e.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate null_flavour
 	if e.NullFlavour.E {
 		attrPath = path + ".null_flavour"
-		errors = append(errors, e.NullFlavour.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.NullFlavour.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate value
 	if e.Value.E {
 		attrPath = path + ".value"
-		errors = append(errors, e.Value.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.Value.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate null_reason
 	if e.NullReason.E {
 		attrPath = path + ".null_reason"
-		errors = append(errors, e.NullReason.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.NullReason.V.Validate(attrPath).Errs...)
 	}
 
-	return errors
+	return validateErr
 }

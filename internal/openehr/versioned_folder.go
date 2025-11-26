@@ -20,14 +20,14 @@ func (vf *VERSIONED_FOLDER) SetModelName() {
 	vf.TimeCreated.SetModelName()
 }
 
-func (vf *VERSIONED_FOLDER) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (vf *VERSIONED_FOLDER) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if vf.Type_.E && vf.Type_.V != VERSIONED_FOLDER_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          VERSIONED_FOLDER_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + VERSIONED_FOLDER_MODEL_NAME,
@@ -36,19 +36,15 @@ func (vf *VERSIONED_FOLDER) Validate(path string) []util.ValidationError {
 	}
 
 	// Validate uid
-	if err := vf.UID.Validate(path + ".uid"); len(err) > 0 {
-		errors = append(errors, err...)
-	}
+	attrPath = path + ".uid"
+	validateErr.Errs = append(validateErr.Errs, vf.UID.Validate(attrPath).Errs...)
 
 	// Validate owner_id
-	if err := vf.OwnerID.Validate(path + ".owner_id"); len(err) > 0 {
-		errors = append(errors, err...)
-	}
-
+	attrPath = path + ".owner_id"
+	validateErr.Errs = append(validateErr.Errs, vf.OwnerID.Validate(attrPath).Errs...)
 	// Validate time_created
-	if err := vf.TimeCreated.Validate(path + ".time_created"); len(err) > 0 {
-		errors = append(errors, err...)
-	}
+	attrPath = path + ".time_created"
+	validateErr.Errs = append(validateErr.Errs, vf.TimeCreated.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

@@ -48,14 +48,14 @@ func (e *EHR) SetModelName() {
 	}
 }
 
-func (e *EHR) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (e *EHR) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if e.Type_.E && e.Type_.V != EHR_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          EHR_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid EHR _type field: %s", e.Type_.V),
@@ -65,32 +65,31 @@ func (e *EHR) Validate(path string) []util.ValidationError {
 
 	// Validate system_id
 	attrPath = path + ".system_id"
-	errs = append(errs, e.SystemID.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.SystemID.Validate(attrPath).Errs...)
 
 	// Validate ehr_id
 	attrPath = path + ".ehr_id"
-	errs = append(errs, e.EHRID.Validate(attrPath)...)
-
+	validateErr.Errs = append(validateErr.Errs, e.EHRID.Validate(attrPath).Errs...)
 	// Validate contributions
 	if e.Contributions.E {
 		for i := range e.Contributions.V {
 			attrPath = path + fmt.Sprintf(".contributions[%d]", i)
 			if e.Contributions.V[i].Type != CONTRIBUTION_MODEL_NAME {
-				errs = append(errs, util.ValidationError{
+				validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 					Model:          EHR_MODEL_NAME,
 					Path:           attrPath,
 					Message:        fmt.Sprintf("invalid contribution type: %s", e.Contributions.V[i].Type),
 					Recommendation: fmt.Sprintf("Ensure contributions[%d] _type field is set to '%s'", i, CONTRIBUTION_MODEL_NAME),
 				})
 			}
-			errs = append(errs, e.Contributions.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, e.Contributions.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate ehr_status
 	attrPath = path + ".ehr_status"
 	if e.EHRStatus.Type != EHR_STATUS_MODEL_NAME && e.EHRStatus.Type != VERSIONED_EHR_STATUS_MODEL_NAME {
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          EHR_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid EHR status type: %s", e.EHRStatus.Type),
@@ -98,33 +97,33 @@ func (e *EHR) Validate(path string) []util.ValidationError {
 		})
 
 	}
-	errs = append(errs, e.EHRStatus.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.EHRStatus.Validate(attrPath).Errs...)
 
 	// Validate ehr_access
 	attrPath = path + ".ehr_access"
 	if e.EHRAccess.Type != EHR_ACCESS_MODEL_NAME && e.EHRAccess.Type != VERSIONED_EHR_ACCESS_MODEL_NAME {
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          EHR_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid EHR access type: %s", e.EHRAccess.Type),
 			Recommendation: fmt.Sprintf("Ensure ehr_access _type field is set to '%s' or '%s'", EHR_ACCESS_MODEL_NAME, VERSIONED_EHR_ACCESS_MODEL_NAME),
 		})
 	}
-	errs = append(errs, e.EHRAccess.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.EHRAccess.Validate(attrPath).Errs...)
 
 	// Validate compositions
 	if e.Compositions.E {
 		for i := range e.Compositions.V {
 			attrPath = path + fmt.Sprintf(".compositions[%d]", i)
 			if e.Compositions.V[i].Type != COMPOSITION_MODEL_NAME {
-				errs = append(errs, util.ValidationError{
+				validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 					Model:          EHR_MODEL_NAME,
 					Path:           attrPath,
 					Message:        fmt.Sprintf("invalid composition type: %s", e.Compositions.V[i].Type),
 					Recommendation: fmt.Sprintf("Ensure compositions[%d] _type field is set to '%s'", i, COMPOSITION_MODEL_NAME),
 				})
 			}
-			errs = append(errs, e.Compositions.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, e.Compositions.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
@@ -133,7 +132,7 @@ func (e *EHR) Validate(path string) []util.ValidationError {
 		directory := e.Directory.V
 		attrPath = path + ".directory"
 		if directory.Type != FOLDER_MODEL_NAME {
-			errs = append(errs, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          EHR_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid folder type: %s", directory.Type),
@@ -141,26 +140,26 @@ func (e *EHR) Validate(path string) []util.ValidationError {
 			})
 		}
 
-		errs = append(errs, directory.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, directory.Validate(attrPath).Errs...)
 	}
 
 	// Validate time_created
 	attrPath = path + ".time_created"
-	errs = append(errs, e.TimeCreated.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.TimeCreated.Validate(attrPath).Errs...)
 
 	// Validate folders
 	if e.Folders.E {
 		for i := range e.Folders.V {
 			attrPath = path + fmt.Sprintf(".folders[%d]", i)
 			if e.Folders.V[i].Type != FOLDER_MODEL_NAME {
-				errs = append(errs, util.ValidationError{
+				validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 					Model:          EHR_MODEL_NAME,
 					Path:           attrPath,
 					Message:        fmt.Sprintf("invalid folder type: %s", e.Folders.V[i].Type),
 					Recommendation: fmt.Sprintf("Ensure folders[%d] _type field is set to '%s'", i, FOLDER_MODEL_NAME),
 				})
 			}
-			errs = append(errs, e.Folders.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, e.Folders.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
@@ -168,9 +167,9 @@ func (e *EHR) Validate(path string) []util.ValidationError {
 	if e.Tags.E {
 		for i := range e.Tags.V {
 			attrPath = path + fmt.Sprintf(".tags[%d]", i)
-			errs = append(errs, e.Tags.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, e.Tags.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
-	return errs
+	return validateErr
 }

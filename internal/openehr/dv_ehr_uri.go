@@ -24,14 +24,14 @@ func (d *DV_EHR_URI) SetModelName() {
 	d.Type_ = util.Some(DV_EHR_URI_MODEL_NAME)
 }
 
-func (d *DV_EHR_URI) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (d *DV_EHR_URI) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if d.Type_.E && d.Type_.V != DV_EHR_URI_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_EHR_URI_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_EHR_URI_MODEL_NAME, d.Type_.V),
@@ -42,7 +42,7 @@ func (d *DV_EHR_URI) Validate(path string) []util.ValidationError {
 	// Validate value
 	attrPath = path + ".value"
 	if d.Value == "" {
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_EHR_URI_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "value field cannot be empty",
@@ -50,7 +50,7 @@ func (d *DV_EHR_URI) Validate(path string) []util.ValidationError {
 		})
 	} else {
 		if !strings.HasPrefix(d.Value, "ehr://") {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_EHR_URI_MODEL_NAME,
 				Path:           attrPath,
 				Message:        "value field must start with 'ehr://'",
@@ -59,5 +59,5 @@ func (d *DV_EHR_URI) Validate(path string) []util.ValidationError {
 		}
 	}
 
-	return errors
+	return validateErr
 }

@@ -45,14 +45,14 @@ func (g *GENERIC_ENTRY) SetModelName() {
 	g.Data.SetModelName()
 }
 
-func (g *GENERIC_ENTRY) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (g *GENERIC_ENTRY) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if g.Type_.E && g.Type_.V != GENERIC_ENTRY_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          GENERIC_ENTRY_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", GENERIC_ENTRY_MODEL_NAME, g.Type_.V),
@@ -62,37 +62,37 @@ func (g *GENERIC_ENTRY) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errs = append(errs, g.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, g.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if g.UID.E {
 		attrPath = path + ".uid"
-		errs = append(errs, g.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, g.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if g.Links.E {
 		for i := range g.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
-			errs = append(errs, g.Links.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, g.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if g.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errs = append(errs, g.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, g.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate feeder_audit
 	if g.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errs = append(errs, g.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, g.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate data
 	attrPath = path + ".data"
-	errs = append(errs, g.Data.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, g.Data.Validate(attrPath).Errs...)
 
-	return errs
+	return validateErr
 }

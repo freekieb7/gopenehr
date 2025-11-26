@@ -20,14 +20,14 @@ func (c *CODE_PHRASE) SetModelName() {
 	c.TerminologyID.SetModelName()
 }
 
-func (c *CODE_PHRASE) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (c *CODE_PHRASE) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if c.Type_.E && c.Type_.V != CODE_PHRASE_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          CODE_PHRASE_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", CODE_PHRASE_MODEL_NAME, c.Type_.V),
@@ -37,12 +37,12 @@ func (c *CODE_PHRASE) Validate(path string) []util.ValidationError {
 
 	// Validate terminology_id
 	attrPath = path + ".terminology_id"
-	errors = append(errors, c.TerminologyID.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, c.TerminologyID.Validate(attrPath).Errs...)
 
 	// Validate code_string
 	if c.CodeString == "" {
 		attrPath = path + ".code_string"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          CODE_PHRASE_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "code_string field is required",
@@ -50,5 +50,5 @@ func (c *CODE_PHRASE) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return errors
+	return validateErr
 }

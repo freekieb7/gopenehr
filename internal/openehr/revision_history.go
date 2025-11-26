@@ -20,14 +20,14 @@ func (r *REVISION_HISTORY) SetModelName() {
 	}
 }
 
-func (r *REVISION_HISTORY) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (r *REVISION_HISTORY) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if r.Type_.E && r.Type_.V != REVISION_HISTORY_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          REVISION_HISTORY_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + REVISION_HISTORY_MODEL_NAME,
@@ -38,8 +38,8 @@ func (r *REVISION_HISTORY) Validate(path string) []util.ValidationError {
 	// Validate items
 	for i := range r.Items {
 		attrPath = fmt.Sprintf("%s.items[%d]", path, i)
-		errs = append(errs, r.Items[i].Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, r.Items[i].Validate(attrPath).Errs...)
 	}
 
-	return errs
+	return validateErr
 }

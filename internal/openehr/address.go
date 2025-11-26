@@ -39,14 +39,14 @@ func (a *ADDRESS) SetModelName() {
 	a.Details.SetModelName()
 }
 
-func (a *ADDRESS) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (a *ADDRESS) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if a.Type_.E && a.Type_.V != ADDRESS_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ADDRESS_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid " + ADDRESS_MODEL_NAME + " _type field: " + a.Type_.V,
@@ -56,37 +56,37 @@ func (a *ADDRESS) Validate(path string) []util.ValidationError {
 
 	// Validate Name
 	attrPath = path + ".name"
-	errors = append(errors, a.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Name.Validate(attrPath).Errs...)
 
 	// Validate UID
 	if a.UID.E {
 		attrPath = path + ".uid"
-		errors = append(errors, a.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Links
 	if a.Links.E {
 		for i, link := range a.Links.V {
 			attrPath = path + fmt.Sprintf(".links[%d]", i)
-			errors = append(errors, link.Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, link.Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate ArchetypeDetails
 	if a.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errors = append(errors, a.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate FeederAudit
 	if a.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errors = append(errors, a.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Details
 	attrPath = path + ".details"
-	errors = append(errors, a.Details.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Details.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

@@ -26,14 +26,14 @@ func (d *DV_PARAGRAPH) SetModelName() {
 	}
 }
 
-func (d *DV_PARAGRAPH) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (d *DV_PARAGRAPH) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if d.Type_.E && d.Type_.V != DV_PARAGRAPH_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_PARAGRAPH_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -44,8 +44,8 @@ func (d *DV_PARAGRAPH) Validate(path string) []util.ValidationError {
 	// Validate items
 	for i := range d.Items {
 		itemPath := fmt.Sprintf("%s.items[%d]", path, i)
-		errors = append(errors, d.Items[i].Validate(itemPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.Items[i].Validate(itemPath).Errs...)
 	}
 
-	return errors
+	return validateErr
 }

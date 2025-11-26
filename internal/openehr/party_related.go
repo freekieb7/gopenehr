@@ -34,14 +34,14 @@ func (p *PARTY_RELATED) SetModelName() {
 	}
 }
 
-func (p *PARTY_RELATED) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (p *PARTY_RELATED) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if p.Type_.E && p.Type_.V != PARTY_RELATED_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          PARTY_RELATED_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -52,20 +52,20 @@ func (p *PARTY_RELATED) Validate(path string) []util.ValidationError {
 	// Validate external_ref
 	if p.ExternalRef.E {
 		attrPath = path + ".external_ref"
-		errors = append(errors, p.ExternalRef.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, p.ExternalRef.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate identifiers
 	if p.Identifiers.E {
 		for i := range p.Identifiers.V {
 			itemPath := fmt.Sprintf("%s.identifiers[%d]", attrPath, i)
-			errors = append(errors, p.Identifiers.V[i].Validate(itemPath)...)
+			validateErr.Errs = append(validateErr.Errs, p.Identifiers.V[i].Validate(itemPath).Errs...)
 		}
 	}
 
 	// Validate relationship
 	attrPath = path + ".relationship"
-	errors = append(errors, p.Relationship.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, p.Relationship.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

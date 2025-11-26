@@ -38,14 +38,14 @@ func (e *EVENT_CONTEXT) SetModelName() {
 	}
 }
 
-func (e *EVENT_CONTEXT) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (e *EVENT_CONTEXT) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if e.Type_.E && e.Type_.V != EVENT_CONTEXT_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          EVENT_CONTEXT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + EVENT_CONTEXT_MODEL_NAME,
@@ -55,35 +55,35 @@ func (e *EVENT_CONTEXT) Validate(path string) []util.ValidationError {
 
 	// Validate start_time
 	attrPath = path + ".start_time"
-	errs = append(errs, e.StartTime.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.StartTime.Validate(attrPath).Errs...)
 
 	// Validate end_time
 	if e.EndTime.E {
 		attrPath = path + ".end_time"
-		errs = append(errs, e.EndTime.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.EndTime.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate setting
 	attrPath = path + ".setting"
-	errs = append(errs, e.Setting.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.Setting.Validate(attrPath).Errs...)
 
 	// Validate other_context
 	if e.OtherContext.E {
 		attrPath = path + ".other_context"
-		errs = append(errs, e.OtherContext.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.OtherContext.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate health_care_facility
 	if e.HealthCareFacility.E {
 		attrPath = path + ".health_care_facility"
-		errs = append(errs, e.HealthCareFacility.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.HealthCareFacility.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate participations
 	if e.Participations.E {
 		if len(e.Participations.V) == 0 {
 			attrPath = path + ".participations"
-			errs = append(errs, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          EVENT_CONTEXT_MODEL_NAME,
 				Path:           attrPath,
 				Message:        "participations array cannot be empty",
@@ -92,10 +92,10 @@ func (e *EVENT_CONTEXT) Validate(path string) []util.ValidationError {
 		} else {
 			for i := range e.Participations.V {
 				attrPath = fmt.Sprintf("%s.participations[%d]", path, i)
-				errs = append(errs, e.Participations.V[i].Validate(attrPath)...)
+				validateErr.Errs = append(validateErr.Errs, e.Participations.V[i].Validate(attrPath).Errs...)
 			}
 		}
 	}
 
-	return errs
+	return validateErr
 }

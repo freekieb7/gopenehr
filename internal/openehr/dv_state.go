@@ -21,14 +21,14 @@ func (d *DV_STATE) SetModelName() {
 	d.Value.SetModelName()
 }
 
-func (d *DV_STATE) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (d *DV_STATE) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if d.Type_.E && d.Type_.V != DV_STATE_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_STATE_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -38,7 +38,7 @@ func (d *DV_STATE) Validate(path string) []util.ValidationError {
 
 	// Validate value
 	attrPath = path + ".value"
-	errors = append(errors, d.Value.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, d.Value.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

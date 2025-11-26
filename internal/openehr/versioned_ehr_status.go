@@ -18,14 +18,14 @@ func (v *VERSIONED_EHR_STATUS) SetModelName() {
 	v.TimeCreated.SetModelName()
 }
 
-func (v *VERSIONED_EHR_STATUS) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (v *VERSIONED_EHR_STATUS) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if v.Type_.E && v.Type_.V != VERSIONED_EHR_STATUS_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          VERSIONED_EHR_STATUS_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -34,19 +34,16 @@ func (v *VERSIONED_EHR_STATUS) Validate(path string) []util.ValidationError {
 	}
 
 	// Validate uid
-	if err := v.UID.Validate(path + ".uid"); len(err) > 0 {
-		errors = append(errors, err...)
-	}
+	attrPath = path + ".uid"
+	validateErr.Errs = append(validateErr.Errs, v.UID.Validate(attrPath).Errs...)
 
 	// Validate owner_id
-	if err := v.OwnerID.Validate(path + ".owner_id"); len(err) > 0 {
-		errors = append(errors, err...)
-	}
+	attrPath = path + ".owner_id"
+	validateErr.Errs = append(validateErr.Errs, v.OwnerID.Validate(attrPath).Errs...)
 
 	// Validate time_created
-	if err := v.TimeCreated.Validate(path + ".time_created"); len(err) > 0 {
-		errors = append(errors, err...)
-	}
+	attrPath = path + ".time_created"
+	validateErr.Errs = append(validateErr.Errs, v.TimeCreated.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

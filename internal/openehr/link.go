@@ -18,14 +18,14 @@ func (l *LINK) SetModelName() {
 	l.Target.SetModelName()
 }
 
-func (l *LINK) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (l *LINK) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if l.Type_.E && l.Type_.V != LINK_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          LINK_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -33,5 +33,5 @@ func (l *LINK) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return errors
+	return validateErr
 }

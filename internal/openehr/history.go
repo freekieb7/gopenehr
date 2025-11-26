@@ -11,7 +11,7 @@ const HISTORY_MODEL_NAME string = "HISTORY"
 type HistoryEventModel interface {
 	isHistoryEventModel()
 	SetModelName()
-	Validate(path string) []util.ValidationError
+	Validate(path string) util.ValidateError
 }
 
 type HISTORY struct {
@@ -63,14 +63,14 @@ func (h *HISTORY) SetModelName() {
 	}
 }
 
-func (h *HISTORY) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (h *HISTORY) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if h.Type_.E && h.Type_.V != HISTORY_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          HISTORY_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + HISTORY_MODEL_NAME,
@@ -80,63 +80,63 @@ func (h *HISTORY) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errs = append(errs, h.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, h.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if h.UID.E {
 		attrPath = path + ".uid"
-		errs = append(errs, h.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, h.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if h.Links.E {
 		for i := range h.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
-			errs = append(errs, h.Links.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, h.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if h.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errs = append(errs, h.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, h.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate feeder_audit
 	if h.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errs = append(errs, h.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, h.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate origin
 	attrPath = path + ".origin"
-	errs = append(errs, h.Origin.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, h.Origin.Validate(attrPath).Errs...)
 
 	// Validate period
 	if h.Period.E {
 		attrPath = path + ".period"
-		errs = append(errs, h.Period.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, h.Period.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate duration
 	if h.Duration.E {
 		attrPath = path + ".duration"
-		errs = append(errs, h.Duration.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, h.Duration.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate summary
 	if h.Summary.E {
 		attrPath = path + ".summary"
-		errs = append(errs, h.Summary.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, h.Summary.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate events
 	if h.Events.E {
 		for i := range h.Events.V {
 			attrPath = fmt.Sprintf("%s.events[%d]", path, i)
-			errs = append(errs, h.Events.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, h.Events.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
-	return errs
+	return validateErr
 }

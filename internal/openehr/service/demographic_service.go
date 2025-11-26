@@ -32,9 +32,14 @@ var (
 	ErrAgentVersionLowerOrEqualToCurrent        = fmt.Errorf("agent version is lower than or equal to the current version")
 	ErrPersonVersionLowerOrEqualToCurrent       = fmt.Errorf("person version is lower than or equal to the current version")
 	ErrGroupVersionLowerOrEqualToCurrent        = fmt.Errorf("group version is lower than or equal to the current version")
+	ErrInvalidGroupUIDMismatch                  = fmt.Errorf("group UID does not match current group UID")
 	ErrOrganisationVersionLowerOrEqualToCurrent = fmt.Errorf("organisation version is lower than or equal to the current version")
+	ErrInvalidOrganisationUIDMismatch           = fmt.Errorf("organisation UID does not match current organisation UID")
 	ErrRoleVersionLowerOrEqualToCurrent         = fmt.Errorf("role version is lower than or equal to the current version")
+	ErrInvalidRoleUIDMismatch                   = fmt.Errorf("role UID does not match current role UID")
 	ErrVersionedPartyVersionNotFound            = fmt.Errorf("versioned party version not found")
+	ErrInvalidAgentUIDMismatch                  = fmt.Errorf("agent UID does not match current agent UID")
+	ErrInvalidPersonUIDMismatch                 = fmt.Errorf("person UID does not match current person UID")
 )
 
 type DemographicService struct {
@@ -49,8 +54,38 @@ func NewDemographicService(logger *slog.Logger, db *database.Database) Demograph
 	}
 }
 
+func (s *DemographicService) ValidateAgent(ctx context.Context, agent openehr.AGENT) error {
+	validateErr := agent.Validate("$")
+	if len(validateErr.Errs) > 0 {
+		return validateErr
+	}
+
+	// Additional Agent validation can be added here
+
+	return nil
+}
+
+func (s *DemographicService) ExistsAgent(ctx context.Context, versionID string) (bool, error) {
+	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.type = $1 AND ov.id = $2 LIMIT 1`
+
+	var exists int
+	err := s.DB.QueryRow(ctx, query, openehr.AGENT_MODEL_NAME, versionID).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check if agent exists: %w", err)
+	}
+	return true, nil
+}
+
 func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGENT) (openehr.AGENT, error) {
-	// If UID is not provided, generate a new one
+	// Validate agent
+	if err := s.ValidateAgent(ctx, agent); err != nil {
+		return openehr.AGENT{}, err
+	}
+
+	// Provide ID when Agent does not have one
 	if !agent.UID.E {
 		agent.UID = util.Some(openehr.X_UID_BASED_ID{
 			Value: &openehr.HIER_OBJECT_ID{
@@ -60,32 +95,41 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 		})
 	}
 
-	// Convert HIER_OBJECT_ID to OBJECT_VERSION_ID if necessary
 	switch agent.UID.V.Value.(type) {
-	case *openehr.HIER_OBJECT_ID:
-		agent.UID.V.Value = &openehr.OBJECT_VERSION_ID{
-			Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
-			Value: fmt.Sprintf("%s::%s::1", agent.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value, config.SYSTEM_ID_GOPENEHR),
-		}
 	case *openehr.OBJECT_VERSION_ID:
-	// valid type
+		// valid type
+	case *openehr.HIER_OBJECT_ID:
+		// Convert to OBJECT_VERSION_ID
+		hierID := agent.UID.V.Value.(*openehr.HIER_OBJECT_ID)
+		agent.UID = util.Some(openehr.X_UID_BASED_ID{
+			Value: &openehr.OBJECT_VERSION_ID{
+				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
+				Value: fmt.Sprintf("%s::%s::1", hierID.Value, config.SYSTEM_ID_GOPENEHR),
+			},
+		})
 	default:
-		return openehr.AGENT{}, errors.New("agent UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID")
+		return openehr.AGENT{}, fmt.Errorf("agent UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID, got %T", agent.UID.V.Value)
+	}
+
+	// Extract UID type
+	agentID, ok := agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+	if !ok {
+		return openehr.AGENT{}, fmt.Errorf("agent UID must be of type OBJECT_VERSION_ID, got %T", agent.UID.V.Value)
 	}
 
 	// Check if agent with the same UID already exists
-	_, err := s.GetAgent(ctx, agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID())
-	if err == nil {
-		return openehr.AGENT{}, ErrAgentAlreadyExists
-	}
-	if !errors.Is(err, ErrAgentNotFound) {
+	exists, err := s.ExistsAgent(ctx, agentID.Value)
+	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to check existing agent: %w", err)
+	}
+	if exists {
+		return openehr.AGENT{}, ErrAgentAlreadyExists
 	}
 
 	// Build Versioned object for the agent
 	versionedParty := openehr.VERSIONED_PARTY{
 		UID: openehr.HIER_OBJECT_ID{
-			Value: agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(),
+			Value: agentID.UID(),
 		},
 		OwnerID: openehr.OBJECT_REF{
 			Namespace: config.NAMESPACE_LOCAL,
@@ -93,19 +137,13 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 			ID: openehr.X_OBJECT_ID{
 				Value: &openehr.HIER_OBJECT_ID{
 					Type_: util.Some(openehr.HIER_OBJECT_ID_MODEL_NAME),
-					Value: agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID(),
+					Value: agentID.UID(),
 				},
 			},
 		},
 		TimeCreated: openehr.DV_DATE_TIME{
 			Value: time.Now().UTC().Format(time.RFC3339),
 		},
-	}
-
-	// Ensures that the versioned party is valid
-	versionedParty.SetModelName()
-	if errs := versionedParty.Validate("$"); len(errs) > 0 {
-		return openehr.AGENT{}, fmt.Errorf("validation errors for versioned party: %v", errs)
 	}
 
 	// Build original version of the agent
@@ -121,12 +159,6 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 			},
 		},
 		Data: &agent,
-	}
-
-	// Ensures that the agent version is valid
-	agentVersion.SetModelName()
-	if errs := agentVersion.Validate("$"); len(errs) > 0 {
-		return openehr.AGENT{}, fmt.Errorf("validation errors for agent version: %v", errs)
 	}
 
 	// Create contribution
@@ -166,12 +198,6 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 		},
 	}
 
-	// Ensures that the contribution is valid
-	contribution.SetModelName()
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return openehr.AGENT{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
-
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -189,6 +215,8 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -196,11 +224,13 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 	}
 
 	// Insert versioned party
-	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id, contribution_id) VALUES ($1, $2, NULL, $3)",
-		versionedParty.UID.Value, openehr.VERSIONED_PARTY_MODEL_NAME, contribution.UID.Value)
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, object_type, ehr_id, contribution_id) VALUES ($1, $2, $3, NULL, $4)",
+		versionedParty.UID.Value, openehr.VERSIONED_PARTY_MODEL_NAME, openehr.AGENT_MODEL_NAME, contribution.UID.Value)
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert versioned party: %w", err)
 	}
+
+	versionedParty.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object_data (id, data) VALUES ($1, $2)",
 		versionedParty.UID.Value, versionedParty)
 	if err != nil {
@@ -213,6 +243,8 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert agent: %w", err)
 	}
+
+	agentVersion.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version_data (id, data) VALUES ($1, $2)",
 		agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, agentVersion)
 	if err != nil {
@@ -227,85 +259,104 @@ func (s *DemographicService) CreateAgent(ctx context.Context, agent openehr.AGEN
 	return agent, nil
 }
 
-// GetAgent retrieves the agent as the latest version when providing versioned object id, or the specified ID version, and returns it as the raw JSON representation.
-func (s *DemographicService) GetAgent(ctx context.Context, uidBasedID string) (openehr.AGENT, error) {
+func (s *DemographicService) GetCurrentAgentVersionByVersionedPartyID(ctx context.Context, versionedPartyID uuid.UUID) (openehr.AGENT, error) {
 	query := `
 		SELECT ovd.data 
 		FROM openehr.tbl_object_version ov
 		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.type = $1 AND
+		WHERE ov.versioned_object_id = $1 AND ov.type = $2
+		ORDER BY ov.created_at DESC
+		LIMIT 1
 	`
-	args := []any{openehr.AGENT_MODEL_NAME}
-	argNum := 2
-
-	if strings.Count(uidBasedID, "::") == 2 {
-		// It's an OBJECT_VERSION_ID
-		query += fmt.Sprintf("ov.id = $%d ", argNum)
-	} else {
-		// It's a versioned object ID
-		query += fmt.Sprintf("ov.versioned_object_id = $%d ORDER BY ov.created_at DESC", argNum)
-	}
-	args = append(args, uidBasedID)
-
-	query += " LIMIT 1"
 
 	var agent openehr.AGENT
-	err := s.DB.QueryRow(ctx, query, args...).Scan(&agent)
+	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), openehr.AGENT_MODEL_NAME).Scan(&agent)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return openehr.AGENT{}, ErrAgentNotFound
 		}
-		return openehr.AGENT{}, fmt.Errorf("failed to get agent by ID: %w", err)
+		return openehr.AGENT{}, fmt.Errorf("failed to get latest agent by versioned party ID: %w", err)
 	}
 
 	return agent, nil
 }
 
-func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGENT) (openehr.AGENT, error) {
-	// Validate Composition
-	if !agent.UID.E {
-		return openehr.AGENT{}, fmt.Errorf("agent UID must be provided for update")
+func (s *DemographicService) GetAgentAtVersion(ctx context.Context, versionID string) (openehr.AGENT, error) {
+	query := `
+		SELECT ovd.data 
+		FROM openehr.tbl_object_version ov
+		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
+		WHERE ov.id = $1 AND ov.type = $2
+		LIMIT 1
+	`
+
+	var agent openehr.AGENT
+	err := s.DB.QueryRow(ctx, query, versionID, openehr.AGENT_MODEL_NAME).Scan(&agent)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return openehr.AGENT{}, ErrAgentNotFound
+		}
+		return openehr.AGENT{}, fmt.Errorf("failed to get agent at version: %w", err)
 	}
 
-	switch agent.UID.V.Value.(type) {
-	case *openehr.OBJECT_VERSION_ID:
-		// Check if version is being updated
-		currentAgent, err := s.GetAgent(ctx, agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID())
-		if err != nil {
-			return openehr.AGENT{}, fmt.Errorf("failed to get current Agent: %w", err)
-		}
+	return agent, nil
+}
 
-		currentVersionID := currentAgent.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
-		newVersionID := agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
-		if newVersionID.VersionTreeID().CompareTo(currentVersionID.VersionTreeID()) <= 0 {
+func (s *DemographicService) UpdateAgent(ctx context.Context, versionedPartyID uuid.UUID, agent openehr.AGENT) (openehr.AGENT, error) {
+	// Validate Agent
+	if err := s.ValidateAgent(ctx, agent); err != nil {
+		return openehr.AGENT{}, err
+	}
+
+	// Get current Agent
+	currentAgent, err := s.GetCurrentAgentVersionByVersionedPartyID(ctx, versionedPartyID)
+	if err != nil {
+		if errors.Is(err, ErrAgentNotFound) {
+			return openehr.AGENT{}, ErrAgentNotFound
+		}
+		return openehr.AGENT{}, fmt.Errorf("failed to get current Agent: %w", err)
+	}
+	currentAgentID := currentAgent.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+
+	// Provide ID when Agent does not have one
+	if !agent.UID.E {
+		agent.UID = util.Some(openehr.X_UID_BASED_ID{
+			Value: &openehr.HIER_OBJECT_ID{
+				Type_: util.Some(openehr.HIER_OBJECT_ID_MODEL_NAME),
+				Value: currentAgentID.UID(),
+			},
+		})
+	}
+
+	// Handle Agent UID types
+	switch v := agent.UID.V.Value.(type) {
+	case *openehr.OBJECT_VERSION_ID:
+		// Check version is incremented
+		if v.VersionTreeID().CompareTo(currentAgentID.VersionTreeID()) <= 0 {
 			return openehr.AGENT{}, ErrAgentVersionLowerOrEqualToCurrent
 		}
-		// valid type
 	case *openehr.HIER_OBJECT_ID:
-		// Add namespace and version to convert to OBJECT_VERSION_ID
-		currentAgent, err := s.GetAgent(ctx, agent.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value)
-		if err != nil {
-			return openehr.AGENT{}, fmt.Errorf("failed to get current Agent: %w", err)
+		// Check HIER_OBJECT_ID matches current Agent UID
+		if currentAgentID.UID() != v.Value {
+			return openehr.AGENT{}, ErrInvalidAgentUIDMismatch
 		}
 
-		hierID := agent.UID.V.Value.(*openehr.HIER_OBJECT_ID)
-		versionTreeID := currentAgent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).VersionTreeID()
+		// Increment version
+		versionTreeID := currentAgentID.VersionTreeID()
 		versionTreeID.Major++
 
+		// Convert to OBJECT_VERSION_ID
 		agent.UID = util.Some(openehr.X_UID_BASED_ID{
 			Value: &openehr.OBJECT_VERSION_ID{
 				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
-				Value: fmt.Sprintf("%s::%s::%s", hierID.Value, config.SYSTEM_ID_GOPENEHR, versionTreeID.String()),
+				Value: fmt.Sprintf("%s::%s::%s", v.Value, config.SYSTEM_ID_GOPENEHR, versionTreeID.String()),
 			},
 		})
 	default:
 		return openehr.AGENT{}, fmt.Errorf("agent UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID, got %T", agent.UID.V.Value)
 	}
 
-	if errs := agent.Validate("$"); len(errs) > 0 {
-		return openehr.AGENT{}, fmt.Errorf("validation errors for agent: %v", errs)
-	}
-
+	// Build Agent version
 	agentVersion := openehr.ORIGINAL_VERSION{
 		UID: *agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
 		LifecycleState: openehr.DV_CODED_TEXT{
@@ -318,12 +369,6 @@ func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGEN
 			},
 		},
 		Data: &agent,
-	}
-
-	// Validate agent version
-	agentVersion.SetModelName()
-	if errs := agentVersion.Validate("$"); len(errs) > 0 {
-		return openehr.AGENT{}, fmt.Errorf("validation errors for agent version: %v", errs)
 	}
 
 	// Prepare contribution
@@ -363,11 +408,6 @@ func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGEN
 		},
 	}
 
-	contribution.SetModelName()
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return openehr.AGENT{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
-
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -385,6 +425,8 @@ func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGEN
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -397,6 +439,8 @@ func (s *DemographicService) UpdateAgent(ctx context.Context, agent openehr.AGEN
 	if err != nil {
 		return openehr.AGENT{}, fmt.Errorf("failed to insert agent: %w", err)
 	}
+
+	agentVersion.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version_data (id, data) VALUES ($1, $2)",
 		agent.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, agentVersion)
 	if err != nil {
@@ -451,11 +495,6 @@ func (s *DemographicService) DeleteAgent(ctx context.Context, versionedObjectID 
 			},
 		},
 	}
-	contribution.SetModelName()
-
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
 
 	// Start transaction
 	tx, err := s.DB.Begin(ctx)
@@ -474,6 +513,8 @@ func (s *DemographicService) DeleteAgent(ctx context.Context, versionedObjectID 
 	if err != nil {
 		return fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -499,8 +540,38 @@ func (s *DemographicService) DeleteAgent(ctx context.Context, versionedObjectID 
 	return nil
 }
 
+func (s *DemographicService) ValidatePerson(ctx context.Context, person openehr.PERSON) error {
+	validateErr := person.Validate("$")
+	if len(validateErr.Errs) > 0 {
+		return validateErr
+	}
+
+	// Additional Person validation can be added here
+
+	return nil
+}
+
+func (s *DemographicService) ExistsPerson(ctx context.Context, versionID string) (bool, error) {
+	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.type = $1 AND ov.id = $2 LIMIT 1`
+
+	var exists int
+	err := s.DB.QueryRow(ctx, query, openehr.PERSON_MODEL_NAME, versionID).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check if person exists: %w", err)
+	}
+	return true, nil
+}
+
 func (s *DemographicService) CreatePerson(ctx context.Context, person openehr.PERSON) (openehr.PERSON, error) {
-	// If UID is not provided, generate a new one
+	// Validate person
+	if err := s.ValidatePerson(ctx, person); err != nil {
+		return openehr.PERSON{}, err
+	}
+
+	// Provide ID when Person does not have one
 	if !person.UID.E {
 		person.UID = util.Some(openehr.X_UID_BASED_ID{
 			Value: &openehr.HIER_OBJECT_ID{
@@ -510,26 +581,35 @@ func (s *DemographicService) CreatePerson(ctx context.Context, person openehr.PE
 		})
 	}
 
-	// Convert HIER_OBJECT_ID to OBJECT_VERSION_ID if necessary
 	switch person.UID.V.Value.(type) {
-	case *openehr.HIER_OBJECT_ID:
-		person.UID.V.Value = &openehr.OBJECT_VERSION_ID{
-			Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
-			Value: fmt.Sprintf("%s::%s::1", person.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value, config.SYSTEM_ID_GOPENEHR),
-		}
 	case *openehr.OBJECT_VERSION_ID:
-	// valid type
+		// valid type
+	case *openehr.HIER_OBJECT_ID:
+		// Convert to OBJECT_VERSION_ID
+		hierID := person.UID.V.Value.(*openehr.HIER_OBJECT_ID)
+		person.UID = util.Some(openehr.X_UID_BASED_ID{
+			Value: &openehr.OBJECT_VERSION_ID{
+				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
+				Value: fmt.Sprintf("%s::%s::1", hierID.Value, config.SYSTEM_ID_GOPENEHR),
+			},
+		})
 	default:
-		return openehr.PERSON{}, errors.New("person UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID")
+		return openehr.PERSON{}, fmt.Errorf("person UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID, got %T", person.UID.V.Value)
+	}
+
+	// Extract UID type
+	personID, ok := person.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+	if !ok {
+		return openehr.PERSON{}, fmt.Errorf("person UID must be of type OBJECT_VERSION_ID, got %T", person.UID.V.Value)
 	}
 
 	// Check if person with the same UID already exists
-	_, err := s.GetPerson(ctx, person.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID())
-	if err == nil {
-		return openehr.PERSON{}, ErrPersonAlreadyExists
-	}
-	if !errors.Is(err, ErrPersonNotFound) {
+	exists, err := s.ExistsPerson(ctx, personID.Value)
+	if err != nil {
 		return openehr.PERSON{}, fmt.Errorf("failed to check existing person: %w", err)
+	}
+	if exists {
+		return openehr.PERSON{}, ErrPersonAlreadyExists
 	}
 
 	// Build Versioned object for the person
@@ -552,12 +632,6 @@ func (s *DemographicService) CreatePerson(ctx context.Context, person openehr.PE
 		},
 	}
 
-	// Ensures that the versioned party is valid
-	versionedParty.SetModelName()
-	if errs := versionedParty.Validate("$"); len(errs) > 0 {
-		return openehr.PERSON{}, fmt.Errorf("validation errors for versioned party: %v", errs)
-	}
-
 	// Build original version of the person
 	personVersion := openehr.ORIGINAL_VERSION{
 		UID: *person.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
@@ -571,12 +645,6 @@ func (s *DemographicService) CreatePerson(ctx context.Context, person openehr.PE
 			},
 		},
 		Data: &person,
-	}
-
-	// Ensures that the person version is valid
-	personVersion.SetModelName()
-	if errs := personVersion.Validate("$"); len(errs) > 0 {
-		return openehr.PERSON{}, fmt.Errorf("validation errors for person version: %v", errs)
 	}
 
 	// Create contribution
@@ -616,12 +684,6 @@ func (s *DemographicService) CreatePerson(ctx context.Context, person openehr.PE
 		},
 	}
 
-	// Ensures that the contribution is valid
-	contribution.SetModelName()
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return openehr.PERSON{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
-
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -639,6 +701,8 @@ func (s *DemographicService) CreatePerson(ctx context.Context, person openehr.PE
 	if err != nil {
 		return openehr.PERSON{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -646,11 +710,13 @@ func (s *DemographicService) CreatePerson(ctx context.Context, person openehr.PE
 	}
 
 	// Insert versioned party
-	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id, contribution_id) VALUES ($1, $2, NULL, $3)",
-		versionedParty.UID.Value, openehr.VERSIONED_PARTY_MODEL_NAME, contribution.UID.Value)
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, object_type, ehr_id, contribution_id) VALUES ($1, $2, $3, NULL, $4)",
+		versionedParty.UID.Value, openehr.VERSIONED_PARTY_MODEL_NAME, openehr.PERSON_MODEL_NAME, contribution.UID.Value)
 	if err != nil {
 		return openehr.PERSON{}, fmt.Errorf("failed to insert versioned party: %w", err)
 	}
+
+	versionedParty.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object_data (id, data) VALUES ($1, $2)",
 		versionedParty.UID.Value, versionedParty)
 	if err != nil {
@@ -663,6 +729,8 @@ func (s *DemographicService) CreatePerson(ctx context.Context, person openehr.PE
 	if err != nil {
 		return openehr.PERSON{}, fmt.Errorf("failed to insert person: %w", err)
 	}
+
+	personVersion.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version_data (id, data) VALUES ($1, $2)",
 		person.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, personVersion)
 	if err != nil {
@@ -677,85 +745,100 @@ func (s *DemographicService) CreatePerson(ctx context.Context, person openehr.PE
 	return person, nil
 }
 
-// GetPerson retrieves the person as the latest version when providing versioned object id, or the specified ID version, and returns it as the raw JSON representation.
-func (s *DemographicService) GetPerson(ctx context.Context, uidBasedID string) (openehr.PERSON, error) {
+func (s *DemographicService) GetCurrentPersonVersionByVersionedPartyID(ctx context.Context, versionedPartyID uuid.UUID) (openehr.PERSON, error) {
 	query := `
 		SELECT ovd.data 
 		FROM openehr.tbl_object_version ov
 		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.type = $1 AND
+		WHERE ov.versioned_object_id = $1 AND ov.type = $2
+		ORDER BY ov.created_at DESC
+		LIMIT 1
 	`
-	args := []any{openehr.PERSON_MODEL_NAME}
-	argNum := 2
-
-	if strings.Count(uidBasedID, "::") == 2 {
-		// It's an OBJECT_VERSION_ID
-		query += fmt.Sprintf("ov.id = $%d ", argNum)
-	} else {
-		// It's a versioned object ID
-		query += fmt.Sprintf("ov.versioned_object_id = $%d ORDER BY ov.created_at DESC", argNum)
-	}
-	args = append(args, uidBasedID)
-
-	query += " LIMIT 1"
 
 	var person openehr.PERSON
-	err := s.DB.QueryRow(ctx, query, args...).Scan(&person)
+	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), openehr.PERSON_MODEL_NAME).Scan(&person)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return openehr.PERSON{}, ErrPersonNotFound
 		}
-		return openehr.PERSON{}, fmt.Errorf("failed to get person by ID: %w", err)
+		return openehr.PERSON{}, fmt.Errorf("failed to get latest person by versioned party ID: %w", err)
 	}
 
 	return person, nil
 }
 
-func (s *DemographicService) UpdatePerson(ctx context.Context, person openehr.PERSON) (openehr.PERSON, error) {
-	// Validate Composition
-	if !person.UID.E {
-		return openehr.PERSON{}, fmt.Errorf("person UID must be provided for update")
+func (s *DemographicService) GetPersonAtVersion(ctx context.Context, versionID string) (openehr.PERSON, error) {
+	query := `
+		SELECT ovd.data 
+		FROM openehr.tbl_object_version ov
+		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
+		WHERE ov.id = $1 AND ov.type = $2
+		LIMIT 1
+	`
+
+	var person openehr.PERSON
+	err := s.DB.QueryRow(ctx, query, versionID, openehr.GROUP_MODEL_NAME).Scan(&person)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return openehr.PERSON{}, ErrPersonNotFound
+		}
+		return openehr.PERSON{}, fmt.Errorf("failed to get person at version: %w", err)
 	}
 
-	switch person.UID.V.Value.(type) {
-	case *openehr.OBJECT_VERSION_ID:
-		// Check if version is being updated
-		currentPerson, err := s.GetPerson(ctx, person.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID())
-		if err != nil {
-			return openehr.PERSON{}, fmt.Errorf("failed to get current Person: %w", err)
-		}
+	return person, nil
+}
 
-		currentVersionID := currentPerson.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
-		newVersionID := person.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
-		if newVersionID.VersionTreeID().CompareTo(currentVersionID.VersionTreeID()) <= 0 {
+func (s *DemographicService) UpdatePerson(ctx context.Context, versionedPartyID uuid.UUID, person openehr.PERSON) (openehr.PERSON, error) {
+	// Validate Person
+	if err := s.ValidatePerson(ctx, person); err != nil {
+		return openehr.PERSON{}, err
+	}
+
+	// Get current Person
+	currentPerson, err := s.GetCurrentPersonVersionByVersionedPartyID(ctx, versionedPartyID)
+	if err != nil {
+		return openehr.PERSON{}, fmt.Errorf("failed to get current Person: %w", err)
+	}
+	currentPersonID := currentPerson.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+	// Provide ID when Person does not have one
+	if !person.UID.E {
+		person.UID = util.Some(openehr.X_UID_BASED_ID{
+			Value: &openehr.HIER_OBJECT_ID{
+				Type_: util.Some(openehr.HIER_OBJECT_ID_MODEL_NAME),
+				Value: currentPersonID.UID(),
+			},
+		})
+	}
+
+	// Handle Person UID types
+	switch v := person.UID.V.Value.(type) {
+	case *openehr.OBJECT_VERSION_ID:
+		// Check version is incremented
+		if v.VersionTreeID().CompareTo(currentPersonID.VersionTreeID()) <= 0 {
 			return openehr.PERSON{}, ErrPersonVersionLowerOrEqualToCurrent
 		}
-		// valid type
 	case *openehr.HIER_OBJECT_ID:
-		// Add namespace and version to convert to OBJECT_VERSION_ID
-		currentPerson, err := s.GetPerson(ctx, person.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value)
-		if err != nil {
-			return openehr.PERSON{}, fmt.Errorf("failed to get current Person: %w", err)
+		// Check HIER_OBJECT_ID matches current Person UID
+		if currentPersonID.UID() != v.Value {
+			return openehr.PERSON{}, ErrInvalidPersonUIDMismatch
 		}
 
-		hierID := person.UID.V.Value.(*openehr.HIER_OBJECT_ID)
-		versionTreeID := currentPerson.UID.V.Value.(*openehr.OBJECT_VERSION_ID).VersionTreeID()
+		// Increment version
+		versionTreeID := currentPersonID.VersionTreeID()
 		versionTreeID.Major++
 
+		// Convert to OBJECT_VERSION_ID
 		person.UID = util.Some(openehr.X_UID_BASED_ID{
 			Value: &openehr.OBJECT_VERSION_ID{
 				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
-				Value: fmt.Sprintf("%s::%s::%s", hierID.Value, config.SYSTEM_ID_GOPENEHR, versionTreeID.String()),
+				Value: fmt.Sprintf("%s::%s::%s", v.Value, config.SYSTEM_ID_GOPENEHR, versionTreeID.String()),
 			},
 		})
 	default:
 		return openehr.PERSON{}, fmt.Errorf("person UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID, got %T", person.UID.V.Value)
 	}
 
-	if errs := person.Validate("$"); len(errs) > 0 {
-		return openehr.PERSON{}, fmt.Errorf("validation errors for person: %v", errs)
-	}
-
+	// Build Person version
 	personVersion := openehr.ORIGINAL_VERSION{
 		UID: *person.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
 		LifecycleState: openehr.DV_CODED_TEXT{
@@ -768,12 +851,6 @@ func (s *DemographicService) UpdatePerson(ctx context.Context, person openehr.PE
 			},
 		},
 		Data: &person,
-	}
-
-	// Validate person version
-	personVersion.SetModelName()
-	if errs := personVersion.Validate("$"); len(errs) > 0 {
-		return openehr.PERSON{}, fmt.Errorf("validation errors for person version: %v", errs)
 	}
 
 	// Prepare contribution
@@ -813,11 +890,6 @@ func (s *DemographicService) UpdatePerson(ctx context.Context, person openehr.PE
 		},
 	}
 
-	contribution.SetModelName()
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return openehr.PERSON{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
-
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -835,6 +907,8 @@ func (s *DemographicService) UpdatePerson(ctx context.Context, person openehr.PE
 	if err != nil {
 		return openehr.PERSON{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -847,6 +921,8 @@ func (s *DemographicService) UpdatePerson(ctx context.Context, person openehr.PE
 	if err != nil {
 		return openehr.PERSON{}, fmt.Errorf("failed to insert person: %w", err)
 	}
+
+	personVersion.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version_data (id, data) VALUES ($1, $2)",
 		person.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, personVersion)
 	if err != nil {
@@ -901,11 +977,6 @@ func (s *DemographicService) DeletePerson(ctx context.Context, versionedObjectID
 			},
 		},
 	}
-	contribution.SetModelName()
-
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
 
 	// Start transaction
 	tx, err := s.DB.Begin(ctx)
@@ -924,6 +995,8 @@ func (s *DemographicService) DeletePerson(ctx context.Context, versionedObjectID
 	if err != nil {
 		return fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -949,8 +1022,38 @@ func (s *DemographicService) DeletePerson(ctx context.Context, versionedObjectID
 	return nil
 }
 
+func (s *DemographicService) ValidateGroup(ctx context.Context, group openehr.GROUP) error {
+	validateErr := group.Validate("$")
+	if len(validateErr.Errs) > 0 {
+		return validateErr
+	}
+
+	// Additional Group validation can be added here
+
+	return nil
+}
+
+func (s *DemographicService) ExistsGroup(ctx context.Context, versionID string) (bool, error) {
+	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.type = $1 AND ov.id = $2 LIMIT 1`
+
+	var exists int
+	err := s.DB.QueryRow(ctx, query, openehr.GROUP_MODEL_NAME, versionID).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check if group exists: %w", err)
+	}
+	return true, nil
+}
+
 func (s *DemographicService) CreateGroup(ctx context.Context, group openehr.GROUP) (openehr.GROUP, error) {
-	// If UID is not provided, generate a new one
+	// Validate group
+	if err := s.ValidateGroup(ctx, group); err != nil {
+		return openehr.GROUP{}, err
+	}
+
+	// Provide ID when Group does not have one
 	if !group.UID.E {
 		group.UID = util.Some(openehr.X_UID_BASED_ID{
 			Value: &openehr.HIER_OBJECT_ID{
@@ -960,26 +1063,35 @@ func (s *DemographicService) CreateGroup(ctx context.Context, group openehr.GROU
 		})
 	}
 
-	// Convert HIER_OBJECT_ID to OBJECT_VERSION_ID if necessary
 	switch group.UID.V.Value.(type) {
-	case *openehr.HIER_OBJECT_ID:
-		group.UID.V.Value = &openehr.OBJECT_VERSION_ID{
-			Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
-			Value: fmt.Sprintf("%s::%s::1", group.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value, config.SYSTEM_ID_GOPENEHR),
-		}
 	case *openehr.OBJECT_VERSION_ID:
-	// valid type
+		// valid type
+	case *openehr.HIER_OBJECT_ID:
+		// Convert to OBJECT_VERSION_ID
+		hierID := group.UID.V.Value.(*openehr.HIER_OBJECT_ID)
+		group.UID = util.Some(openehr.X_UID_BASED_ID{
+			Value: &openehr.OBJECT_VERSION_ID{
+				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
+				Value: fmt.Sprintf("%s::%s::1", hierID.Value, config.SYSTEM_ID_GOPENEHR),
+			},
+		})
 	default:
-		return openehr.GROUP{}, errors.New("group UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID")
+		return openehr.GROUP{}, fmt.Errorf("group UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID, got %T", group.UID.V.Value)
+	}
+
+	// Extract UID type
+	groupID, ok := group.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+	if !ok {
+		return openehr.GROUP{}, fmt.Errorf("group UID must be of type OBJECT_VERSION_ID, got %T", group.UID.V.Value)
 	}
 
 	// Check if group with the same UID already exists
-	_, err := s.GetGroup(ctx, group.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID())
-	if err == nil {
-		return openehr.GROUP{}, ErrGroupAlreadyExists
-	}
-	if !errors.Is(err, ErrGroupNotFound) {
+	exists, err := s.ExistsGroup(ctx, groupID.Value)
+	if err != nil {
 		return openehr.GROUP{}, fmt.Errorf("failed to check existing group: %w", err)
+	}
+	if exists {
+		return openehr.GROUP{}, ErrGroupAlreadyExists
 	}
 
 	// Build Versioned object for the group
@@ -1002,12 +1114,6 @@ func (s *DemographicService) CreateGroup(ctx context.Context, group openehr.GROU
 		},
 	}
 
-	// Ensures that the versioned party is valid
-	versionedParty.SetModelName()
-	if errs := versionedParty.Validate("$"); len(errs) > 0 {
-		return openehr.GROUP{}, fmt.Errorf("validation errors for versioned party: %v", errs)
-	}
-
 	// Build original version of the group
 	groupVersion := openehr.ORIGINAL_VERSION{
 		UID: *group.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
@@ -1021,12 +1127,6 @@ func (s *DemographicService) CreateGroup(ctx context.Context, group openehr.GROU
 			},
 		},
 		Data: &group,
-	}
-
-	// Ensures that the group version is valid
-	groupVersion.SetModelName()
-	if errs := groupVersion.Validate("$"); len(errs) > 0 {
-		return openehr.GROUP{}, fmt.Errorf("validation errors for group version: %v", errs)
 	}
 
 	// Create contribution
@@ -1066,12 +1166,6 @@ func (s *DemographicService) CreateGroup(ctx context.Context, group openehr.GROU
 		},
 	}
 
-	// Ensures that the contribution is valid
-	contribution.SetModelName()
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return openehr.GROUP{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
-
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -1089,6 +1183,8 @@ func (s *DemographicService) CreateGroup(ctx context.Context, group openehr.GROU
 	if err != nil {
 		return openehr.GROUP{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -1096,11 +1192,13 @@ func (s *DemographicService) CreateGroup(ctx context.Context, group openehr.GROU
 	}
 
 	// Insert versioned party
-	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id, contribution_id) VALUES ($1, $2, NULL, $3)",
-		versionedParty.UID.Value, openehr.VERSIONED_PARTY_MODEL_NAME, contribution.UID.Value)
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, object_type, ehr_id, contribution_id) VALUES ($1, $2, $3, NULL, $4)",
+		versionedParty.UID.Value, openehr.VERSIONED_PARTY_MODEL_NAME, openehr.GROUP_MODEL_NAME, contribution.UID.Value)
 	if err != nil {
 		return openehr.GROUP{}, fmt.Errorf("failed to insert versioned party: %w", err)
 	}
+
+	versionedParty.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object_data (id, data) VALUES ($1, $2)",
 		versionedParty.UID.Value, versionedParty)
 	if err != nil {
@@ -1113,6 +1211,8 @@ func (s *DemographicService) CreateGroup(ctx context.Context, group openehr.GROU
 	if err != nil {
 		return openehr.GROUP{}, fmt.Errorf("failed to insert group: %w", err)
 	}
+
+	groupVersion.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version_data (id, data) VALUES ($1, $2)",
 		groupVersion.UID.Value, groupVersion)
 	if err != nil {
@@ -1127,85 +1227,101 @@ func (s *DemographicService) CreateGroup(ctx context.Context, group openehr.GROU
 	return group, nil
 }
 
-// GetGroup retrieves the group as the latest version when providing versioned object id, or the specified ID version, and returns it as the raw JSON representation.
-func (s *DemographicService) GetGroup(ctx context.Context, uidBasedID string) (openehr.GROUP, error) {
+func (s *DemographicService) GetCurrentGroupVersionByVersionedPartyID(ctx context.Context, versionedPartyID uuid.UUID) (openehr.GROUP, error) {
 	query := `
 		SELECT ovd.data 
 		FROM openehr.tbl_object_version ov
 		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ehr_id IS NULL AND ov.type = $1 AND
+		WHERE ov.versioned_object_id = $1 AND ov.type = $2
+		ORDER BY ov.created_at DESC
+		LIMIT 1
 	`
-	var args []any
-	argNum := 2
-
-	if strings.Count(uidBasedID, "::") == 2 {
-		// It's an OBJECT_VERSION_ID
-		query += fmt.Sprintf("ov.id = $%d ", argNum)
-	} else {
-		// It's a versioned object ID
-		query += fmt.Sprintf("ov.versioned_object_id = $%d ORDER BY ov.created_at DESC", argNum)
-	}
-	args = append(args, uidBasedID)
-
-	query += " LIMIT 1"
 
 	var group openehr.GROUP
-	err := s.DB.QueryRow(ctx, query, args...).Scan(&group)
+	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), openehr.GROUP_MODEL_NAME).Scan(&group)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return openehr.GROUP{}, ErrGroupNotFound
 		}
-		return openehr.GROUP{}, fmt.Errorf("failed to get group by ID: %w", err)
+		return openehr.GROUP{}, fmt.Errorf("failed to get latest group by versioned party ID: %w", err)
 	}
 
 	return group, nil
 }
 
-func (s *DemographicService) UpdateGroup(ctx context.Context, group openehr.GROUP) (openehr.GROUP, error) {
-	// Validate Composition
-	if !group.UID.E {
-		return openehr.GROUP{}, fmt.Errorf("group UID must be provided for update")
+func (s *DemographicService) GetGroupAtVersion(ctx context.Context, versionID string) (openehr.GROUP, error) {
+	query := `
+		SELECT ovd.data 
+		FROM openehr.tbl_object_version ov
+		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
+		WHERE ov.id = $1 AND ov.type = $2
+		LIMIT 1
+	`
+
+	var group openehr.GROUP
+	err := s.DB.QueryRow(ctx, query, versionID, openehr.GROUP_MODEL_NAME).Scan(&group)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return openehr.GROUP{}, ErrGroupNotFound
+		}
+		return openehr.GROUP{}, fmt.Errorf("failed to get group at version: %w", err)
 	}
 
-	switch group.UID.V.Value.(type) {
-	case *openehr.OBJECT_VERSION_ID:
-		// Check if version is being updated
-		currentGroup, err := s.GetGroup(ctx, group.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID())
-		if err != nil {
-			return openehr.GROUP{}, fmt.Errorf("failed to get current Group: %w", err)
-		}
+	return group, nil
+}
 
-		currentVersionID := currentGroup.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
-		newVersionID := group.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
-		if newVersionID.VersionTreeID().CompareTo(currentVersionID.VersionTreeID()) <= 0 {
+func (s *DemographicService) UpdateGroup(ctx context.Context, versionedPartyID uuid.UUID, group openehr.GROUP) (openehr.GROUP, error) {
+	// Validate Group
+	if err := s.ValidateGroup(ctx, group); err != nil {
+		return openehr.GROUP{}, err
+	}
+
+	// Get current Group
+	currentGroup, err := s.GetCurrentGroupVersionByVersionedPartyID(ctx, versionedPartyID)
+	if err != nil {
+		return openehr.GROUP{}, fmt.Errorf("failed to get current Group: %w", err)
+	}
+	currentGroupID := currentGroup.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+
+	// Provide ID when Group does not have one
+	if !group.UID.E {
+		group.UID = util.Some(openehr.X_UID_BASED_ID{
+			Value: &openehr.HIER_OBJECT_ID{
+				Type_: util.Some(openehr.HIER_OBJECT_ID_MODEL_NAME),
+				Value: currentGroupID.UID(),
+			},
+		})
+	}
+
+	// Handle Group UID types
+	switch v := group.UID.V.Value.(type) {
+	case *openehr.OBJECT_VERSION_ID:
+		// Check version is incremented
+		if v.VersionTreeID().CompareTo(currentGroupID.VersionTreeID()) <= 0 {
 			return openehr.GROUP{}, ErrGroupVersionLowerOrEqualToCurrent
 		}
-		// valid type
 	case *openehr.HIER_OBJECT_ID:
-		// Add namespace and version to convert to OBJECT_VERSION_ID
-		currentGroup, err := s.GetGroup(ctx, group.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value)
-		if err != nil {
-			return openehr.GROUP{}, fmt.Errorf("failed to get current Group: %w", err)
+		// Check HIER_OBJECT_ID matches current Group UID
+		if currentGroupID.UID() != v.Value {
+			return openehr.GROUP{}, ErrInvalidGroupUIDMismatch
 		}
 
-		hierID := group.UID.V.Value.(*openehr.HIER_OBJECT_ID)
-		versionTreeID := currentGroup.UID.V.Value.(*openehr.OBJECT_VERSION_ID).VersionTreeID()
+		// Increment version
+		versionTreeID := currentGroupID.VersionTreeID()
 		versionTreeID.Major++
 
+		// Convert to OBJECT_VERSION_ID
 		group.UID = util.Some(openehr.X_UID_BASED_ID{
 			Value: &openehr.OBJECT_VERSION_ID{
 				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
-				Value: fmt.Sprintf("%s::%s::%s", hierID.Value, config.SYSTEM_ID_GOPENEHR, versionTreeID.String()),
+				Value: fmt.Sprintf("%s::%s::%s", v.Value, config.SYSTEM_ID_GOPENEHR, versionTreeID.String()),
 			},
 		})
 	default:
 		return openehr.GROUP{}, fmt.Errorf("group UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID, got %T", group.UID.V.Value)
 	}
 
-	if errs := group.Validate("$"); len(errs) > 0 {
-		return openehr.GROUP{}, fmt.Errorf("validation errors for group: %v", errs)
-	}
-
+	// Build group version
 	groupVersion := openehr.ORIGINAL_VERSION{
 		UID: *group.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
 		LifecycleState: openehr.DV_CODED_TEXT{
@@ -1218,12 +1334,6 @@ func (s *DemographicService) UpdateGroup(ctx context.Context, group openehr.GROU
 			},
 		},
 		Data: &group,
-	}
-
-	// Validate group version
-	groupVersion.SetModelName()
-	if errs := groupVersion.Validate("$"); len(errs) > 0 {
-		return openehr.GROUP{}, fmt.Errorf("validation errors for group version: %v", errs)
 	}
 
 	// Prepare contribution
@@ -1263,11 +1373,6 @@ func (s *DemographicService) UpdateGroup(ctx context.Context, group openehr.GROU
 		},
 	}
 
-	contribution.SetModelName()
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return openehr.GROUP{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
-
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -1285,6 +1390,8 @@ func (s *DemographicService) UpdateGroup(ctx context.Context, group openehr.GROU
 	if err != nil {
 		return openehr.GROUP{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -1297,6 +1404,8 @@ func (s *DemographicService) UpdateGroup(ctx context.Context, group openehr.GROU
 	if err != nil {
 		return openehr.GROUP{}, fmt.Errorf("failed to insert group: %w", err)
 	}
+
+	groupVersion.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version_data (id, data) VALUES ($1, $2)",
 		group.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, groupVersion)
 	if err != nil {
@@ -1351,11 +1460,6 @@ func (s *DemographicService) DeleteGroup(ctx context.Context, versionedObjectID 
 			},
 		},
 	}
-	contribution.SetModelName()
-
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
 
 	// Start transaction
 	tx, err := s.DB.Begin(ctx)
@@ -1374,6 +1478,8 @@ func (s *DemographicService) DeleteGroup(ctx context.Context, versionedObjectID 
 	if err != nil {
 		return fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -1399,8 +1505,38 @@ func (s *DemographicService) DeleteGroup(ctx context.Context, versionedObjectID 
 	return nil
 }
 
+func (s *DemographicService) ValidateOrganisation(ctx context.Context, organisation openehr.ORGANISATION) error {
+	validateErr := organisation.Validate("$")
+	if len(validateErr.Errs) > 0 {
+		return validateErr
+	}
+
+	// Additional Organisation validation can be added here
+
+	return nil
+}
+
+func (s *DemographicService) ExistsOrganisation(ctx context.Context, versionID string) (bool, error) {
+	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.type = $1 AND ov.id = $2 LIMIT 1`
+
+	var exists int
+	err := s.DB.QueryRow(ctx, query, openehr.ORGANISATION_MODEL_NAME, versionID).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check if organisation exists: %w", err)
+	}
+	return true, nil
+}
+
 func (s *DemographicService) CreateOrganisation(ctx context.Context, organisation openehr.ORGANISATION) (openehr.ORGANISATION, error) {
-	// If UID is not provided, generate a new one
+	// Validate organisation
+	if err := s.ValidateOrganisation(ctx, organisation); err != nil {
+		return openehr.ORGANISATION{}, err
+	}
+
+	// Provide ID when Organisation does not have one
 	if !organisation.UID.E {
 		organisation.UID = util.Some(openehr.X_UID_BASED_ID{
 			Value: &openehr.HIER_OBJECT_ID{
@@ -1410,26 +1546,35 @@ func (s *DemographicService) CreateOrganisation(ctx context.Context, organisatio
 		})
 	}
 
-	// Convert HIER_OBJECT_ID to OBJECT_VERSION_ID if necessary
 	switch organisation.UID.V.Value.(type) {
-	case *openehr.HIER_OBJECT_ID:
-		organisation.UID.V.Value = &openehr.OBJECT_VERSION_ID{
-			Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
-			Value: fmt.Sprintf("%s::%s::1", organisation.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value, config.SYSTEM_ID_GOPENEHR),
-		}
 	case *openehr.OBJECT_VERSION_ID:
-	// valid type
+		// valid type
+	case *openehr.HIER_OBJECT_ID:
+		// Convert to OBJECT_VERSION_ID
+		hierID := organisation.UID.V.Value.(*openehr.HIER_OBJECT_ID)
+		organisation.UID = util.Some(openehr.X_UID_BASED_ID{
+			Value: &openehr.OBJECT_VERSION_ID{
+				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
+				Value: fmt.Sprintf("%s::%s::1", hierID.Value, config.SYSTEM_ID_GOPENEHR),
+			},
+		})
 	default:
-		return openehr.ORGANISATION{}, errors.New("organisation UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID")
+		return openehr.ORGANISATION{}, fmt.Errorf("organisation UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID, got %T", organisation.UID.V.Value)
+	}
+
+	// Extract UID type
+	organisationID, ok := organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+	if !ok {
+		return openehr.ORGANISATION{}, fmt.Errorf("organisation UID must be of type OBJECT_VERSION_ID, got %T", organisation.UID.V.Value)
 	}
 
 	// Check if organisation with the same UID already exists
-	_, err := s.GetOrganisation(ctx, organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID())
-	if err == nil {
-		return openehr.ORGANISATION{}, ErrOrganisationAlreadyExists
-	}
-	if !errors.Is(err, ErrOrganisationNotFound) {
+	exists, err := s.ExistsOrganisation(ctx, organisationID.Value)
+	if err != nil {
 		return openehr.ORGANISATION{}, fmt.Errorf("failed to check existing organisation: %w", err)
+	}
+	if exists {
+		return openehr.ORGANISATION{}, ErrOrganisationAlreadyExists
 	}
 
 	// Build Versioned object for the organisation
@@ -1452,12 +1597,6 @@ func (s *DemographicService) CreateOrganisation(ctx context.Context, organisatio
 		},
 	}
 
-	// Ensures that the versioned party is valid
-	versionedParty.SetModelName()
-	if errs := versionedParty.Validate("$"); len(errs) > 0 {
-		return openehr.ORGANISATION{}, fmt.Errorf("validation errors for versioned party: %v", errs)
-	}
-
 	// Build original version of the organisation
 	organisationVersion := openehr.ORIGINAL_VERSION{
 		UID: *organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
@@ -1471,12 +1610,6 @@ func (s *DemographicService) CreateOrganisation(ctx context.Context, organisatio
 			},
 		},
 		Data: &organisation,
-	}
-
-	// Ensures that the organisation version is valid
-	organisationVersion.SetModelName()
-	if errs := organisationVersion.Validate("$"); len(errs) > 0 {
-		return openehr.ORGANISATION{}, fmt.Errorf("validation errors for organisation version: %v", errs)
 	}
 
 	// Create contribution
@@ -1516,12 +1649,6 @@ func (s *DemographicService) CreateOrganisation(ctx context.Context, organisatio
 		},
 	}
 
-	// Ensures that the contribution is valid
-	contribution.SetModelName()
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return openehr.ORGANISATION{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
-
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -1539,6 +1666,8 @@ func (s *DemographicService) CreateOrganisation(ctx context.Context, organisatio
 	if err != nil {
 		return openehr.ORGANISATION{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -1546,11 +1675,13 @@ func (s *DemographicService) CreateOrganisation(ctx context.Context, organisatio
 	}
 
 	// Insert versioned party
-	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id, contribution_id) VALUES ($1, $2, NULL, $3)",
-		versionedParty.UID.Value, openehr.VERSIONED_PARTY_MODEL_NAME, contribution.UID.Value)
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, object_type, ehr_id, contribution_id) VALUES ($1, $2, $3, NULL, $4)",
+		versionedParty.UID.Value, openehr.VERSIONED_PARTY_MODEL_NAME, openehr.ORGANISATION_MODEL_NAME, contribution.UID.Value)
 	if err != nil {
 		return openehr.ORGANISATION{}, fmt.Errorf("failed to insert versioned party: %w", err)
 	}
+
+	versionedParty.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object_data (id, data) VALUES ($1, $2)",
 		versionedParty.UID.Value, versionedParty)
 	if err != nil {
@@ -1563,6 +1694,8 @@ func (s *DemographicService) CreateOrganisation(ctx context.Context, organisatio
 	if err != nil {
 		return openehr.ORGANISATION{}, fmt.Errorf("failed to insert organisation: %w", err)
 	}
+
+	organisationVersion.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version_data (id, data) VALUES ($1, $2)",
 		organisationVersion.UID.Value, organisationVersion)
 	if err != nil {
@@ -1577,85 +1710,100 @@ func (s *DemographicService) CreateOrganisation(ctx context.Context, organisatio
 	return organisation, nil
 }
 
-// GetOrganisation retrieves the organisation as the latest version when providing versioned object id, or the specified ID version, and returns it as the raw JSON representation.
-func (s *DemographicService) GetOrganisation(ctx context.Context, uidBasedID string) (openehr.ORGANISATION, error) {
+func (s *DemographicService) GetCurrentOrganisationVersionByVersionedPartyID(ctx context.Context, versionedPartyID uuid.UUID) (openehr.ORGANISATION, error) {
 	query := `
 		SELECT ovd.data 
 		FROM openehr.tbl_object_version ov
 		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ehr_id IS NULL AND ov.type = $1 AND
+		WHERE ov.versioned_object_id = $1 AND ov.type = $2
+		ORDER BY ov.created_at DESC
+		LIMIT 1
 	`
-	args := []any{openehr.ORGANISATION_MODEL_NAME}
-	argNum := 2
-
-	if strings.Count(uidBasedID, "::") == 2 {
-		// It's an OBJECT_VERSION_ID
-		query += fmt.Sprintf("ov.id = $%d ", argNum)
-	} else {
-		// It's a versioned object ID
-		query += fmt.Sprintf("ov.versioned_object_id = $%d ORDER BY ov.created_at DESC", argNum)
-	}
-	args = append(args, uidBasedID)
-
-	query += " LIMIT 1"
 
 	var organisation openehr.ORGANISATION
-	err := s.DB.QueryRow(ctx, query, args...).Scan(&organisation)
+	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), openehr.AGENT_MODEL_NAME).Scan(&organisation)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return openehr.ORGANISATION{}, ErrOrganisationNotFound
 		}
-		return openehr.ORGANISATION{}, fmt.Errorf("failed to get organisation by ID: %w", err)
+		return openehr.ORGANISATION{}, fmt.Errorf("failed to get latest organisation by versioned party ID: %w", err)
 	}
 
 	return organisation, nil
 }
 
-func (s *DemographicService) UpdateOrganisation(ctx context.Context, organisation openehr.ORGANISATION) (openehr.ORGANISATION, error) {
-	// Validate Composition
-	if !organisation.UID.E {
-		return openehr.ORGANISATION{}, fmt.Errorf("organisation UID must be provided for update")
+func (s *DemographicService) GetOrganisationAtVersion(ctx context.Context, versionID string) (openehr.ORGANISATION, error) {
+	query := `
+		SELECT ovd.data 
+		FROM openehr.tbl_object_version ov
+		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
+		WHERE ov.id = $1 AND ov.type = $2
+		LIMIT 1
+	`
+
+	var organisation openehr.ORGANISATION
+	err := s.DB.QueryRow(ctx, query, versionID, openehr.ORGANISATION_MODEL_NAME).Scan(&organisation)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return openehr.ORGANISATION{}, ErrOrganisationNotFound
+		}
+		return openehr.ORGANISATION{}, fmt.Errorf("failed to get organisation at version: %w", err)
 	}
 
-	switch organisation.UID.V.Value.(type) {
-	case *openehr.OBJECT_VERSION_ID:
-		// Check if version is being updated
-		currentOrganisation, err := s.GetOrganisation(ctx, organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID())
-		if err != nil {
-			return openehr.ORGANISATION{}, fmt.Errorf("failed to get current Organisation: %w", err)
-		}
+	return organisation, nil
+}
 
-		currentVersionID := currentOrganisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
-		newVersionID := organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
-		if newVersionID.VersionTreeID().CompareTo(currentVersionID.VersionTreeID()) <= 0 {
+func (s *DemographicService) UpdateOrganisation(ctx context.Context, versionedPartyID uuid.UUID, organisation openehr.ORGANISATION) (openehr.ORGANISATION, error) {
+	// Validate Organisation
+	if err := s.ValidateOrganisation(ctx, organisation); err != nil {
+		return openehr.ORGANISATION{}, err
+	}
+
+	// Get current Organisation
+	currentOrganisation, err := s.GetCurrentOrganisationVersionByVersionedPartyID(ctx, versionedPartyID)
+	if err != nil {
+		return openehr.ORGANISATION{}, fmt.Errorf("failed to get current Organisation: %w", err)
+	}
+	currentOrganisationID := currentOrganisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+	// Provide ID when Organisation does not have one
+	if !organisation.UID.E {
+		organisation.UID = util.Some(openehr.X_UID_BASED_ID{
+			Value: &openehr.HIER_OBJECT_ID{
+				Type_: util.Some(openehr.HIER_OBJECT_ID_MODEL_NAME),
+				Value: currentOrganisationID.UID(),
+			},
+		})
+	}
+
+	// Handle Organisation UID types
+	switch v := organisation.UID.V.Value.(type) {
+	case *openehr.OBJECT_VERSION_ID:
+		// Check version is incremented
+		if v.VersionTreeID().CompareTo(currentOrganisationID.VersionTreeID()) <= 0 {
 			return openehr.ORGANISATION{}, ErrOrganisationVersionLowerOrEqualToCurrent
 		}
-		// valid type
 	case *openehr.HIER_OBJECT_ID:
-		// Add namespace and version to convert to OBJECT_VERSION_ID
-		currentOrganisation, err := s.GetOrganisation(ctx, organisation.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value)
-		if err != nil {
-			return openehr.ORGANISATION{}, fmt.Errorf("failed to get current Organisation: %w", err)
+		// Check HIER_OBJECT_ID matches current Organisation UID
+		if currentOrganisationID.UID() != v.Value {
+			return openehr.ORGANISATION{}, ErrInvalidOrganisationUIDMismatch
 		}
 
-		hierID := organisation.UID.V.Value.(*openehr.HIER_OBJECT_ID)
-		versionTreeID := currentOrganisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).VersionTreeID()
+		// Increment version
+		versionTreeID := currentOrganisationID.VersionTreeID()
 		versionTreeID.Major++
 
+		// Convert to OBJECT_VERSION_ID
 		organisation.UID = util.Some(openehr.X_UID_BASED_ID{
 			Value: &openehr.OBJECT_VERSION_ID{
 				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
-				Value: fmt.Sprintf("%s::%s::%s", hierID.Value, config.SYSTEM_ID_GOPENEHR, versionTreeID.String()),
+				Value: fmt.Sprintf("%s::%s::%s", v.Value, config.SYSTEM_ID_GOPENEHR, versionTreeID.String()),
 			},
 		})
 	default:
 		return openehr.ORGANISATION{}, fmt.Errorf("organisation UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID, got %T", organisation.UID.V.Value)
 	}
 
-	if errs := organisation.Validate("$"); len(errs) > 0 {
-		return openehr.ORGANISATION{}, fmt.Errorf("validation errors for organisation: %v", errs)
-	}
-
+	// Build organisation version
 	organisationVersion := openehr.ORIGINAL_VERSION{
 		UID: *organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
 		LifecycleState: openehr.DV_CODED_TEXT{
@@ -1668,12 +1816,6 @@ func (s *DemographicService) UpdateOrganisation(ctx context.Context, organisatio
 			},
 		},
 		Data: &organisation,
-	}
-
-	// Validate organisation version
-	organisationVersion.SetModelName()
-	if errs := organisationVersion.Validate("$"); len(errs) > 0 {
-		return openehr.ORGANISATION{}, fmt.Errorf("validation errors for organisation version: %v", errs)
 	}
 
 	// Prepare contribution
@@ -1713,11 +1855,6 @@ func (s *DemographicService) UpdateOrganisation(ctx context.Context, organisatio
 		},
 	}
 
-	contribution.SetModelName()
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return openehr.ORGANISATION{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
-
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -1735,6 +1872,8 @@ func (s *DemographicService) UpdateOrganisation(ctx context.Context, organisatio
 	if err != nil {
 		return openehr.ORGANISATION{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -1747,6 +1886,8 @@ func (s *DemographicService) UpdateOrganisation(ctx context.Context, organisatio
 	if err != nil {
 		return openehr.ORGANISATION{}, fmt.Errorf("failed to insert organisation: %w", err)
 	}
+
+	organisationVersion.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version_data (id, data) VALUES ($1, $2)",
 		organisation.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, organisationVersion)
 	if err != nil {
@@ -1801,11 +1942,6 @@ func (s *DemographicService) DeleteOrganisation(ctx context.Context, versionedOb
 			},
 		},
 	}
-	contribution.SetModelName()
-
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
 
 	// Start transaction
 	tx, err := s.DB.Begin(ctx)
@@ -1824,6 +1960,8 @@ func (s *DemographicService) DeleteOrganisation(ctx context.Context, versionedOb
 	if err != nil {
 		return fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -1849,8 +1987,38 @@ func (s *DemographicService) DeleteOrganisation(ctx context.Context, versionedOb
 	return nil
 }
 
+func (s *DemographicService) ValidateRole(ctx context.Context, role openehr.ROLE) error {
+	validateErr := role.Validate("$")
+	if len(validateErr.Errs) > 0 {
+		return validateErr
+	}
+
+	// Additional Organisation validation can be added here
+
+	return nil
+}
+
+func (s *DemographicService) ExistsRole(ctx context.Context, versionID string) (bool, error) {
+	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.type = $1 AND ov.id = $2 LIMIT 1`
+
+	var exists int
+	err := s.DB.QueryRow(ctx, query, openehr.ROLE_MODEL_NAME, versionID).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to check if role exists: %w", err)
+	}
+	return true, nil
+}
+
 func (s *DemographicService) CreateRole(ctx context.Context, role openehr.ROLE) (openehr.ROLE, error) {
-	// If UID is not provided, generate a new one
+	// Validate rol
+	if err := s.ValidateRole(ctx, role); err != nil {
+		return openehr.ROLE{}, err
+	}
+
+	// Provide ID when Role does not have one
 	if !role.UID.E {
 		role.UID = util.Some(openehr.X_UID_BASED_ID{
 			Value: &openehr.HIER_OBJECT_ID{
@@ -1860,26 +2028,35 @@ func (s *DemographicService) CreateRole(ctx context.Context, role openehr.ROLE) 
 		})
 	}
 
-	// Convert HIER_OBJECT_ID to OBJECT_VERSION_ID if necessary
 	switch role.UID.V.Value.(type) {
-	case *openehr.HIER_OBJECT_ID:
-		role.UID.V.Value = &openehr.OBJECT_VERSION_ID{
-			Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
-			Value: fmt.Sprintf("%s::%s::1", role.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value, config.SYSTEM_ID_GOPENEHR),
-		}
 	case *openehr.OBJECT_VERSION_ID:
-	// valid type
+		// valid type
+	case *openehr.HIER_OBJECT_ID:
+		// Convert to OBJECT_VERSION_ID
+		hierID := role.UID.V.Value.(*openehr.HIER_OBJECT_ID)
+		role.UID = util.Some(openehr.X_UID_BASED_ID{
+			Value: &openehr.OBJECT_VERSION_ID{
+				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
+				Value: fmt.Sprintf("%s::%s::1", hierID.Value, config.SYSTEM_ID_GOPENEHR),
+			},
+		})
 	default:
-		return openehr.ROLE{}, errors.New("role UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID")
+		return openehr.ROLE{}, fmt.Errorf("role UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID, got %T", role.UID.V.Value)
+	}
+
+	// Extract UID type
+	roleID, ok := role.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+	if !ok {
+		return openehr.ROLE{}, fmt.Errorf("role UID must be of type OBJECT_VERSION_ID, got %T", role.UID.V.Value)
 	}
 
 	// Check if role with the same UID already exists
-	_, err := s.GetRole(ctx, role.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID())
-	if err == nil {
-		return openehr.ROLE{}, ErrRoleAlreadyExists
-	}
-	if !errors.Is(err, ErrRoleNotFound) {
+	exists, err := s.ExistsRole(ctx, roleID.Value)
+	if err != nil {
 		return openehr.ROLE{}, fmt.Errorf("failed to check existing role: %w", err)
+	}
+	if exists {
+		return openehr.ROLE{}, ErrRoleAlreadyExists
 	}
 
 	// Build Versioned object for the role
@@ -1902,12 +2079,6 @@ func (s *DemographicService) CreateRole(ctx context.Context, role openehr.ROLE) 
 		},
 	}
 
-	// Ensures that the versioned party is valid
-	versionedParty.SetModelName()
-	if errs := versionedParty.Validate("$"); len(errs) > 0 {
-		return openehr.ROLE{}, fmt.Errorf("validation errors for versioned party: %v", errs)
-	}
-
 	// Build original version of the role
 	roleVersion := openehr.ORIGINAL_VERSION{
 		UID: *role.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
@@ -1921,12 +2092,6 @@ func (s *DemographicService) CreateRole(ctx context.Context, role openehr.ROLE) 
 			},
 		},
 		Data: &role,
-	}
-
-	// Ensures that the role version is valid
-	roleVersion.SetModelName()
-	if errs := roleVersion.Validate("$"); len(errs) > 0 {
-		return openehr.ROLE{}, fmt.Errorf("validation errors for role version: %v", errs)
 	}
 
 	// Create contribution
@@ -1966,12 +2131,6 @@ func (s *DemographicService) CreateRole(ctx context.Context, role openehr.ROLE) 
 		},
 	}
 
-	// Ensures that the contribution is valid
-	contribution.SetModelName()
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return openehr.ROLE{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
-
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -1989,6 +2148,8 @@ func (s *DemographicService) CreateRole(ctx context.Context, role openehr.ROLE) 
 	if err != nil {
 		return openehr.ROLE{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -1996,11 +2157,13 @@ func (s *DemographicService) CreateRole(ctx context.Context, role openehr.ROLE) 
 	}
 
 	// Insert versioned party
-	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id, contribution_id) VALUES ($1, $2, NULL, $3)",
-		versionedParty.UID.Value, openehr.VERSIONED_PARTY_MODEL_NAME, contribution.UID.Value)
+	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object (id, type, object_type, ehr_id, contribution_id) VALUES ($1, $2, $3, NULL, $4)",
+		versionedParty.UID.Value, openehr.VERSIONED_PARTY_MODEL_NAME, openehr.ROLE_MODEL_NAME, contribution.UID.Value)
 	if err != nil {
 		return openehr.ROLE{}, fmt.Errorf("failed to insert versioned party: %w", err)
 	}
+
+	versionedParty.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_versioned_object_data (id, data) VALUES ($1, $2)",
 		versionedParty.UID.Value, versionedParty)
 	if err != nil {
@@ -2013,6 +2176,8 @@ func (s *DemographicService) CreateRole(ctx context.Context, role openehr.ROLE) 
 	if err != nil {
 		return openehr.ROLE{}, fmt.Errorf("failed to insert role: %w", err)
 	}
+
+	roleVersion.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version_data (id, data) VALUES ($1, $2)",
 		role.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, roleVersion)
 	if err != nil {
@@ -2027,85 +2192,100 @@ func (s *DemographicService) CreateRole(ctx context.Context, role openehr.ROLE) 
 	return role, nil
 }
 
-// GetRole retrieves the role as the latest version when providing versioned object id, or the specified ID version, and returns it as the raw JSON representation.
-func (s *DemographicService) GetRole(ctx context.Context, uidBasedID string) (openehr.ROLE, error) {
+func (s *DemographicService) GetCurrentRoleVersionByVersionedPartyID(ctx context.Context, versionedPartyID uuid.UUID) (openehr.ROLE, error) {
 	query := `
 		SELECT ovd.data 
 		FROM openehr.tbl_object_version ov
 		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ehr_id IS NULL AND ov.type = $1 AND
+		WHERE ov.versioned_object_id = $1 AND ov.type = $2
+		ORDER BY ov.created_at DESC
+		LIMIT 1
 	`
-	args := []any{openehr.ROLE_MODEL_NAME}
-	argNum := 2
-
-	if strings.Count(uidBasedID, "::") == 2 {
-		// It's an OBJECT_VERSION_ID
-		query += fmt.Sprintf("ov.id = $%d ", argNum)
-	} else {
-		// It's a versioned object ID
-		query += fmt.Sprintf("ov.versioned_object_id = $%d ORDER BY ov.created_at DESC", argNum)
-	}
-	args = append(args, uidBasedID)
-
-	query += " LIMIT 1"
 
 	var role openehr.ROLE
-	err := s.DB.QueryRow(ctx, query, args...).Scan(&role)
+	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), openehr.ROLE_MODEL_NAME).Scan(&role)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return openehr.ROLE{}, ErrRoleNotFound
 		}
-		return openehr.ROLE{}, fmt.Errorf("failed to get role by ID: %w", err)
+		return openehr.ROLE{}, fmt.Errorf("failed to get latest role by versioned party ID: %w", err)
 	}
 
 	return role, nil
 }
 
-func (s *DemographicService) UpdateRole(ctx context.Context, role openehr.ROLE) (openehr.ROLE, error) {
-	// Validate Composition
-	if !role.UID.E {
-		return openehr.ROLE{}, fmt.Errorf("role UID must be provided for update")
+func (s *DemographicService) GetRoleAtVersion(ctx context.Context, versionID string) (openehr.ROLE, error) {
+	query := `
+		SELECT ovd.data 
+		FROM openehr.tbl_object_version ov
+		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
+		WHERE ov.id = $1 AND ov.type = $2
+		LIMIT 1
+	`
+
+	var role openehr.ROLE
+	err := s.DB.QueryRow(ctx, query, versionID, openehr.ROLE_MODEL_NAME).Scan(&role)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return openehr.ROLE{}, ErrRoleNotFound
+		}
+		return openehr.ROLE{}, fmt.Errorf("failed to get role at version: %w", err)
 	}
 
-	switch role.UID.V.Value.(type) {
-	case *openehr.OBJECT_VERSION_ID:
-		// Check if version is being updated
-		currentRole, err := s.GetRole(ctx, role.UID.V.Value.(*openehr.OBJECT_VERSION_ID).UID())
-		if err != nil {
-			return openehr.ROLE{}, fmt.Errorf("failed to get current Role: %w", err)
-		}
+	return role, nil
+}
 
-		currentVersionID := currentRole.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
-		newVersionID := role.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
-		if newVersionID.VersionTreeID().CompareTo(currentVersionID.VersionTreeID()) <= 0 {
+func (s *DemographicService) UpdateRole(ctx context.Context, versionedPartyID uuid.UUID, role openehr.ROLE) (openehr.ROLE, error) {
+	// Validate Role
+	if err := s.ValidateRole(ctx, role); err != nil {
+		return openehr.ROLE{}, err
+	}
+
+	// Get current Role
+	currentRole, err := s.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
+	if err != nil {
+		return openehr.ROLE{}, fmt.Errorf("failed to get current Role: %w", err)
+	}
+	currentRoleID := currentRole.UID.V.Value.(*openehr.OBJECT_VERSION_ID)
+	// Provide ID when Role does not have one
+	if !role.UID.E {
+		role.UID = util.Some(openehr.X_UID_BASED_ID{
+			Value: &openehr.HIER_OBJECT_ID{
+				Type_: util.Some(openehr.HIER_OBJECT_ID_MODEL_NAME),
+				Value: currentRoleID.UID(),
+			},
+		})
+	}
+
+	// Handle Role UID types
+	switch v := role.UID.V.Value.(type) {
+	case *openehr.OBJECT_VERSION_ID:
+		// Check version is incremented
+		if v.VersionTreeID().CompareTo(currentRoleID.VersionTreeID()) <= 0 {
 			return openehr.ROLE{}, ErrRoleVersionLowerOrEqualToCurrent
 		}
-		// valid type
 	case *openehr.HIER_OBJECT_ID:
-		// Add namespace and version to convert to OBJECT_VERSION_ID
-		currentRole, err := s.GetRole(ctx, role.UID.V.Value.(*openehr.HIER_OBJECT_ID).Value)
-		if err != nil {
-			return openehr.ROLE{}, fmt.Errorf("failed to get current Role: %w", err)
+		// Check HIER_OBJECT_ID matches current Role UID
+		if currentRoleID.UID() != v.Value {
+			return openehr.ROLE{}, ErrInvalidRoleUIDMismatch
 		}
 
-		hierID := role.UID.V.Value.(*openehr.HIER_OBJECT_ID)
-		versionTreeID := currentRole.UID.V.Value.(*openehr.OBJECT_VERSION_ID).VersionTreeID()
+		// Increment version
+		versionTreeID := currentRoleID.VersionTreeID()
 		versionTreeID.Major++
 
+		// Convert to OBJECT_VERSION_ID
 		role.UID = util.Some(openehr.X_UID_BASED_ID{
 			Value: &openehr.OBJECT_VERSION_ID{
 				Type_: util.Some(openehr.OBJECT_VERSION_ID_MODEL_NAME),
-				Value: fmt.Sprintf("%s::%s::%s", hierID.Value, config.SYSTEM_ID_GOPENEHR, versionTreeID.String()),
+				Value: fmt.Sprintf("%s::%s::%s", v.Value, config.SYSTEM_ID_GOPENEHR, versionTreeID.String()),
 			},
 		})
 	default:
 		return openehr.ROLE{}, fmt.Errorf("role UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID, got %T", role.UID.V.Value)
 	}
 
-	if errs := role.Validate("$"); len(errs) > 0 {
-		return openehr.ROLE{}, fmt.Errorf("validation errors for role: %v", errs)
-	}
-
+	// Build role version
 	roleVersion := openehr.ORIGINAL_VERSION{
 		UID: *role.UID.V.Value.(*openehr.OBJECT_VERSION_ID),
 		LifecycleState: openehr.DV_CODED_TEXT{
@@ -2117,13 +2297,8 @@ func (s *DemographicService) UpdateRole(ctx context.Context, role openehr.ROLE) 
 				},
 			},
 		},
-		Data: &role,
-	}
-
-	// Validate role version
-	roleVersion.SetModelName()
-	if errs := roleVersion.Validate("$"); len(errs) > 0 {
-		return openehr.ROLE{}, fmt.Errorf("validation errors for role version: %v", errs)
+		PrecedingVersionUID: util.Some(*currentRoleID),
+		Data:                &role,
 	}
 
 	// Prepare contribution
@@ -2163,12 +2338,6 @@ func (s *DemographicService) UpdateRole(ctx context.Context, role openehr.ROLE) 
 		},
 	}
 
-	// Validate contribution
-	contribution.SetModelName()
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return openehr.ROLE{}, fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
-
 	// Begin transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -2186,6 +2355,8 @@ func (s *DemographicService) UpdateRole(ctx context.Context, role openehr.ROLE) 
 	if err != nil {
 		return openehr.ROLE{}, fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -2198,6 +2369,8 @@ func (s *DemographicService) UpdateRole(ctx context.Context, role openehr.ROLE) 
 	if err != nil {
 		return openehr.ROLE{}, fmt.Errorf("failed to insert role: %w", err)
 	}
+
+	roleVersion.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_object_version_data (id, data) VALUES ($1, $2)",
 		role.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value, roleVersion)
 	if err != nil {
@@ -2253,12 +2426,6 @@ func (s *DemographicService) DeleteRole(ctx context.Context, versionedObjectID s
 		},
 	}
 
-	// Validate contribution
-	contribution.SetModelName()
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return fmt.Errorf("validation errors for new Contribution: %v", errs)
-	}
-
 	// Start transaction
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -2276,6 +2443,8 @@ func (s *DemographicService) DeleteRole(ctx context.Context, versionedObjectID s
 	if err != nil {
 		return fmt.Errorf("failed to insert contribution: %w", err)
 	}
+
+	contribution.SetModelName()
 	_, err = tx.Exec(ctx, "INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)",
 		contribution.UID.Value, contribution)
 	if err != nil {
@@ -2399,31 +2568,25 @@ func (s *DemographicService) GetVersionedPartyVersionJSON(ctx context.Context, v
 	return partyVersionJSON, nil
 }
 
-func (s *DemographicService) CreateContribution(ctx context.Context, contribution openehr.CONTRIBUTION) (openehr.CONTRIBUTION, error) {
-	if contribution.UID.Value == "" {
-		contribution.UID.Value = uuid.NewString()
-	}
+// func (s *DemographicService) CreateContribution(ctx context.Context, contribution openehr.CONTRIBUTION) (openehr.CONTRIBUTION, error) {
+// 	if contribution.UID.Value == "" {
+// 		contribution.UID.Value = uuid.NewString()
+// 	}
 
-	// Validate Contribution
-	contribution.SetModelName()
-	if errs := contribution.Validate("$"); len(errs) > 0 {
-		return openehr.CONTRIBUTION{}, fmt.Errorf("validation errors for Contribution: %v", errs)
-	}
+// 	// Insert Contribution
+// 	query := `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, NULL)`
+// 	args := []any{contribution.UID.Value}
+// 	if _, err := s.DB.Exec(ctx, query, args...); err != nil {
+// 		return openehr.CONTRIBUTION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
+// 	}
+// 	query = `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`
+// 	args = []any{contribution.UID.Value, contribution}
+// 	if _, err := s.DB.Exec(ctx, query, args...); err != nil {
+// 		return openehr.CONTRIBUTION{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
+// 	}
 
-	// Insert Contribution
-	query := `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, NULL)`
-	args := []any{contribution.UID.Value}
-	if _, err := s.DB.Exec(ctx, query, args...); err != nil {
-		return openehr.CONTRIBUTION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
-	query = `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`
-	args = []any{contribution.UID.Value, contribution}
-	if _, err := s.DB.Exec(ctx, query, args...); err != nil {
-		return openehr.CONTRIBUTION{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
-
-	return contribution, nil
-}
+// 	return contribution, nil
+// }
 
 func (s *DemographicService) GetContribution(ctx context.Context, contributionID string) (openehr.CONTRIBUTION, error) {
 	query := `

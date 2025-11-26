@@ -19,18 +19,22 @@ func (t *TEMPLATE_ID) HasModelName() bool {
 	return t.Type_.E
 }
 
+func (t *TEMPLATE_ID) GetModelName() string {
+	return TEMPLATE_ID_MODEL_NAME
+}
+
 func (t *TEMPLATE_ID) SetModelName() {
 	t.Type_ = util.Some(TEMPLATE_ID_MODEL_NAME)
 }
 
-func (t *TEMPLATE_ID) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (t *TEMPLATE_ID) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if t.Type_.E && t.Type_.V != TEMPLATE_ID_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          TEMPLATE_ID_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", TEMPLATE_ID_MODEL_NAME, t.Type_.V),
@@ -41,7 +45,7 @@ func (t *TEMPLATE_ID) Validate(path string) []util.ValidationError {
 	// Validate value
 	if t.Value == "" {
 		attrPath = path + ".value"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          TEMPLATE_ID_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "value field cannot be empty",
@@ -49,5 +53,5 @@ func (t *TEMPLATE_ID) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return errors
+	return validateErr
 }

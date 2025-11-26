@@ -217,6 +217,9 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 	ehrStatus := h.EHRService.NewEHRStatus()
 	if len(c.Body()) > 0 {
 		if err := c.BodyParser(&ehrStatus); err != nil {
+			if err, ok := err.(util.ValidateError); ok {
+				return c.Status(fiber.StatusBadRequest).JSON(err)
+			}
 			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 		}
 	}
@@ -226,6 +229,9 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 	if err != nil {
 		if err == service.ErrEHRStatusAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("EHR Status with the given UID already exists")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create EHR", "error", err)
@@ -298,19 +304,12 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 	ehrStatus := h.EHRService.NewEHRStatus()
 	if len(c.Body()) > 0 {
 		if err := c.BodyParser(&ehrStatus); err != nil {
+			if err, ok := err.(util.ValidateError); ok {
+				return c.Status(fiber.StatusBadRequest).JSON(err)
+			}
+
 			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 		}
-	}
-
-	// Check if EHR with given ID already exists
-	_, err = h.EHRService.GetEHR(ctx, ehrID.String())
-	if err == nil {
-		return c.Status(fiber.StatusConflict).SendString("EHR with the given ID already exists")
-	}
-	if err != service.ErrEHRNotFound {
-		h.Logger.ErrorContext(ctx, "Failed to check if EHR exists", "error", err)
-		c.Status(http.StatusInternalServerError)
-		return nil
 	}
 
 	// Create EHR with specified ID and EHR_STATUS
@@ -321,6 +320,9 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 		}
 		if err == service.ErrEHRStatusAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("EHR Status with the given UID already exists")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create EHR", "error", err)
@@ -401,6 +403,10 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 
 	var requestEhrStatus openehr.EHR_STATUS
 	if err := c.BodyParser(&requestEhrStatus); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
@@ -435,6 +441,12 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 		}
 		if err == service.ErrEHRStatusVersionLowerOrEqualToCurrent {
 			return c.Status(fiber.StatusBadRequest).SendString("EHR Status version in request body must be incremented")
+		}
+		if err == service.ErrInvalidEHRStatusUIDMismatch {
+			return c.Status(fiber.StatusBadRequest).SendString("EHR Status UID HIER_OBJECT_ID in request body does not match current EHR Status UID")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to update EHR Status", "error", err)
@@ -627,6 +639,10 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 	// Parse new composition from request body
 	var requestComposition openehr.COMPOSITION
 	if err := c.BodyParser(&requestComposition); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
@@ -649,6 +665,9 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 		}
 		if err == service.ErrCompositionAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("Composition with the given UID already exists")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create Composition", "error", err)
@@ -743,12 +762,10 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 	// Check collision using If-Match header
 	currentComposition, err := h.EHRService.GetComposition(ctx, ehrID, strings.Split(uidBasedID, "::")[0])
 	if err != nil {
-		if err == service.ErrEHRNotFound {
-			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
-		}
 		if err == service.ErrCompositionNotFound {
-			return c.Status(fiber.StatusNotFound).SendString("Composition not found for the given UID")
+			return c.Status(fiber.StatusNotFound).SendString("Composition not found for the given EHR ID and UID")
 		}
+
 		h.Logger.ErrorContext(ctx, "Failed to get current Composition", "error", err)
 		c.Status(http.StatusInternalServerError)
 		return nil
@@ -762,11 +779,11 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 	// Parse updated composition from request body
 	var requestComposition openehr.COMPOSITION
 	if err := c.BodyParser(&requestComposition); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
-	}
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
 
-	if requestComposition.UID.V.Value == nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Composition UID must be provided for update")
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
 	// Proceed to update Composition
@@ -783,6 +800,15 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 		}
 		if err == service.ErrCompositionVersionLowerOrEqualToCurrent {
 			return c.Status(fiber.StatusBadRequest).SendString("Composition version in request body is lower or equal to the current version")
+		}
+		if err == service.ErrInvalidCompositionUIDMismatch {
+			return c.Status(fiber.StatusBadRequest).SendString("Composition UID HIER_OBJECT_ID in request body does not match current Composition UID")
+		}
+		if err == service.ErrCompositionUIDNotProvided {
+			return c.Status(fiber.StatusBadRequest).SendString("Composition UID must be provided in the request body for update")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to update Composition", "error", err)
@@ -1032,12 +1058,17 @@ func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
 
-	var requestDirectory util.Optional[openehr.FOLDER]
-	if len(c.Body()) > 0 {
-		if err := c.BodyParser(&requestDirectory.V); err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	if len(c.Body()) <= 0 {
+		return c.Status(fiber.StatusBadRequest).SendString("Request body is required")
+	}
+
+	var requestDirectory openehr.FOLDER
+	if err := c.BodyParser(&requestDirectory); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
 		}
-		requestDirectory.E = true
+
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
 	directory, err := h.EHRService.CreateDirectory(ctx, ehrID, requestDirectory)
@@ -1047,6 +1078,9 @@ func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 		}
 		if err == service.ErrDirectoryAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("Directory with the given UID already exists")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create Directory", "error", err)
@@ -1118,22 +1152,31 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 	}
 
 	// Parse updated directory from request body
-	var updatedDirectory openehr.FOLDER
-	if err := c.BodyParser(&updatedDirectory); err != nil {
+	var requestDirectory openehr.FOLDER
+	if err := c.BodyParser(&requestDirectory); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
-	// Check collision using If-Match header
-
-	if err := h.EHRService.UpdateDirectory(ctx, ehrID, updatedDirectory); err != nil {
-		if err == service.ErrEHRNotFound {
-			return c.Status(fiber.StatusNotFound).SendString("EHR not found for the given EHR ID")
-		}
+	directory, err := h.EHRService.UpdateDirectory(ctx, ehrID, requestDirectory)
+	if err != nil {
 		if err == service.ErrDirectoryNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Directory not found for the given EHR ID")
 		}
 		if err == service.ErrDirectoryAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("Directory with the given UID already exists")
+		}
+		if err == service.ErrDirectoryVersionLowerOrEqualToCurrent {
+			return c.Status(fiber.StatusBadRequest).SendString("Directory version in request body is lower or equal to the current version")
+		}
+		if err == service.ErrInvalidDirectoryUIDMismatch {
+			return c.Status(fiber.StatusBadRequest).SendString("Directory UID HIER_OBJECT_ID in request body does not match current Directory UID")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to update Directory", "error", err)
@@ -1142,7 +1185,7 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 	}
 
 	// Determine response
-	updatedDirectoryID := updatedDirectory.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
+	updatedDirectoryID := directory.UID.V.Value.(*openehr.OBJECT_VERSION_ID).Value
 	c.Set("ETag", "\""+updatedDirectoryID+"\"")
 	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+ehrID.String()+"/directory/"+updatedDirectoryID)
 
@@ -1151,12 +1194,12 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 		c.Status(fiber.StatusNoContent)
 		return nil
 	case ReturnTypeRepresentation:
-		return c.Status(fiber.StatusOK).JSON(updatedDirectory)
+		return c.Status(fiber.StatusOK).JSON(directory)
 	case ReturnTypeIdentifier:
 		return c.JSON(`{"uid":"` + updatedDirectoryID + `"}`)
 	default:
 		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.Status(fiber.StatusOK).JSON(updatedDirectory)
+		return c.Status(fiber.StatusOK).JSON(directory)
 	}
 }
 
@@ -1302,59 +1345,66 @@ func (h *Handler) GetFolderInDirectoryVersion(c *fiber.Ctx) error {
 }
 
 func (h *Handler) CreateContribution(c *fiber.Ctx) error {
-	ctx := c.Context()
+	c.Status(fiber.StatusNotImplemented)
+	return nil
 
-	c.Accepts("application/json")
+	// ctx := c.Context()
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid ehr_id parameter format")
-	}
+	// c.Accepts("application/json")
 
-	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
-	}
+	// ehrIDStr := c.Params("ehr_id")
+	// if ehrIDStr == "" {
+	// 	return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
+	// }
+	// ehrID, err := uuid.Parse(ehrIDStr)
+	// if err != nil {
+	// 	return c.Status(fiber.StatusBadRequest).SendString("Invalid ehr_id parameter format")
+	// }
 
-	// Parse new contribution from request body
-	var newContribution openehr.CONTRIBUTION
-	if err := c.BodyParser(&newContribution); err != nil {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
-	}
+	// // return type
+	// returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
+	// if !returnType.IsValid() {
+	// 	return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	// }
 
-	contribution, err := h.EHRService.CreateContribution(ctx, ehrID, newContribution)
-	if err != nil {
-		if err == service.ErrContributionAlreadyExists {
-			return c.Status(fiber.StatusConflict).SendString("Contribution with the given UID already exists")
-		}
+	// // Parse new contribution from request body
+	// var newContribution openehr.CONTRIBUTION
+	// if err := c.BodyParser(&newContribution); err != nil {
+	// 	if err, ok := err.(util.ValidateError); ok {
+	// 		return c.Status(fiber.StatusBadRequest).JSON(err)
+	// 	}
 
-		h.Logger.ErrorContext(ctx, "Failed to create Contribution", "error", err)
-		c.Status(http.StatusInternalServerError)
-		return nil
-	}
+	// 	return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	// }
 
-	// Determine response
-	contributionID := contribution.UID.Value
-	c.Set("ETag", "\""+contributionID+"\"")
-	c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+ehrID.String()+"/contribution/"+contributionID)
+	// contribution, err := h.EHRService.CreateContribution(ctx, ehrID, newContribution)
+	// if err != nil {
+	// 	if err == service.ErrContributionAlreadyExists {
+	// 		return c.Status(fiber.StatusConflict).SendString("Contribution with the given UID already exists")
+	// 	}
 
-	c.Status(fiber.StatusCreated)
-	switch returnType {
-	case ReturnTypeMinimal:
-		return nil
-	case ReturnTypeRepresentation:
-		return c.JSON(contribution)
-	case ReturnTypeIdentifier:
-		return c.JSON(`{"uid":"` + contributionID + `"}`)
-	default:
-		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.JSON(contribution)
-	}
+	// 	h.Logger.ErrorContext(ctx, "Failed to create Contribution", "error", err)
+	// 	c.Status(http.StatusInternalServerError)
+	// 	return nil
+	// }
+
+	// // Determine response
+	// contributionID := contribution.UID.Value
+	// c.Set("ETag", "\""+contributionID+"\"")
+	// c.Set("Location", h.Config.Host+"/openehr/v1/ehr/"+ehrID.String()+"/contribution/"+contributionID)
+
+	// c.Status(fiber.StatusCreated)
+	// switch returnType {
+	// case ReturnTypeMinimal:
+	// 	return nil
+	// case ReturnTypeRepresentation:
+	// 	return c.JSON(contribution)
+	// case ReturnTypeIdentifier:
+	// 	return c.JSON(`{"uid":"` + contributionID + `"}`)
+	// default:
+	// 	h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+	// 	return c.JSON(contribution)
+	// }
 }
 
 func (h *Handler) GetContribution(c *fiber.Ctx) error {
@@ -1435,18 +1485,21 @@ func (h *Handler) CreateAgent(c *fiber.Ctx) error {
 	// Parse new agent from request body
 	var newAgent openehr.AGENT
 	if err := c.BodyParser(&newAgent); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Agent", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
-	}
-
-	if errs := newAgent.Validate("$"); len(errs) > 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(errs)
 	}
 
 	agent, err := h.DemographicService.CreateAgent(ctx, newAgent)
 	if err != nil {
 		if err == service.ErrAgentAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("Agent with the given UID already exists")
+		}
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create Agent", "error", err)
@@ -1483,7 +1536,28 @@ func (h *Handler) GetAgent(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
-	agent, err := h.DemographicService.GetAgent(ctx, uidBasedID)
+	if strings.Count(uidBasedID, "::") == 3 {
+		// Is version id
+		agent, err := h.DemographicService.GetAgentAtVersion(ctx, uidBasedID)
+		if err != nil {
+			if err == service.ErrAgentNotFound {
+				return c.Status(fiber.StatusNotFound).SendString("Agent not found for the given agent ID")
+			}
+			h.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
+			c.Status(http.StatusInternalServerError)
+			return nil
+		}
+
+		return c.Status(fiber.StatusOK).JSON(agent)
+	}
+
+	// Is versioned party id
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	agent, err := h.DemographicService.GetCurrentAgentVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrAgentNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Agent not found for the given agent ID")
@@ -1501,8 +1575,8 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
+	versionID := c.Params("uid_based_id")
+	if versionID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
@@ -1518,8 +1592,12 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 	}
 
 	// Ensure Agent exists before update
-	versionedObjectID := strings.Split(uidBasedID, "::")[0]
-	currentAgent, err := h.DemographicService.GetAgent(ctx, versionedObjectID)
+	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	currentAgent, err := h.DemographicService.GetCurrentAgentVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrAgentNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Agent not found for the given agent ID")
@@ -1537,21 +1615,28 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 	// Parse updated agent from request body
 	var requestAgent openehr.AGENT
 	if err := c.BodyParser(&requestAgent); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Agent", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
 	// Proceed to update Agent
-	updatedAgent, err := h.DemographicService.UpdateAgent(ctx, requestAgent)
+	updatedAgent, err := h.DemographicService.UpdateAgent(ctx, versionedPartyID, requestAgent)
 	if err != nil {
 		if err == service.ErrAgentNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Agent not found for the given agent ID")
 		}
-		if err == service.ErrAgentAlreadyExists {
-			return c.Status(fiber.StatusConflict).SendString("Agent with the given UID already exists")
-		}
 		if err == service.ErrAgentVersionLowerOrEqualToCurrent {
 			return c.Status(fiber.StatusConflict).SendString("Agent version is lower than or equal to the current version")
+		}
+		if err == service.ErrInvalidAgentUIDMismatch {
+			return c.Status(fiber.StatusBadRequest).SendString("Agent UID HIER_OBJECT_ID in request body does not match current Agent UID")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to update Agent", "error", err)
@@ -1586,13 +1671,17 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
-	if !strings.Contains(uidBasedID, "::") {
+	if strings.Count(uidBasedID, "::") != 2 {
 		return c.Status(fiber.StatusBadRequest).SendString("Cannot delete Agent by versioned object ID. Please provide the object version ID.")
 	}
 
 	// Check existence before deletion
-	versionedObjectID := strings.Split(uidBasedID, "::")[0]
-	currentAgent, err := h.DemographicService.GetAgent(ctx, versionedObjectID)
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	currentAgent, err := h.DemographicService.GetCurrentAgentVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrAgentNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Agent not found for the given agent ID")
@@ -1628,7 +1717,7 @@ func (h *Handler) CreateGroup(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
-	// Parse return type from Prefer header
+	// return type
 	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
@@ -1637,18 +1726,21 @@ func (h *Handler) CreateGroup(c *fiber.Ctx) error {
 	// Parse new group from request body
 	var newGroup openehr.GROUP
 	if err := c.BodyParser(&newGroup); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Group", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
-	}
-
-	if errs := newGroup.Validate("$"); len(errs) > 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(errs)
 	}
 
 	group, err := h.DemographicService.CreateGroup(ctx, newGroup)
 	if err != nil {
 		if err == service.ErrGroupAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("Group with the given UID already exists")
+		}
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create Group", "error", err)
@@ -1685,7 +1777,28 @@ func (h *Handler) GetGroup(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
-	group, err := h.DemographicService.GetGroup(ctx, uidBasedID)
+	if strings.Count(uidBasedID, "::") == 3 {
+		// Is version id
+		group, err := h.DemographicService.GetGroupAtVersion(ctx, uidBasedID)
+		if err != nil {
+			if err == service.ErrGroupNotFound {
+				return c.Status(fiber.StatusNotFound).SendString("Group not found for the given group ID")
+			}
+			h.Logger.ErrorContext(ctx, "Failed to get Group by ID", "error", err)
+			c.Status(http.StatusInternalServerError)
+			return nil
+		}
+
+		return c.Status(fiber.StatusOK).JSON(group)
+
+	}
+	// Is versioned party id
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	group, err := h.DemographicService.GetCurrentGroupVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrGroupNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Group not found for the given group ID")
@@ -1703,8 +1816,8 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
+	versionID := c.Params("uid_based_id")
+	if versionID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
@@ -1713,21 +1826,22 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("If-Match header is required")
 	}
 
-	// Parse return type from Prefer header
+	// return type
 	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
 	if !returnType.IsValid() {
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
 	}
 
-	// Ensure Group exists before update
-	versionedObjectID := strings.Split(uidBasedID, "::")[0]
-	currentGroup, err := h.DemographicService.GetGroup(ctx, versionedObjectID)
+	// Ensure Agent exists before update
+	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	currentGroup, err := h.DemographicService.GetCurrentGroupVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrGroupNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Group not found for the given group ID")
-		}
-		if err == service.ErrGroupVersionLowerOrEqualToCurrent {
-			return c.Status(fiber.StatusConflict).SendString("Group version is lower than or equal to the current version")
 		}
 		h.Logger.ErrorContext(ctx, "Failed to get current Group by ID", "error", err)
 		c.Status(http.StatusInternalServerError)
@@ -1742,21 +1856,31 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 	// Parse updated group from request body
 	var requestGroup openehr.GROUP
 	if err := c.BodyParser(&requestGroup); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Group", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
 	// Proceed to update Group
-	updatedGroup, err := h.DemographicService.UpdateGroup(ctx, requestGroup)
+	updatedGroup, err := h.DemographicService.UpdateGroup(ctx, versionedPartyID, requestGroup)
 	if err != nil {
 		if err == service.ErrGroupNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Group not found for the given group ID")
 		}
-		if err == service.ErrGroupAlreadyExists {
-			return c.Status(fiber.StatusConflict).SendString("Group with the given UID already exists")
+		if err == service.ErrGroupVersionLowerOrEqualToCurrent {
+			return c.Status(fiber.StatusConflict).SendString("Group version is lower than or equal to the current version")
+		}
+		if err == service.ErrInvalidGroupUIDMismatch {
+			return c.Status(fiber.StatusBadRequest).SendString("Group UID HIER_OBJECT_ID in request body does not match current Group UID")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to update Group", "error", err)
+		h.Logger.ErrorContext(ctx, "Failed to update Agent", "error", err)
 		c.Status(http.StatusInternalServerError)
 		return nil
 	}
@@ -1768,14 +1892,15 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 
 	switch returnType {
 	case ReturnTypeMinimal:
+		c.Status(fiber.StatusNoContent)
 		return nil
 	case ReturnTypeRepresentation:
-		return c.JSON(updatedGroup)
+		return c.Status(fiber.StatusOK).JSON(updatedGroup)
 	case ReturnTypeIdentifier:
 		return c.JSON(`{"uid":"` + updatedGroupID + `"}`)
 	default:
 		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.JSON(updatedGroup)
+		return c.Status(fiber.StatusOK).JSON(updatedGroup)
 	}
 }
 
@@ -1792,8 +1917,12 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 	}
 
 	// Check existence before deletion
-	versionedObjectID := strings.Split(uidBasedID, "::")[0]
-	currentGroup, err := h.DemographicService.GetGroup(ctx, versionedObjectID)
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	currentGroup, err := h.DemographicService.GetCurrentGroupVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrGroupNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Group not found for the given group ID")
@@ -1838,18 +1967,21 @@ func (h *Handler) CreatePerson(c *fiber.Ctx) error {
 	// Parse new person from request body
 	var newPerson openehr.PERSON
 	if err := c.BodyParser(&newPerson); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Person", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
-	}
-
-	if errs := newPerson.Validate("$"); len(errs) > 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(errs)
 	}
 
 	person, err := h.DemographicService.CreatePerson(ctx, newPerson)
 	if err != nil {
 		if err == service.ErrPersonAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("Person with the given UID already exists")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create Person", "error", err)
@@ -1885,12 +2017,32 @@ func (h *Handler) GetPerson(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
-	person, err := h.DemographicService.GetPerson(ctx, uidBasedID)
+	if strings.Count(uidBasedID, "::") == 3 {
+		// Is version id
+		person, err := h.DemographicService.GetPersonAtVersion(ctx, uidBasedID)
+		if err != nil {
+			if err == service.ErrPersonNotFound {
+				return c.Status(fiber.StatusNotFound).SendString("Person not found for the given person ID")
+			}
+			h.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
+			c.Status(http.StatusInternalServerError)
+			return nil
+		}
+		return c.Status(fiber.StatusOK).JSON(person)
+	}
+
+	// Is versioned party id
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	person, err := h.DemographicService.GetCurrentPersonVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrPersonNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Person not found for the given person ID")
 		}
-		h.Logger.ErrorContext(ctx, "Failed to get Person by ID", "error", err)
+		h.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
 		c.Status(http.StatusInternalServerError)
 		return nil
 	}
@@ -1903,8 +2055,8 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
+	versionID := c.Params("uid_based_id")
+	if versionID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
@@ -1920,8 +2072,12 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 	}
 
 	// Ensure Person exists before update
-	versionedObjectID := strings.Split(uidBasedID, "::")[0]
-	currentPerson, err := h.DemographicService.GetPerson(ctx, versionedObjectID)
+	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	currentPerson, err := h.DemographicService.GetCurrentPersonVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrPersonNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Person not found for the given person ID")
@@ -1939,21 +2095,28 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 	// Parse updated person from request body
 	var requestPerson openehr.PERSON
 	if err := c.BodyParser(&requestPerson); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Person", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
 	// Proceed to update Person
-	updatePerson, err := h.DemographicService.UpdatePerson(ctx, requestPerson)
+	updatePerson, err := h.DemographicService.UpdatePerson(ctx, versionedPartyID, requestPerson)
 	if err != nil {
 		if err == service.ErrPersonNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Person not found for the given person ID")
 		}
-		if err == service.ErrPersonAlreadyExists {
-			return c.Status(fiber.StatusConflict).SendString("Person with the given UID already exists")
-		}
 		if err == service.ErrPersonVersionLowerOrEqualToCurrent {
 			return c.Status(fiber.StatusConflict).SendString("Person version is lower than or equal to the current version")
+		}
+		if err == service.ErrInvalidPersonUIDMismatch {
+			return c.Status(fiber.StatusBadRequest).SendString("Person UID HIER_OBJECT_ID in request body does not match current Person UID")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to update Person", "error", err)
@@ -1987,13 +2150,17 @@ func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
-	if !strings.Contains(uidBasedID, "::") {
+	if strings.Count(uidBasedID, "::") != 3 {
 		return c.Status(fiber.StatusBadRequest).SendString("Cannot delete Person by versioned object ID. Please provide the object version ID.")
 	}
 
 	// Check existence before deletion
-	versionedObjectID := strings.Split(uidBasedID, "::")[0]
-	currentPerson, err := h.DemographicService.GetPerson(ctx, versionedObjectID)
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	currentPerson, err := h.DemographicService.GetCurrentPersonVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrPersonNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Person not found for the given person ID")
@@ -2038,18 +2205,21 @@ func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 	// Parse new organisation from request body
 	var newOrganisation openehr.ORGANISATION
 	if err := c.BodyParser(&newOrganisation); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Organisation", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
-	}
-
-	if errs := newOrganisation.Validate("$"); len(errs) > 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(errs)
 	}
 
 	organisation, err := h.DemographicService.CreateOrganisation(ctx, newOrganisation)
 	if err != nil {
 		if err == service.ErrOrganisationAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("Organisation with the given UID already exists")
+		}
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create Organisation", "error", err)
@@ -2086,7 +2256,28 @@ func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
-	organisation, err := h.DemographicService.GetOrganisation(ctx, uidBasedID)
+	if strings.Count(uidBasedID, "::") == 3 {
+		// Is version id
+		organisation, err := h.DemographicService.GetOrganisationAtVersion(ctx, uidBasedID)
+		if err != nil {
+			if err == service.ErrOrganisationNotFound {
+				return c.Status(fiber.StatusNotFound).SendString("Organisation not found for the given organisation ID")
+			}
+			h.Logger.ErrorContext(ctx, "Failed to get Organisation by ID", "error", err)
+			c.Status(http.StatusInternalServerError)
+			return nil
+		}
+
+		return c.Status(fiber.StatusOK).JSON(organisation)
+	}
+
+	// Is versioned party id
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	organisation, err := h.DemographicService.GetCurrentOrganisationVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrOrganisationNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Organisation not found for the given organisation ID")
@@ -2104,8 +2295,8 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
+	versionID := c.Params("uid_based_id")
+	if versionID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
@@ -2121,8 +2312,12 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 	}
 
 	// Ensure Organisation exists before update
-	versionedObjectID := strings.Split(uidBasedID, "::")[0]
-	currentOrganisation, err := h.DemographicService.GetOrganisation(ctx, versionedObjectID)
+	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	currentOrganisation, err := h.DemographicService.GetCurrentOrganisationVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrOrganisationNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Organisation not found for the given organisation ID")
@@ -2140,21 +2335,28 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 	// Parse updated organisation from request body
 	var requestOrganisation openehr.ORGANISATION
 	if err := c.BodyParser(&requestOrganisation); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Organisation", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
 	// Proceed to update Organisation
-	organisation, err := h.DemographicService.UpdateOrganisation(ctx, requestOrganisation)
+	organisation, err := h.DemographicService.UpdateOrganisation(ctx, versionedPartyID, requestOrganisation)
 	if err != nil {
 		if err == service.ErrOrganisationNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Organisation not found for the given organisation ID")
 		}
-		if err == service.ErrOrganisationAlreadyExists {
-			return c.Status(fiber.StatusConflict).SendString("Organisation with the given UID already exists")
-		}
 		if err == service.ErrOrganisationVersionLowerOrEqualToCurrent {
 			return c.Status(fiber.StatusConflict).SendString("Organisation version is lower than or equal to the current version")
+		}
+		if err == service.ErrInvalidOrganisationUIDMismatch {
+			return c.Status(fiber.StatusConflict).SendString("Organisation with the given UID already exists")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to update Organisation", "error", err)
@@ -2188,13 +2390,17 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
-	if !strings.Contains(uidBasedID, "::") {
+	if strings.Count(uidBasedID, "::") != 2 {
 		return c.Status(fiber.StatusBadRequest).SendString("Cannot delete Organisation by versioned object ID. Please provide the object version ID.")
 	}
 
 	// Check existence before deletion
-	versionedObjectID := strings.Split(uidBasedID, "::")[0]
-	currentOrganisation, err := h.DemographicService.GetOrganisation(ctx, versionedObjectID)
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	currentOrganisation, err := h.DemographicService.GetCurrentOrganisationVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrOrganisationNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Organisation not found for the given organisation ID")
@@ -2239,18 +2445,21 @@ func (h *Handler) CreateRole(c *fiber.Ctx) error {
 	// Parse new role from request body
 	var newRole openehr.ROLE
 	if err := c.BodyParser(&newRole); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Role", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
-	}
-
-	if errs := newRole.Validate("$"); len(errs) > 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(errs)
 	}
 
 	role, err := h.DemographicService.CreateRole(ctx, newRole)
 	if err != nil {
 		if err == service.ErrRoleAlreadyExists {
 			return c.Status(fiber.StatusConflict).SendString("Role with the given UID already exists")
+		}
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create Role", "error", err)
@@ -2287,7 +2496,28 @@ func (h *Handler) GetRole(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
-	role, err := h.DemographicService.GetRole(ctx, uidBasedID)
+	if strings.Count(uidBasedID, "::") == 3 {
+		// Is version id
+		role, err := h.DemographicService.GetRoleAtVersion(ctx, uidBasedID)
+		if err != nil {
+			if err == service.ErrRoleNotFound {
+				return c.Status(fiber.StatusNotFound).SendString("Role not found for the given role ID")
+			}
+			h.Logger.ErrorContext(ctx, "Failed to get Role by ID", "error", err)
+			c.Status(http.StatusInternalServerError)
+			return nil
+		}
+
+		return c.Status(fiber.StatusOK).JSON(role)
+	}
+
+	// Is versioned party id
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	role, err := h.DemographicService.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrRoleNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Role not found for the given role ID")
@@ -2305,8 +2535,8 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 
 	c.Accepts("application/json")
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
+	versionID := c.Params("uid_based_id")
+	if versionID == "" {
 		return c.Status(fiber.StatusBadRequest).SendString("uid_based_id parameter is required")
 	}
 
@@ -2322,8 +2552,12 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 	}
 
 	// Ensure Role exists before update
-	versionedObjectID := strings.Split(uidBasedID, "::")[0]
-	currentRole, err := h.DemographicService.GetRole(ctx, versionedObjectID)
+	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	currentRole, err := h.DemographicService.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrRoleNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Role not found for the given role ID")
@@ -2341,18 +2575,28 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 	// Parse updated role from request body
 	var requestRole openehr.ROLE
 	if err := c.BodyParser(&requestRole); err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(err)
+		}
+
 		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Role", "error", err)
 		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
 	}
 
 	// Proceed to update Role
-	updatedRole, err := h.DemographicService.UpdateRole(ctx, requestRole)
+	updatedRole, err := h.DemographicService.UpdateRole(ctx, versionedPartyID, requestRole)
 	if err != nil {
 		if err == service.ErrRoleNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Role not found for the given role ID")
 		}
-		if err == service.ErrRoleAlreadyExists {
-			return c.Status(fiber.StatusConflict).SendString("Role with the given UID already exists")
+		if err == service.ErrRoleVersionLowerOrEqualToCurrent {
+			return c.Status(fiber.StatusConflict).SendString("Role version is lower than or equal to the current version")
+		}
+		if err == service.ErrInvalidRoleUIDMismatch {
+			return c.Status(fiber.StatusBadRequest).SendString("Role UID HIER_OBJECT_ID in request body does not match current Role UID")
+		}
+		if validationErrs, ok := err.(util.ValidateError); ok {
+			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to update Role", "error", err)
@@ -2391,8 +2635,12 @@ func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 	}
 
 	// Check existence before deletion
-	versionedObjectID := strings.Split(uidBasedID, "::")[0]
-	currentRole, err := h.DemographicService.GetRole(ctx, versionedObjectID)
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).SendString("Invalid uid_based_id format")
+	}
+
+	currentRole, err := h.DemographicService.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == service.ErrRoleNotFound {
 			return c.Status(fiber.StatusNotFound).SendString("Role not found for the given role ID")
@@ -2556,51 +2804,54 @@ func (h *Handler) GetVersionedPartyVersion(c *fiber.Ctx) error {
 }
 
 func (h *Handler) CreateDemographicContribution(c *fiber.Ctx) error {
-	ctx := c.Context()
+	return c.Status(fiber.StatusNotImplemented).SendString("Create Demographic Contribution not implemented yet")
 
-	c.Accepts("application/json")
+	// ctx := c.Context()
 
-	// Parse return type from Prefer header
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
-	}
+	// c.Accepts("application/json")
 
-	// Parse new contribution from request body
-	var newContribution openehr.CONTRIBUTION
-	if err := c.BodyParser(&newContribution); err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Demographic Contribution", "error", err)
-		return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
-	}
+	// // Parse return type from Prefer header
+	// returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
+	// if !returnType.IsValid() {
+	// 	return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
+	// }
 
-	if errs := newContribution.Validate("$"); len(errs) > 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(errs)
-	}
+	// // Parse new contribution from request body
+	// var newContribution openehr.CONTRIBUTION
+	// if err := c.BodyParser(&newContribution); err != nil {
+	// 	h.Logger.ErrorContext(ctx, "Failed to parse request body for new Demographic Contribution", "error", err)
+	// 	return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
+	// }
 
-	contribution, err := h.DemographicService.CreateContribution(ctx, newContribution)
-	if err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to create Demographic Contribution", "error", err)
-		c.Status(http.StatusInternalServerError)
-		return nil
-	}
+	// validateErr := newContribution.Validate("$")
+	// if len(validateErr.Errs) > 0 {
+	// 	return c.Status(fiber.StatusBadRequest).JSON(validateErr)
+	// }
 
-	// Determine response
-	contributionID := contribution.UID.Value
-	c.Set("ETag", "\""+contributionID+"\"")
-	c.Set("Location", h.Config.Host+"/openehr/v1/demographic/contribution/"+contributionID)
+	// contribution, err := h.DemographicService.CreateContribution(ctx, newContribution)
+	// if err != nil {
+	// 	h.Logger.ErrorContext(ctx, "Failed to create Demographic Contribution", "error", err)
+	// 	c.Status(http.StatusInternalServerError)
+	// 	return nil
+	// }
 
-	c.Status(fiber.StatusCreated)
-	switch returnType {
-	case ReturnTypeMinimal:
-		return nil
-	case ReturnTypeRepresentation:
-		return c.JSON(contribution)
-	case ReturnTypeIdentifier:
-		return c.JSON(`{"uid":"` + contributionID + `"}`)
-	default:
-		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.JSON(contribution)
-	}
+	// // Determine response
+	// contributionID := contribution.UID.Value
+	// c.Set("ETag", "\""+contributionID+"\"")
+	// c.Set("Location", h.Config.Host+"/openehr/v1/demographic/contribution/"+contributionID)
+
+	// c.Status(fiber.StatusCreated)
+	// switch returnType {
+	// case ReturnTypeMinimal:
+	// 	return nil
+	// case ReturnTypeRepresentation:
+	// 	return c.JSON(contribution)
+	// case ReturnTypeIdentifier:
+	// 	return c.JSON(`{"uid":"` + contributionID + `"}`)
+	// default:
+	// 	h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+	// 	return c.JSON(contribution)
+	// }
 }
 
 func (h *Handler) GetDemographicContribution(c *fiber.Ctx) error {

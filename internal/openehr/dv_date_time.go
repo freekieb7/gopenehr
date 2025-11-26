@@ -45,14 +45,14 @@ func (d *DV_DATE_TIME) SetModelName() {
 	}
 }
 
-func (d *DV_DATE_TIME) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (d *DV_DATE_TIME) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if d.Type_.E && d.Type_.V != DV_DATE_TIME_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_DATE_TIME_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_DATE_TIME_MODEL_NAME, d.Type_.V),
@@ -63,20 +63,20 @@ func (d *DV_DATE_TIME) Validate(path string) []util.ValidationError {
 	// Validate normal_status
 	if d.NormalStatus.E {
 		attrPath = path + ".normal_status"
-		errs = append(errs, d.NormalStatus.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.NormalStatus.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate normal_range
 	if d.NormalRange.E {
 		attrPath = path + ".normal_range"
-		errs = append(errs, d.NormalRange.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.NormalRange.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate other_reference_ranges
 	if d.OtherReferenceRanges.E {
 		for i := range d.OtherReferenceRanges.V {
 			itemPath := fmt.Sprintf("%s.other_reference_ranges[%d]", path, i)
-			errs = append(errs, d.OtherReferenceRanges.V[i].Validate(itemPath)...)
+			validateErr.Errs = append(validateErr.Errs, d.OtherReferenceRanges.V[i].Validate(itemPath).Errs...)
 		}
 	}
 
@@ -84,7 +84,7 @@ func (d *DV_DATE_TIME) Validate(path string) []util.ValidationError {
 	if d.MagnitudeStatus.E {
 		attrPath = path + ".magnitude_status"
 		if !slices.Contains([]string{"<", ">", "<=", ">=", "=", "~"}, d.MagnitudeStatus.V) {
-			errs = append(errs, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_DATE_TIME_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid %s magnitude_status field: %s", DV_DATE_TIME_MODEL_NAME, d.MagnitudeStatus.V),
@@ -96,19 +96,19 @@ func (d *DV_DATE_TIME) Validate(path string) []util.ValidationError {
 	// Validate accuracy
 	if d.Accuracy.E {
 		attrPath = path + ".accuracy"
-		errs = append(errs, d.Accuracy.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.Accuracy.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate value
 	attrPath = path + ".value"
 	if d.Value == "" {
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:   DV_DATE_TIME_MODEL_NAME,
 			Path:    attrPath,
 			Message: fmt.Sprintf("%s value field is required", DV_DATE_TIME_MODEL_NAME),
 		})
 	} else if !strings.HasSuffix(d.Value, "Z") {
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_DATE_TIME_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s value field: %s", DV_DATE_TIME_MODEL_NAME, d.Value),
@@ -116,7 +116,7 @@ func (d *DV_DATE_TIME) Validate(path string) []util.ValidationError {
 		})
 	} else {
 		if _, err := time.Parse(time.RFC3339Nano, d.Value); err != nil {
-			errs = append(errs, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_DATE_TIME_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid %s value field: %s", DV_DATE_TIME_MODEL_NAME, d.Value),
@@ -125,5 +125,5 @@ func (d *DV_DATE_TIME) Validate(path string) []util.ValidationError {
 		}
 	}
 
-	return errs
+	return validateErr
 }

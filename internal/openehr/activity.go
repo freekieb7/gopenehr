@@ -50,14 +50,14 @@ func (a *ACTIVITY) SetModelName() {
 	a.Description.SetModelName()
 }
 
-func (a *ACTIVITY) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (a *ACTIVITY) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if a.Type_.E && a.Type_.V != ACTIVITY_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ACTIVITY_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + ACTIVITY_MODEL_NAME,
@@ -67,43 +67,43 @@ func (a *ACTIVITY) Validate(path string) []util.ValidationError {
 
 	// Validate Name
 	attrPath = path + ".name"
-	errs = append(errs, a.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Name.Validate(attrPath).Errs...)
 
 	// Validate UID
 	if a.UID.E {
 		attrPath = path + ".uid"
-		errs = append(errs, a.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Links
 	if a.Links.E {
 		for i := range a.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
-			errs = append(errs, a.Links.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, a.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate ArchetypeDetails
 	if a.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errs = append(errs, a.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate FeederAudit
 	if a.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errs = append(errs, a.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Timing
 	if a.Timing.E {
 		attrPath = path + ".timing"
-		errs = append(errs, a.Timing.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.Timing.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Description
 	attrPath = path + ".description"
-	errs = append(errs, a.Description.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Description.Validate(attrPath).Errs...)
 
-	return errs
+	return validateErr
 }

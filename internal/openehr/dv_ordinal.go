@@ -33,14 +33,14 @@ func (d *DV_ORDINAL) SetModelName() {
 	d.Symbol.SetModelName()
 }
 
-func (d *DV_ORDINAL) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (d *DV_ORDINAL) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if d.Type_.E && d.Type_.V != DV_ORDINAL_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_ORDINAL_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -51,24 +51,24 @@ func (d *DV_ORDINAL) Validate(path string) []util.ValidationError {
 	// Validate normal_status
 	if d.NormalStatus.E {
 		attrPath = path + ".normal_status"
-		errors = append(errors, d.NormalStatus.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.NormalStatus.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate normal_range
 	if d.NormalRange.E {
 		attrPath = path + ".normal_range"
-		errors = append(errors, d.NormalRange.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.NormalRange.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate other_reference_ranges
 	if d.OtherReferenceRanges.E {
 		attrPath = path + ".other_reference_ranges"
-		errors = append(errors, d.OtherReferenceRanges.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.OtherReferenceRanges.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate symbol
 	attrPath = path + ".symbol"
-	errors = append(errors, d.Symbol.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, d.Symbol.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

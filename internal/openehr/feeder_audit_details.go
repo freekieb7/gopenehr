@@ -34,14 +34,14 @@ func (f *FEEDER_AUDIT_DETAILS) SetModelName() {
 	}
 }
 
-func (f *FEEDER_AUDIT_DETAILS) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (f *FEEDER_AUDIT_DETAILS) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if f.Type_.E && f.Type_.V != FEEDER_AUDIT_DETAILS_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          FEEDER_AUDIT_DETAILS_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -52,7 +52,7 @@ func (f *FEEDER_AUDIT_DETAILS) Validate(path string) []util.ValidationError {
 	// Validate system_id
 	attrPath = path + ".system_id"
 	if f.SystemID == "" {
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          FEEDER_AUDIT_DETAILS_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "system_id field cannot be empty",
@@ -63,32 +63,32 @@ func (f *FEEDER_AUDIT_DETAILS) Validate(path string) []util.ValidationError {
 	// Validate location
 	if f.Location.E {
 		attrPath = path + ".location"
-		errors = append(errors, f.Location.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, f.Location.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate subject
 	if f.Subject.E {
 		attrPath = path + ".subject"
-		errors = append(errors, f.Subject.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, f.Subject.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate provider
 	if f.Provider.E {
 		attrPath = path + ".provider"
-		errors = append(errors, f.Provider.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, f.Provider.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate time
 	if f.Time.E {
 		attrPath = path + ".time"
-		errors = append(errors, f.Time.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, f.Time.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate other_details
 	if f.OtherDetails.E {
 		attrPath = path + ".other_details"
-		errors = append(errors, f.OtherDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, f.OtherDetails.V.Validate(attrPath).Errs...)
 	}
 
-	return errors
+	return validateErr
 }

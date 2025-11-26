@@ -41,14 +41,14 @@ func (d *DV_DURATION) SetModelName() {
 	}
 }
 
-func (d *DV_DURATION) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (d *DV_DURATION) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if d.Type_.E && d.Type_.V != DV_DURATION_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_DURATION_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_DURATION_MODEL_NAME, d.Type_.V),
@@ -59,20 +59,20 @@ func (d *DV_DURATION) Validate(path string) []util.ValidationError {
 	// Validate normal_status
 	if d.NormalStatus.E {
 		attrPath = path + ".normal_status"
-		errors = append(errors, d.NormalStatus.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.NormalStatus.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate normal_range
 	if d.NormalRange.E {
 		attrPath = path + ".normal_range"
-		errors = append(errors, d.NormalRange.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.NormalRange.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate other_reference_ranges
 	if d.OtherReferenceRanges.E {
 		for i := range d.OtherReferenceRanges.V {
 			itemPath := fmt.Sprintf("%s.other_reference_ranges[%d]", path, i)
-			errors = append(errors, d.OtherReferenceRanges.V[i].Validate(itemPath)...)
+			validateErr.Errs = append(validateErr.Errs, d.OtherReferenceRanges.V[i].Validate(itemPath).Errs...)
 		}
 	}
 
@@ -82,7 +82,7 @@ func (d *DV_DURATION) Validate(path string) []util.ValidationError {
 		validValues := []string{"<", ">", "<=", ">=", "=", "~"}
 		isValid := slices.Contains(validValues, d.MagnitudeStatus.V)
 		if !isValid {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_DURATION_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid %s magnitude_status field: %s", DV_DURATION_MODEL_NAME, d.MagnitudeStatus.V),
@@ -96,7 +96,7 @@ func (d *DV_DURATION) Validate(path string) []util.ValidationError {
 		attrPath = path + ".accuracy"
 		value := d.Accuracy.V
 		if value < 0 {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_DURATION_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid %s accuracy field: %f", DV_DURATION_MODEL_NAME, value),
@@ -105,5 +105,5 @@ func (d *DV_DURATION) Validate(path string) []util.ValidationError {
 		}
 	}
 
-	return errors
+	return validateErr
 }

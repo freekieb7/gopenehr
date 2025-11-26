@@ -23,18 +23,22 @@ func (o *OBJECT_VERSION_ID) HasModelName() bool {
 	return o.Type_.E
 }
 
+func (o *OBJECT_VERSION_ID) GetModelName() string {
+	return OBJECT_VERSION_ID_MODEL_NAME
+}
+
 func (o *OBJECT_VERSION_ID) SetModelName() {
 	o.Type_ = util.Some(OBJECT_VERSION_ID_MODEL_NAME)
 }
 
-func (o *OBJECT_VERSION_ID) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (o *OBJECT_VERSION_ID) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if o.Type_.E && o.Type_.V != OBJECT_VERSION_ID_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          OBJECT_VERSION_ID_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", OBJECT_VERSION_ID_MODEL_NAME, o.Type_.V),
@@ -45,7 +49,7 @@ func (o *OBJECT_VERSION_ID) Validate(path string) []util.ValidationError {
 	// Validate value
 	attrPath = path + ".value"
 	if o.Value == "" {
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          OBJECT_VERSION_ID_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "value field cannot be empty",
@@ -55,7 +59,7 @@ func (o *OBJECT_VERSION_ID) Validate(path string) []util.ValidationError {
 		// lexical form: object_id '::' creating_system_id '::' version_tree_id.
 		parts := strings.Split(o.Value, "::")
 		if len(parts) != 3 {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          OBJECT_VERSION_ID_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid value format: %s", o.Value),
@@ -66,7 +70,7 @@ func (o *OBJECT_VERSION_ID) Validate(path string) []util.ValidationError {
 		// First part UID
 		uid := parts[0]
 		if err := util.ValidateUID(uid); err != nil {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          OBJECT_VERSION_ID_MODEL_NAME,
 				Path:           attrPath + ".object_id",
 				Message:        fmt.Sprintf("invalid object_id format: %s", uid),
@@ -77,7 +81,7 @@ func (o *OBJECT_VERSION_ID) Validate(path string) []util.ValidationError {
 		// Second part creating_system_id
 		creatingSystemID := parts[1]
 		if creatingSystemID == "" {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          OBJECT_VERSION_ID_MODEL_NAME,
 				Path:           attrPath + ".creating_system_id",
 				Message:        "creating_system_id cannot be empty",
@@ -89,14 +93,14 @@ func (o *OBJECT_VERSION_ID) Validate(path string) []util.ValidationError {
 		// Lexical form: trunk_version [ '.' branch_number '.' branch_version ]
 		versionTreeID := parts[2]
 		if versionTreeID == "" {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          OBJECT_VERSION_ID_MODEL_NAME,
 				Path:           attrPath + ".version_tree_id",
 				Message:        "version_tree_id cannot be empty",
 				Recommendation: "Ensure version_tree_id is not empty",
 			})
 		} else if !util.VersionTreeIDRegex.MatchString(versionTreeID) {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          OBJECT_VERSION_ID_MODEL_NAME,
 				Path:           attrPath + ".version_tree_id",
 				Message:        fmt.Sprintf("invalid version_tree_id format: %s", versionTreeID),
@@ -105,7 +109,7 @@ func (o *OBJECT_VERSION_ID) Validate(path string) []util.ValidationError {
 		}
 	}
 
-	return errors
+	return validateErr
 }
 
 func (o OBJECT_VERSION_ID) UID() string {

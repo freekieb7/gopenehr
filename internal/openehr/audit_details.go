@@ -26,14 +26,14 @@ func (a *AUDIT_DETAILS) SetModelName() {
 	a.Committer.SetModelName()
 }
 
-func (a *AUDIT_DETAILS) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (a *AUDIT_DETAILS) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if a.Type_.E && a.Type_.V != AUDIT_DETAILS_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          AUDIT_DETAILS_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + AUDIT_DETAILS_MODEL_NAME,
@@ -44,7 +44,7 @@ func (a *AUDIT_DETAILS) Validate(path string) []util.ValidationError {
 	// Validate system_id
 	attrPath = path + ".system_id"
 	if a.SystemID == "" {
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          AUDIT_DETAILS_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "system_id cannot be empty",
@@ -54,12 +54,12 @@ func (a *AUDIT_DETAILS) Validate(path string) []util.ValidationError {
 
 	// Validate time_committed
 	attrPath = path + ".time_committed"
-	errs = append(errs, a.TimeCommitted.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.TimeCommitted.Validate(attrPath).Errs...)
 
 	// Validate change_type
 	attrPath = path + ".change_type"
 	if !terminology.IsValidAuditChangeTypeCode(a.ChangeType.DefiningCode.CodeString) {
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          AUDIT_DETAILS_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "Invalid change_type code",
@@ -67,7 +67,7 @@ func (a *AUDIT_DETAILS) Validate(path string) []util.ValidationError {
 		})
 	}
 	if terminology.GetAuditChangeTypeName(a.ChangeType.DefiningCode.CodeString) != a.ChangeType.Value {
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          AUDIT_DETAILS_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "change_type value does not match code",
@@ -75,11 +75,10 @@ func (a *AUDIT_DETAILS) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	errs = append(errs, a.ChangeType.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.ChangeType.Validate(attrPath).Errs...)
 
 	// Validate committer
 	attrPath = path + ".committer"
-	errs = append(errs, a.Committer.Validate(attrPath)...)
-
-	return errs
+	validateErr.Errs = append(validateErr.Errs, a.Committer.Validate(attrPath).Errs...)
+	return validateErr
 }

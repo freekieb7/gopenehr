@@ -47,14 +47,14 @@ func (e *EHR_STATUS) SetModelName() {
 	}
 }
 
-func (e *EHR_STATUS) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (e *EHR_STATUS) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if e.Type_.E && e.Type_.V != "EHR_STATUS" {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          "EHR_STATUS",
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -64,43 +64,43 @@ func (e *EHR_STATUS) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errors = append(errors, e.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if e.UID.E {
 		attrPath = path + ".uid"
-		errors = append(errors, e.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if e.Links.E {
 		for i := range e.Links.V {
-			itemPath := fmt.Sprintf("%s.links[%d]", path, i)
-			errors = append(errors, e.Links.V[i].Validate(itemPath)...)
+			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
+			validateErr.Errs = append(validateErr.Errs, e.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if e.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errors = append(errors, e.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate subject
 	attrPath = path + ".subject"
-	errors = append(errors, e.Subject.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.Subject.Validate(attrPath).Errs...)
 
 	// Validate feeder_audit
 	if e.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errors = append(errors, e.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate other_details
 	if e.OtherDetails.E {
 		attrPath = path + ".other_details"
-		errors = append(errors, e.OtherDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.OtherDetails.V.Validate(attrPath).Errs...)
 	}
 
-	return errors
+	return validateErr
 }

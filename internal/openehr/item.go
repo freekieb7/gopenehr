@@ -7,6 +7,8 @@ import (
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 )
 
+const ITEM_MODEL_NAME string = "ITEM"
+
 // Abstract
 type ITEM struct {
 	Type_            util.Optional[string]         `json:"_type,omitzero"`
@@ -32,7 +34,7 @@ type ItemModel interface {
 	isItemModel()
 	HasModelName() bool
 	SetModelName()
-	Validate(path string) []util.ValidationError
+	Validate(path string) util.ValidateError
 }
 
 type X_ITEM struct {
@@ -43,21 +45,21 @@ func (i *X_ITEM) SetModelName() {
 	i.Value.SetModelName()
 }
 
-func (i *X_ITEM) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (i *X_ITEM) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Abstract model requires _type to be defined
 	if !i.Value.HasModelName() {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:   "ITEM",
 			Path:    attrPath,
 			Message: "missing _type field",
 		})
 	}
 
-	return errs
+	return validateErr
 }
 
 func (i X_ITEM) MarshalJSON() ([]byte, error) {
@@ -76,10 +78,17 @@ func (i *X_ITEM) UnmarshalJSON(data []byte) error {
 		i.Value = new(CLUSTER)
 	case ELEMENT_MODEL_NAME:
 		i.Value = new(ELEMENT)
-	case "":
-		return fmt.Errorf("missing ITEM _type field")
 	default:
-		return fmt.Errorf("ITEM unexpected _type %s", t)
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          ITEM_MODEL_NAME,
+					Path:           "$.**._type",
+					Message:        fmt.Sprintf("unexpected ITEM _type %s", t),
+					Recommendation: "Ensure _type field is one of the known ITEM subtypes",
+				},
+			},
+		}
 	}
 
 	return json.Unmarshal(data, i.Value)

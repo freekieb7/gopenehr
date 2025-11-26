@@ -28,7 +28,7 @@ type DataValueModel interface {
 	isDataValueModel()
 	HasModelName() bool
 	SetModelName()
-	Validate(path string) []util.ValidationError
+	Validate(path string) util.ValidateError
 }
 
 type X_DATA_VALUE struct {
@@ -39,33 +39,36 @@ func (x *X_DATA_VALUE) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x *X_DATA_VALUE) Validate(path string) []util.ValidationError {
+func (x *X_DATA_VALUE) Validate(path string) util.ValidateError {
 	if x.Value == nil {
-		return []util.ValidationError{
-			{
-				Model:          DATA_VALUE_MODEL_NAME,
-				Path:           path,
-				Message:        "value is not known DATA_VALUE subtype",
-				Recommendation: "Ensure value is properly set",
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          DATA_VALUE_MODEL_NAME,
+					Path:           path,
+					Message:        "value is not known DATA_VALUE subtype",
+					Recommendation: "Ensure value is properly set",
+				},
 			},
 		}
 	}
 
-	var errs []util.ValidationError
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Abstract model requires _type to be defined
 	if !x.Value.HasModelName() {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DATA_VALUE_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "empty _type field",
 			Recommendation: "Ensure _type field is defined",
 		})
 	}
+	validateErr.Errs = append(validateErr.Errs, x.Value.Validate(path).Errs...)
 
-	return append(errs, x.Value.Validate(path)...)
+	return validateErr
 }
 
 func (x X_DATA_VALUE) MarshalJSON() ([]byte, error) {
@@ -124,10 +127,17 @@ func (x *X_DATA_VALUE) UnmarshalJSON(data []byte) error {
 		x.Value = new(DV_URI)
 	case DV_EHR_URI_MODEL_NAME:
 		x.Value = new(DV_EHR_URI)
-	case "":
-		return fmt.Errorf("missing DATA_VALUE _type field")
 	default:
-		return fmt.Errorf("DATA_VALUE unexpected _type %s", t)
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          DATA_VALUE_MODEL_NAME,
+					Path:           "$.**._type",
+					Message:        fmt.Sprintf("unexpected DATA_VALUE _type %s", t),
+					Recommendation: "Ensure _type field is one of the known DATA_VALUE subtypes",
+				},
+			},
+		}
 	}
 
 	return json.Unmarshal(data, x.Value)

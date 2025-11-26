@@ -34,7 +34,7 @@ type ContentItemModel interface {
 	isContentItemModel()
 	HasModelName() bool
 	SetModelName()
-	Validate(path string) []util.ValidationError
+	Validate(path string) util.ValidateError
 }
 
 type X_CONTENT_ITEM struct {
@@ -45,33 +45,36 @@ func (x *X_CONTENT_ITEM) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x *X_CONTENT_ITEM) Validate(path string) []util.ValidationError {
+func (x *X_CONTENT_ITEM) Validate(path string) util.ValidateError {
 	if x.Value == nil {
-		return []util.ValidationError{
-			{
-				Model:          CONTENT_ITEM_MODEL_NAME,
-				Path:           path,
-				Message:        "value is not known CONTENT_ITEM subtype",
-				Recommendation: "Ensure value is properly set",
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          CONTENT_ITEM_MODEL_NAME,
+					Path:           path,
+					Message:        "value is not known CONTENT_ITEM subtype",
+					Recommendation: "Ensure value is properly set",
+				},
 			},
 		}
 	}
 
-	var errs []util.ValidationError
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Abstract model requires _type to be defined
 	if !x.Value.HasModelName() {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          CONTENT_ITEM_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "empty _type field",
 			Recommendation: "Ensure _type field is defined",
 		})
 	}
+	validateErr.Errs = append(validateErr.Errs, x.Value.Validate(path).Errs...)
 
-	return append(errs, x.Value.Validate(path)...)
+	return validateErr
 }
 
 func (x X_CONTENT_ITEM) MarshalJSON() ([]byte, error) {
@@ -102,10 +105,17 @@ func (x *X_CONTENT_ITEM) UnmarshalJSON(data []byte) error {
 		x.Value = new(ACTION)
 	case GENERIC_ENTRY_MODEL_NAME:
 		x.Value = new(GENERIC_ENTRY)
-	case "":
-		return fmt.Errorf("missing CONTENT_ITEM _type field")
 	default:
-		return fmt.Errorf("invalid CONTENT_ITEM type: %s", t)
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          CONTENT_ITEM_MODEL_NAME,
+					Path:           "$.**._type",
+					Message:        fmt.Sprintf("unexpected CONTENT_ITEM _type %s", t),
+					Recommendation: "Ensure _type field is one of the known CONTENT_ITEM subtypes",
+				},
+			},
+		}
 	}
 
 	return json.Unmarshal(data, x.Value)

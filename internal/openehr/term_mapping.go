@@ -28,14 +28,14 @@ func (t *TERM_MAPPING) SetModelName() {
 	t.Target.SetModelName()
 }
 
-func (t *TERM_MAPPING) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (t *TERM_MAPPING) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if t.Type_.E && t.Type_.V != TERM_MAPPING_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          TERM_MAPPING_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", TERM_MAPPING_MODEL_NAME, t.Type_.V),
@@ -46,18 +46,18 @@ func (t *TERM_MAPPING) Validate(path string) []util.ValidationError {
 	// Validate purpose
 	if t.Purpose.E {
 		attrPath = path + ".purpose"
-		errors = append(errors, t.Purpose.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, t.Purpose.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate target
 	attrPath = path + ".target"
-	errors = append(errors, t.Target.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, t.Target.Validate(attrPath).Errs...)
 
 	// Validate match
 	validMatches := []byte{'=', '>', '<', '?'}
 	if !slices.Contains(validMatches, t.Match) {
 		attrPath = path + ".match"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          TERM_MAPPING_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid match value: %c", t.Match),
@@ -65,5 +65,5 @@ func (t *TERM_MAPPING) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return errors
+	return validateErr
 }

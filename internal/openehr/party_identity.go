@@ -39,14 +39,14 @@ func (p *PARTY_IDENTITY) SetModelName() {
 	p.Details.SetModelName()
 }
 
-func (p *PARTY_IDENTITY) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (p *PARTY_IDENTITY) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if p.Type_.E && p.Type_.V != PARTY_IDENTITY_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          PARTY_IDENTITY_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", PARTY_IDENTITY_MODEL_NAME, p.Type_.V),
@@ -56,12 +56,12 @@ func (p *PARTY_IDENTITY) Validate(path string) []util.ValidationError {
 
 	// Validate Name
 	attrPath = path + ".name"
-	errors = append(errors, p.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, p.Name.Validate(attrPath).Errs...)
 
 	// Validate ArchetypeNodeID
 	attrPath = path + ".archetype_node_id"
 	if p.ArchetypeNodeID == "" {
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          PARTY_IDENTITY_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "archetype_node_id is required",
@@ -72,32 +72,32 @@ func (p *PARTY_IDENTITY) Validate(path string) []util.ValidationError {
 	// Validate UID
 	if p.UID.E {
 		attrPath = path + ".uid"
-		errors = append(errors, p.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, p.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Links
 	if p.Links.E {
 		for i, link := range p.Links.V {
 			attrPath = path + fmt.Sprintf(".links[%d]", i)
-			errors = append(errors, link.Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, link.Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate ArchetypeDetails
 	if p.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errors = append(errors, p.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, p.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate FeederAudit
 	if p.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errors = append(errors, p.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, p.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Details
 	attrPath = path + ".details"
-	errors = append(errors, p.Details.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, p.Details.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

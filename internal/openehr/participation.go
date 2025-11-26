@@ -24,14 +24,14 @@ func (p *PARTICIPATION) SetModelName() {
 	}
 }
 
-func (p *PARTICIPATION) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (p *PARTICIPATION) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if p.Type_.E && p.Type_.V != PARTICIPATION_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          PARTICIPATION_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + PARTICIPATION_MODEL_NAME,
@@ -41,23 +41,23 @@ func (p *PARTICIPATION) Validate(path string) []util.ValidationError {
 
 	// Validate function
 	attrPath = path + ".function"
-	errs = append(errs, p.Function.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, p.Function.Validate(attrPath).Errs...)
 
 	// Validate mode
 	if p.Mode.E {
 		attrPath = path + ".mode"
-		errs = append(errs, p.Mode.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, p.Mode.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate performer
 	attrPath = path + ".performer"
-	errs = append(errs, p.Performer.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, p.Performer.Validate(attrPath).Errs...)
 
 	// Validate time
 	if p.Time.E {
 		attrPath = path + ".time"
-		errs = append(errs, p.Time.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, p.Time.V.Validate(attrPath).Errs...)
 	}
 
-	return errs
+	return validateErr
 }

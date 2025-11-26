@@ -49,14 +49,14 @@ func (i *ITEM_TREE) SetModelName() {
 	}
 }
 
-func (i *ITEM_TREE) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (i *ITEM_TREE) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if i.Type_.E && i.Type_.V != ITEM_TREE_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ITEM_TREE_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -66,35 +66,35 @@ func (i *ITEM_TREE) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errors = append(errors, i.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, i.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if i.UID.E {
 		attrPath = path + ".uid"
-		errors = append(errors, i.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if i.Links.E {
 		for j := range i.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, j)
-			errors = append(errors, i.Links.V[j].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, i.Links.V[j].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if i.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errors = append(errors, i.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate items
 	if i.Items.E {
 		for k := range i.Items.V {
 			attrPath = fmt.Sprintf("%s.items[%d]", path, k)
-			errors = append(errors, i.Items.V[k].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, i.Items.V[k].Validate(attrPath).Errs...)
 		}
 	}
 
-	return errors
+	return validateErr
 }

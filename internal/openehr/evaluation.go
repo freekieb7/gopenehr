@@ -73,14 +73,14 @@ func (e *EVALUATION) SetModelName() {
 	e.Data.SetModelName()
 }
 
-func (e *EVALUATION) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (e *EVALUATION) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if e.Type_.E && e.Type_.V != EVALUATION_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          EVALUATION_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + EVALUATION_MODEL_NAME,
@@ -90,81 +90,80 @@ func (e *EVALUATION) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errs = append(errs, e.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if e.UID.E {
 		attrPath = path + ".uid"
-		errs = append(errs, e.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if e.Links.E {
 		for i := range e.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
-			errs = append(errs, e.Links.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, e.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if e.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errs = append(errs, e.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate feeder_audit
 	if e.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errs = append(errs, e.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate language
 	attrPath = path + ".language"
-	errs = append(errs, e.Language.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.Language.Validate(attrPath).Errs...)
 
 	// Validate encoding
 	attrPath = path + ".encoding"
-	errs = append(errs, e.Encoding.Validate(attrPath)...)
-
+	validateErr.Errs = append(validateErr.Errs, e.Encoding.Validate(attrPath).Errs...)
 	// Validate other_participations
 	if e.OtherParticipations.E {
 		for i := range e.OtherParticipations.V {
 			attrPath = fmt.Sprintf("%s.other_participations[%d]", path, i)
-			errs = append(errs, e.OtherParticipations.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, e.OtherParticipations.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate workflow_id
 	if e.WorkflowID.E {
 		attrPath = path + ".workflow_id"
-		errs = append(errs, e.WorkflowID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.WorkflowID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate subject
 	attrPath = path + ".subject"
-	errs = append(errs, e.Subject.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.Subject.Validate(attrPath).Errs...)
 
 	// Validate provider
 	if e.Provider.E {
 		attrPath = path + ".provider"
-		errs = append(errs, e.Provider.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.Provider.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate protocol
 	if e.Protocol.E {
 		attrPath = path + ".protocol"
-		errs = append(errs, e.Protocol.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.Protocol.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate guideline_id
 	if e.GuidelineID.E {
 		attrPath = path + ".guideline_id"
-		errs = append(errs, e.GuidelineID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, e.GuidelineID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate data
 	attrPath = path + ".data"
-	errs = append(errs, e.Data.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, e.Data.Validate(attrPath).Errs...)
 
-	return errs
+	return validateErr
 }

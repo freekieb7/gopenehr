@@ -77,14 +77,14 @@ func (a *AGENT) SetModelName() {
 	}
 }
 
-func (a *AGENT) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (a *AGENT) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	attrPath = path + "._type"
 	if a.Type_.E && a.Type_.V != AGENT_MODEL_NAME {
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          AGENT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid " + AGENT_MODEL_NAME + " _type field: " + a.Type_.V,
@@ -94,12 +94,12 @@ func (a *AGENT) Validate(path string) []util.ValidationError {
 
 	// Validate Name
 	attrPath = path + ".name"
-	errors = append(errors, a.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Name.Validate(attrPath).Errs...)
 
 	// Validate ArchetypeNodeID
 	attrPath = path + ".archetype_node_id"
 	if a.ArchetypeNodeID == "" {
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          AGENT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "archetype_node_id is required",
@@ -110,33 +110,33 @@ func (a *AGENT) Validate(path string) []util.ValidationError {
 	// Validate UID
 	if a.UID.E {
 		attrPath = path + ".uid"
-		errors = append(errors, a.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Links
 	if a.Links.E {
 		for i, link := range a.Links.V {
 			attrPath = path + fmt.Sprintf(".links[%d]", i)
-			errors = append(errors, link.Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, link.Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate ArchetypeDetails
 	if a.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errors = append(errors, a.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate FeederAudit
 	if a.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errors = append(errors, a.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Identities
 	if len(a.Identities) == 0 {
 		attrPath = path + ".identities"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          AGENT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "identities is required",
@@ -145,7 +145,7 @@ func (a *AGENT) Validate(path string) []util.ValidationError {
 	} else {
 		for i, identity := range a.Identities {
 			attrPath = path + fmt.Sprintf(".identities[%d]", i)
-			errors = append(errors, identity.Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, identity.Validate(attrPath).Errs...)
 		}
 	}
 
@@ -153,21 +153,21 @@ func (a *AGENT) Validate(path string) []util.ValidationError {
 	if a.Contacts.E {
 		for i, contact := range a.Contacts.V {
 			attrPath = path + fmt.Sprintf(".contacts[%d]", i)
-			errors = append(errors, contact.Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, contact.Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate Details
 	if a.Details.E {
 		attrPath = path + ".details"
-		errors = append(errors, a.Details.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.Details.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate ReverseRelationships
 	if a.ReverseRelationships.E {
 		for i, rel := range a.ReverseRelationships.V {
 			attrPath = path + fmt.Sprintf(".reverse_relationships[%d]", i)
-			errors = append(errors, rel.Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, rel.Validate(attrPath).Errs...)
 		}
 	}
 
@@ -175,7 +175,7 @@ func (a *AGENT) Validate(path string) []util.ValidationError {
 	if a.Relationships.E {
 		for i, rel := range a.Relationships.V {
 			attrPath = path + fmt.Sprintf(".relationships[%d]", i)
-			errors = append(errors, rel.Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, rel.Validate(attrPath).Errs...)
 		}
 	}
 
@@ -183,7 +183,7 @@ func (a *AGENT) Validate(path string) []util.ValidationError {
 	if a.Languages.E {
 		for i, lang := range a.Languages.V {
 			attrPath = path + fmt.Sprintf(".languages[%d]", i)
-			errors = append(errors, lang.Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, lang.Validate(attrPath).Errs...)
 		}
 	}
 
@@ -191,9 +191,9 @@ func (a *AGENT) Validate(path string) []util.ValidationError {
 	if a.Roles.E {
 		for i := range a.Roles.V {
 			attrPath = path + fmt.Sprintf(".roles[%d]", i)
-			errors = append(errors, a.Roles.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, a.Roles.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
-	return errors
+	return validateErr
 }

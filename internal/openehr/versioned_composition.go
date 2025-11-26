@@ -20,14 +20,14 @@ func (vc *VERSIONED_COMPOSITION) SetModelName() {
 	vc.TimeCreated.SetModelName()
 }
 
-func (vc *VERSIONED_COMPOSITION) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (vc *VERSIONED_COMPOSITION) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if vc.Type_.E && vc.Type_.V != VERSIONED_COMPOSITION_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          VERSIONED_COMPOSITION_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + VERSIONED_COMPOSITION_MODEL_NAME,
@@ -36,19 +36,16 @@ func (vc *VERSIONED_COMPOSITION) Validate(path string) []util.ValidationError {
 	}
 
 	// Validate uid
-	if err := vc.UID.Validate(path + ".uid"); len(err) > 0 {
-		errors = append(errors, err...)
-	}
+	attrPath = path + ".uid"
+	validateErr.Errs = append(validateErr.Errs, vc.UID.Validate(attrPath).Errs...)
 
 	// Validate owner_id
-	if err := vc.OwnerID.Validate(path + ".owner_id"); len(err) > 0 {
-		errors = append(errors, err...)
-	}
+	attrPath = path + ".owner_id"
+	validateErr.Errs = append(validateErr.Errs, vc.OwnerID.Validate(attrPath).Errs...)
 
 	// Validate time_created
-	if err := vc.TimeCreated.Validate(path + ".time_created"); len(err) > 0 {
-		errors = append(errors, err...)
-	}
+	attrPath = path + ".time_created"
+	validateErr.Errs = append(validateErr.Errs, vc.TimeCreated.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

@@ -28,8 +28,9 @@ func (o *OBJECT_ID) UnmarshalJSON(data []byte) error {
 type ObjectIDModel interface {
 	isObjectIDModel()
 	HasModelName() bool
+	GetModelName() string
 	SetModelName()
-	Validate(path string) []util.ValidationError
+	Validate(path string) util.ValidateError
 }
 
 type X_OBJECT_ID struct {
@@ -40,25 +41,27 @@ func (x *X_OBJECT_ID) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x *X_OBJECT_ID) Validate(path string) []util.ValidationError {
+func (x *X_OBJECT_ID) Validate(path string) util.ValidateError {
 	if x.Value == nil {
-		return []util.ValidationError{
-			{
-				Model:          OBJECT_ID_MODEL_NAME,
-				Path:           path,
-				Message:        "value is not known OBJECT_ID subtype",
-				Recommendation: "Ensure value is properly set",
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          OBJECT_ID_MODEL_NAME,
+					Path:           path,
+					Message:        "value is not known OBJECT_ID subtype",
+					Recommendation: "Ensure value is properly set",
+				},
 			},
 		}
 	}
 
-	var errs []util.ValidationError
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Abstract model requires _type to be defined
 	if !x.Value.HasModelName() {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          OBJECT_ID_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "empty _type field",
@@ -66,7 +69,8 @@ func (x *X_OBJECT_ID) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return append(errs, x.Value.Validate(path)...)
+	validateErr.Errs = append(validateErr.Errs, x.Value.Validate(path).Errs...)
+	return validateErr
 }
 
 func (o X_OBJECT_ID) MarshalJSON() ([]byte, error) {
@@ -91,10 +95,17 @@ func (o *X_OBJECT_ID) UnmarshalJSON(data []byte) error {
 		o.Value = new(TEMPLATE_ID)
 	case GENERIC_ID_MODEL_NAME:
 		o.Value = new(GENERIC_ID)
-	case "":
-		return fmt.Errorf("missing OBJECT_ID _type field")
 	default:
-		return fmt.Errorf("OBJECT_ID unexpected _type %s", t)
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          OBJECT_ID_MODEL_NAME,
+					Path:           "$.**._type",
+					Message:        fmt.Sprintf("unexpected OBJECT_ID _type '%s'", t),
+					Recommendation: "Ensure _type field is one of the known OBJECT_ID subtypes",
+				},
+			},
+		}
 	}
 
 	return json.Unmarshal(data, o.Value)

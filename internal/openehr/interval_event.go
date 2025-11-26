@@ -59,14 +59,14 @@ func (i *INTERVAL_EVENT) SetModelName() {
 	i.MathFunction.SetModelName()
 }
 
-func (i *INTERVAL_EVENT) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (i *INTERVAL_EVENT) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if i.Type_.E && i.Type_.V != INTERVAL_EVENT_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          INTERVAL_EVENT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + INTERVAL_EVENT_MODEL_NAME,
@@ -76,51 +76,51 @@ func (i *INTERVAL_EVENT) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errs = append(errs, i.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, i.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if i.UID.E {
 		attrPath = path + ".uid"
-		errs = append(errs, i.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if i.Links.E {
 		for j := range i.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, j)
-			errs = append(errs, i.Links.V[j].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, i.Links.V[j].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if i.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errs = append(errs, i.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate feeder_audit
 	if i.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errs = append(errs, i.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate time
 	attrPath = path + ".time"
-	errs = append(errs, i.Time.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, i.Time.Validate(attrPath).Errs...)
 
 	// Validate state
 	if i.State.E {
 		attrPath = path + ".state"
-		errs = append(errs, i.State.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.State.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate data
 	attrPath = path + ".data"
-	errs = append(errs, i.Data.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, i.Data.Validate(attrPath).Errs...)
 
 	// Validate width
 	attrPath = path + ".width"
-	errs = append(errs, i.Width.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, i.Width.Validate(attrPath).Errs...)
 
 	// Validate sample_count
 	// if i.SampleCount.E {
@@ -129,7 +129,7 @@ func (i *INTERVAL_EVENT) Validate(path string) []util.ValidationError {
 
 	// Validate math_function
 	attrPath = path + ".math_function"
-	errs = append(errs, i.MathFunction.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, i.MathFunction.Validate(attrPath).Errs...)
 
-	return errs
+	return validateErr
 }

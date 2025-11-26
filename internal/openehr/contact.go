@@ -45,14 +45,14 @@ func (c *CONTACT) SetModelName() {
 	}
 }
 
-func (c *CONTACT) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (c *CONTACT) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if c.Type_.E && c.Type_.V != CONTACT_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          CONTACT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", CONTACT_MODEL_NAME, c.Type_.V),
@@ -62,12 +62,12 @@ func (c *CONTACT) Validate(path string) []util.ValidationError {
 
 	// Validate Name
 	attrPath = path + ".name"
-	errors = append(errors, c.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, c.Name.Validate(attrPath).Errs...)
 
 	// Validate ArchetypeNodeID
 	attrPath = path + ".archetype_node_id"
 	if c.ArchetypeNodeID == "" {
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          CONTACT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "archetype_node_id is required",
@@ -78,40 +78,40 @@ func (c *CONTACT) Validate(path string) []util.ValidationError {
 	// Validate UID
 	if c.UID.E {
 		attrPath = path + ".uid"
-		errors = append(errors, c.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, c.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Links
 	if c.Links.E {
 		for i := range c.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
-			errors = append(errors, c.Links.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, c.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate ArchetypeDetails
 	if c.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errors = append(errors, c.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, c.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate FeederAudit
 	if c.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errors = append(errors, c.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, c.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Addresses
 	for i := range c.Addresses {
 		attrPath = fmt.Sprintf("%s.addresses[%d]", path, i)
-		errors = append(errors, c.Addresses[i].Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, c.Addresses[i].Validate(attrPath).Errs...)
 	}
 
 	// Validate TimeValidity
 	if c.TimeValidity.E {
 		attrPath = path + ".time_validity"
-		errors = append(errors, c.TimeValidity.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, c.TimeValidity.V.Validate(attrPath).Errs...)
 	}
 
-	return errors
+	return validateErr
 }

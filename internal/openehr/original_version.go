@@ -9,7 +9,7 @@ import (
 type VersionModel interface {
 	isVersionModel()
 	SetModelName()
-	Validate(path string) []util.ValidationError
+	Validate(path string) util.ValidateError
 }
 
 const ORIGINAL_VERSION_MODEL_NAME = "ORIGINAL_VERSION"
@@ -44,14 +44,14 @@ func (ov *ORIGINAL_VERSION) SetModelName() {
 	ov.Data.SetModelName()
 }
 
-func (ov *ORIGINAL_VERSION) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (ov *ORIGINAL_VERSION) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if ov.Type_.E && ov.Type_.V != "ORIGINAL_VERSION" {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          "ORIGINAL_VERSION",
 			Path:           attrPath,
 			Message:        "_type must be ORIGINAL_VERSION",
@@ -61,39 +61,39 @@ func (ov *ORIGINAL_VERSION) Validate(path string) []util.ValidationError {
 
 	// Validate uid
 	attrPath = path + ".uid"
-	errs = append(errs, ov.UID.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, ov.UID.Validate(attrPath).Errs...)
 
 	// Validate preceding_version_uid
 	if ov.PrecedingVersionUID.E {
 		attrPath = path + ".preceding_version_uid"
-		errs = append(errs, ov.PrecedingVersionUID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, ov.PrecedingVersionUID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate other_input_version_uids
 	if ov.OtherInputVersionUIDs.E {
 		attrPath = path + ".other_input_version_uids"
 		for i := range ov.OtherInputVersionUIDs.V {
-			uidPath := fmt.Sprintf("%s[%d]", attrPath, i)
-			errs = append(errs, ov.OtherInputVersionUIDs.V[i].Validate(uidPath)...)
+			itemPath := fmt.Sprintf("%s[%d]", attrPath, i)
+			validateErr.Errs = append(validateErr.Errs, ov.OtherInputVersionUIDs.V[i].Validate(itemPath).Errs...)
 		}
 	}
 
 	// Validate lifecycle_state
 	attrPath = path + ".lifecycle_state"
-	errs = append(errs, ov.LifecycleState.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, ov.LifecycleState.Validate(attrPath).Errs...)
 
 	// Validate attestations
 	if ov.Attestations.E {
 		attrPath = path + ".attestations"
 		for i := range ov.Attestations.V {
-			attPath := fmt.Sprintf("%s[%d]", attrPath, i)
-			errs = append(errs, ov.Attestations.V[i].Validate(attPath)...)
+			itemPath := fmt.Sprintf("%s[%d]", attrPath, i)
+			validateErr.Errs = append(validateErr.Errs, ov.Attestations.V[i].Validate(itemPath).Errs...)
 		}
 	}
 
 	// Validate data
 	attrPath = path + ".data"
-	errs = append(errs, ov.Data.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, ov.Data.Validate(attrPath).Errs...)
 
-	return errs
+	return validateErr
 }

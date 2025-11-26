@@ -24,12 +24,12 @@ func (r *REFERENCE_RANGE) SetModelName() {
 	r.Range.SetModelName()
 }
 
-func (r *REFERENCE_RANGE) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (r *REFERENCE_RANGE) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 
 	// Validate _type
 	if r.Type_.E && r.Type_.V != REFERENCE_RANGE_MODEL_NAME {
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          REFERENCE_RANGE_MODEL_NAME,
 			Path:           "._type",
 			Message:        fmt.Sprintf("invalid %s _type field: %s", REFERENCE_RANGE_MODEL_NAME, r.Type_.V),
@@ -39,11 +39,11 @@ func (r *REFERENCE_RANGE) Validate(path string) []util.ValidationError {
 
 	// Validate meaning
 	attrPath := path + ".meaning"
-	errors = append(errors, r.Meaning.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, r.Meaning.Validate(attrPath).Errs...)
 
 	// Validate range
 	attrPath = path + ".range"
-	errors = append(errors, r.Range.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, r.Range.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

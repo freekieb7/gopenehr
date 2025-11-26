@@ -13,7 +13,7 @@ type EventDataModel interface {
 	isEventModel()
 	HasModelName() bool
 	SetModelName()
-	Validate(path string) []util.ValidationError
+	Validate(path string) util.ValidateError
 }
 
 // Abstract
@@ -48,25 +48,27 @@ func (x *X_EVENT) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x *X_EVENT) Validate(path string) []util.ValidationError {
+func (x *X_EVENT) Validate(path string) util.ValidateError {
 	if x.Value == nil {
-		return []util.ValidationError{
-			{
-				Model:          EVENT_MODEL_NAME,
-				Path:           path,
-				Message:        "value is not known EVENT subtype",
-				Recommendation: "Ensure value is properly set",
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          EVENT_MODEL_NAME,
+					Path:           path,
+					Message:        "value is not known EVENT subtype",
+					Recommendation: "Ensure value is properly set",
+				},
 			},
 		}
 	}
 
-	var errs []util.ValidationError
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Abstract model requires _type to be defined
 	if !x.Value.HasModelName() {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          EVENT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "empty _type field",
@@ -74,9 +76,9 @@ func (x *X_EVENT) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	errs = append(errs, x.Value.Validate(path)...)
+	validateErr.Errs = append(validateErr.Errs, x.Value.Validate(path).Errs...)
 
-	return errs
+	return validateErr
 }
 
 func (x X_EVENT) MarshalJSON() ([]byte, error) {
@@ -95,10 +97,17 @@ func (x *X_EVENT) UnmarshalJSON(data []byte) error {
 		x.Value = new(POINT_EVENT)
 	case INTERVAL_EVENT_MODEL_NAME:
 		x.Value = new(INTERVAL_EVENT)
-	case "":
-		return fmt.Errorf("missing EVENT _type field")
 	default:
-		return fmt.Errorf("EVENT unexpected _type %s", t)
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          EVENT_MODEL_NAME,
+					Path:           "$.**._type",
+					Message:        fmt.Sprintf("unexpected EVENT _type %s", t),
+					Recommendation: "Ensure _type field is one of the known EVENT subtypes",
+				},
+			},
+		}
 	}
 
 	return json.Unmarshal(data, x.Value)

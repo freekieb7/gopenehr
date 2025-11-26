@@ -51,14 +51,14 @@ func (a *ROLE) SetModelName() {
 	a.Source.SetModelName()
 }
 
-func (a *ROLE) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (a *ROLE) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	attrPath = path + "._type"
 	if a.Type_.E && a.Type_.V != ROLE_MODEL_NAME {
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ROLE_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid " + ROLE_MODEL_NAME + " _type field: " + a.Type_.V,
@@ -68,12 +68,12 @@ func (a *ROLE) Validate(path string) []util.ValidationError {
 
 	// Validate Name
 	attrPath = path + ".name"
-	errors = append(errors, a.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Name.Validate(attrPath).Errs...)
 
 	// Validate UID
 	attrPath = path + ".uid"
 	if a.UID.E {
-		errors = append(errors, a.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Links
@@ -81,41 +81,41 @@ func (a *ROLE) Validate(path string) []util.ValidationError {
 	if a.Links.E {
 		for i := range a.Links.V {
 			linkPath := fmt.Sprintf("%s[%d]", attrPath, i)
-			errors = append(errors, a.Links.V[i].Validate(linkPath)...)
+			validateErr.Errs = append(validateErr.Errs, a.Links.V[i].Validate(linkPath).Errs...)
 		}
 	}
 
 	// Validate ArchetypeDetails
 	attrPath = path + ".archetype_details"
 	if a.ArchetypeDetails.E {
-		errors = append(errors, a.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate FeederAudit
 	attrPath = path + ".feeder_audit"
 	if a.FeederAudit.E {
-		errors = append(errors, a.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Details
 	attrPath = path + ".details"
 	if a.Details.E {
-		errors = append(errors, a.Details.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.Details.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Target
 	attrPath = path + ".target"
-	errors = append(errors, a.Target.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Target.Validate(attrPath).Errs...)
 
 	// Validate TimeValidity
 	attrPath = path + ".time_validity"
 	if a.TimeValidity.E {
-		errors = append(errors, a.TimeValidity.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.TimeValidity.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate Source
 	attrPath = path + ".source"
-	errors = append(errors, a.Source.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Source.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

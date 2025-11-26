@@ -50,14 +50,14 @@ func (d *DV_MULTIMEDIA) SetModelName() {
 	}
 }
 
-func (d *DV_MULTIMEDIA) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (d *DV_MULTIMEDIA) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if d.Type_.E && d.Type_.V != DV_MULTIMEDIA_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_MULTIMEDIA_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -69,7 +69,7 @@ func (d *DV_MULTIMEDIA) Validate(path string) []util.ValidationError {
 	if d.Charset.E {
 		attrPath = path + ".charset"
 		if !terminology.IsValidCharsetTerminologyID(d.Charset.V.TerminologyID.Value) {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_MULTIMEDIA_MODEL_NAME,
 				Path:           attrPath,
 				Message:        "invalid charset terminology ID",
@@ -77,7 +77,7 @@ func (d *DV_MULTIMEDIA) Validate(path string) []util.ValidationError {
 			})
 		}
 		if !terminology.IsValidCharset(d.Charset.V.CodeString) {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_MULTIMEDIA_MODEL_NAME,
 				Path:           attrPath,
 				Message:        "invalid charset code string",
@@ -85,14 +85,14 @@ func (d *DV_MULTIMEDIA) Validate(path string) []util.ValidationError {
 			})
 		}
 
-		errors = append(errors, d.Charset.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.Charset.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate language
 	if d.Language.E {
 		attrPath = path + ".language"
 		if !terminology.IsValidLanguageTerminologyID(d.Language.V.TerminologyID.Value) {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_MULTIMEDIA_MODEL_NAME,
 				Path:           attrPath,
 				Message:        "invalid language terminology ID",
@@ -100,7 +100,7 @@ func (d *DV_MULTIMEDIA) Validate(path string) []util.ValidationError {
 			})
 		}
 		if !terminology.IsValidLanguageCode(d.Language.V.CodeString) {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_MULTIMEDIA_MODEL_NAME,
 				Path:           attrPath,
 				Message:        "invalid language code string",
@@ -108,41 +108,41 @@ func (d *DV_MULTIMEDIA) Validate(path string) []util.ValidationError {
 			})
 		}
 
-		errors = append(errors, d.Language.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.Language.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate uri
 	if d.Uri.E {
 		attrPath = path + ".uri"
-		errors = append(errors, d.Uri.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.Uri.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate media_type
 	attrPath = path + ".media_type"
-	errors = append(errors, d.MediaType.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, d.MediaType.Validate(attrPath).Errs...)
 
 	// Validate compression_algorithm
 	if d.CompressionAlgorithm.E {
 		attrPath = path + ".compression_algorithm"
-		errors = append(errors, d.CompressionAlgorithm.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.CompressionAlgorithm.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate integrity_check_algorithm
 	if d.IntegrityCheckAlgorithm.E {
 		attrPath = path + ".integrity_check_algorithm"
-		errors = append(errors, d.IntegrityCheckAlgorithm.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.IntegrityCheckAlgorithm.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate thumbnail
 	if d.Thumbnail.E {
 		attrPath = path + ".thumbnail"
-		errors = append(errors, d.Thumbnail.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.Thumbnail.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate size
 	if d.Size < 0 {
 		attrPath = path + ".size"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_MULTIMEDIA_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "size must be non-negative",
@@ -150,5 +150,5 @@ func (d *DV_MULTIMEDIA) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return errors
+	return validateErr
 }

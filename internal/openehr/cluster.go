@@ -47,14 +47,14 @@ func (c *CLUSTER) SetModelName() {
 	}
 }
 
-func (c *CLUSTER) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (c *CLUSTER) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if c.Type_.E && c.Type_.V != CLUSTER_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:   CLUSTER_MODEL_NAME,
 			Path:    attrPath,
 			Message: "invalid _type value",
@@ -63,39 +63,39 @@ func (c *CLUSTER) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errors = append(errors, c.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, c.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if c.UID.E {
 		attrPath = path + ".uid"
-		errors = append(errors, c.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, c.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if c.Links.E {
 		for i := range c.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
-			errors = append(errors, c.Links.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, c.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if c.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errors = append(errors, c.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, c.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate feeder_audit
 	if c.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errors = append(errors, c.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, c.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate items
 	for i := range c.Items {
 		attrPath = fmt.Sprintf("%s.items[%d]", path, i)
-		errors = append(errors, c.Items[i].Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, c.Items[i].Validate(attrPath).Errs...)
 	}
 
-	return errors
+	return validateErr
 }

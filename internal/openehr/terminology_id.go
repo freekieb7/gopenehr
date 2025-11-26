@@ -17,14 +17,14 @@ func (t *TERMINOLOGY_ID) SetModelName() {
 	t.Type_ = util.Some(TERMINOLOGY_ID_MODEL_NAME)
 }
 
-func (t *TERMINOLOGY_ID) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (t *TERMINOLOGY_ID) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if t.Type_.E && t.Type_.V != TERMINOLOGY_ID_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          TERMINOLOGY_ID_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", TERMINOLOGY_ID_MODEL_NAME, t.Type_.V),
@@ -35,7 +35,7 @@ func (t *TERMINOLOGY_ID) Validate(path string) []util.ValidationError {
 	// Validate value
 	if t.Value == "" {
 		attrPath = path + ".value"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          TERMINOLOGY_ID_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "value field is required",
@@ -43,5 +43,5 @@ func (t *TERMINOLOGY_ID) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return errors
+	return validateErr
 }

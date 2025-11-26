@@ -80,14 +80,14 @@ func (a *ACTION) SetModelName() {
 	a.Description.SetModelName()
 }
 
-func (a *ACTION) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (a *ACTION) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if a.Type_.E && a.Type_.V != ACTION_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ACTION_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + ACTION_MODEL_NAME,
@@ -97,83 +97,83 @@ func (a *ACTION) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errs = append(errs, a.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if a.UID.E {
 		attrPath = path + ".uid"
-		errs = append(errs, a.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if a.Links.E {
 		for i := range a.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
-			errs = append(errs, a.Links.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, a.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if a.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errs = append(errs, a.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate feeder_audit
 	if a.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errs = append(errs, a.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate other_participations
 	if a.OtherParticipations.E {
 		for i := range a.OtherParticipations.V {
 			attrPath = fmt.Sprintf("%s.other_participations[%d]", path, i)
-			errs = append(errs, a.OtherParticipations.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, a.OtherParticipations.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate workflow_id
 	if a.WorkflowID.E {
 		attrPath = path + ".workflow_id"
-		errs = append(errs, a.WorkflowID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.WorkflowID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate subject
 	attrPath = path + ".subject"
-	errs = append(errs, a.Subject.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Subject.Validate(attrPath).Errs...)
 
 	// Validate provider
 	if a.Provider.E {
 		attrPath = path + ".provider"
-		errs = append(errs, a.Provider.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.Provider.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate protocol
 	if a.Protocol.E {
 		attrPath = path + ".protocol"
-		errs = append(errs, a.Protocol.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.Protocol.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate guideline_id
 	if a.GuidelineID.E {
 		attrPath = path + ".guideline_id"
-		errs = append(errs, a.GuidelineID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.GuidelineID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate ism_transition
 	attrPath = path + ".ism_transition"
-	errs = append(errs, a.IsmTransition.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.IsmTransition.Validate(attrPath).Errs...)
 
 	// Validate instruction_details
 	if a.InstructionDetails.E {
 		attrPath = path + ".instruction_details"
-		errs = append(errs, a.InstructionDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.InstructionDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate description
 	attrPath = path + ".description"
-	errs = append(errs, a.Description.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Description.Validate(attrPath).Errs...)
 
-	return errs
+	return validateErr
 }

@@ -19,14 +19,14 @@ func (i *INSTRUCTION_DETAILS) SetModelName() {
 	}
 }
 
-func (i *INSTRUCTION_DETAILS) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (i *INSTRUCTION_DETAILS) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if i.Type_.E && i.Type_.V != INSTRUCTION_DETAILS_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          INSTRUCTION_DETAILS_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + INSTRUCTION_DETAILS_MODEL_NAME,
@@ -36,7 +36,7 @@ func (i *INSTRUCTION_DETAILS) Validate(path string) []util.ValidationError {
 
 	// Validate instruction_id
 	attrPath = path + ".instruction_id"
-	errs = append(errs, i.InstructionID.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, i.InstructionID.Validate(attrPath).Errs...)
 
 	// Validate activity
 	// No validation for string type
@@ -44,8 +44,8 @@ func (i *INSTRUCTION_DETAILS) Validate(path string) []util.ValidationError {
 	// Validate wf_details
 	if i.WfDetails.E {
 		attrPath = path + ".wf_details"
-		errs = append(errs, i.WfDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.WfDetails.V.Validate(attrPath).Errs...)
 	}
 
-	return errs
+	return validateErr
 }

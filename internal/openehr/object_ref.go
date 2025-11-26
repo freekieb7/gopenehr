@@ -20,14 +20,14 @@ func (o *OBJECT_REF) SetModelName() {
 	o.ID.SetModelName()
 }
 
-func (o *OBJECT_REF) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (o *OBJECT_REF) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if o.Type_.E && o.Type_.V != OBJECT_REF_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          OBJECT_REF_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", OBJECT_REF_MODEL_NAME, o.Type_.V),
@@ -38,7 +38,7 @@ func (o *OBJECT_REF) Validate(path string) []util.ValidationError {
 	// Validate namespace
 	attrPath = path + ".namespace"
 	if o.Namespace == "" {
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          "String",
 			Path:           attrPath,
 			Message:        "invalid namespace: cannot be empty",
@@ -46,7 +46,7 @@ func (o *OBJECT_REF) Validate(path string) []util.ValidationError {
 		})
 	} else {
 		if !util.NamespaceRegex.MatchString(o.Namespace) {
-			errs = append(errs, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          "String",
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid namespace: %s", o.Namespace),
@@ -58,7 +58,7 @@ func (o *OBJECT_REF) Validate(path string) []util.ValidationError {
 	// Validate type
 	if o.Type == "" {
 		attrPath = path + ".type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          "String",
 			Path:           attrPath,
 			Message:        "invalid type: cannot be empty",
@@ -68,7 +68,7 @@ func (o *OBJECT_REF) Validate(path string) []util.ValidationError {
 
 	// Validate id
 	attrPath = path + ".id"
-	errs = append(errs, o.ID.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, o.ID.Validate(attrPath).Errs...)
 
 	// Validated overal object values
 	switch o.Type {
@@ -82,7 +82,7 @@ func (o *OBJECT_REF) Validate(path string) []util.ValidationError {
 		_, ok := o.ID.Value.(*HIER_OBJECT_ID)
 		if !ok {
 			attrPath = path + ".id"
-			errs = append(errs, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          OBJECT_REF_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid id type for object ref type %s: expected HIER_OBJECT_ID", o.Type),
@@ -101,7 +101,7 @@ func (o *OBJECT_REF) Validate(path string) []util.ValidationError {
 		_, ok := o.ID.Value.(*OBJECT_VERSION_ID)
 		if !ok {
 			attrPath = path + ".id"
-			errs = append(errs, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          OBJECT_REF_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid id type for object ref type %s: expected OBJECT_VERSION_ID", o.Type),
@@ -110,5 +110,5 @@ func (o *OBJECT_REF) Validate(path string) []util.ValidationError {
 		}
 	}
 
-	return errs
+	return validateErr
 }

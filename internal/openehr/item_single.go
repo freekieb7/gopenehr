@@ -39,14 +39,14 @@ func (i *ITEM_SINGLE) SetModelName() {
 	i.Item.SetModelName()
 }
 
-func (i ITEM_SINGLE) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (i ITEM_SINGLE) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if i.Type_.E && i.Type_.V != ITEM_SINGLE_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ITEM_SINGLE_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -56,35 +56,35 @@ func (i ITEM_SINGLE) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errors = append(errors, i.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, i.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if i.UID.E {
 		attrPath = path + ".uid"
-		errors = append(errors, i.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if i.Links.E {
 		attrPath = path + ".links"
-		errors = append(errors, i.Links.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.Links.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate archetype_details
 	if i.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errors = append(errors, i.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate feeder_audit
 	if i.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errors = append(errors, i.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate item
 	attrPath = path + ".item"
-	errors = append(errors, i.Item.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, i.Item.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

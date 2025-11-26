@@ -39,14 +39,14 @@ func (a *ATTESTATION) SetModelName() {
 	a.Reason.SetModelName()
 }
 
-func (a *ATTESTATION) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (a *ATTESTATION) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if a.Type_.E && a.Type_.V != ATTESTATION_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ATTESTATION_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + ATTESTATION_MODEL_NAME,
@@ -57,7 +57,7 @@ func (a *ATTESTATION) Validate(path string) []util.ValidationError {
 	// Validate system_id
 	attrPath = path + ".system_id"
 	if a.SystemID == "" {
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ATTESTATION_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "system_id cannot be empty",
@@ -67,26 +67,25 @@ func (a *ATTESTATION) Validate(path string) []util.ValidationError {
 
 	// Validate time_committed
 	attrPath = path + ".time_committed"
-	errs = append(errs, a.TimeCommitted.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.TimeCommitted.Validate(attrPath).Errs...)
 
 	// Validate change_type
 	attrPath = path + ".change_type"
-	errs = append(errs, a.ChangeType.Validate(attrPath)...)
-
+	validateErr.Errs = append(validateErr.Errs, a.ChangeType.Validate(attrPath).Errs...)
 	// Validate description
 	if a.Description.E {
 		attrPath = path + ".description"
-		errs = append(errs, a.Description.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.Description.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate committer
 	attrPath = path + ".committer"
-	errs = append(errs, a.Committer.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Committer.Validate(attrPath).Errs...)
 
 	// Validate attested_view
 	if a.AttestedView.E {
 		attrPath = path + ".attested_view"
-		errs = append(errs, a.AttestedView.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.AttestedView.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate items
@@ -94,13 +93,13 @@ func (a *ATTESTATION) Validate(path string) []util.ValidationError {
 		attrPath = path + ".items"
 		for i := range a.Items.V {
 			itemPath := fmt.Sprintf("%s[%d]", attrPath, i)
-			errs = append(errs, a.Items.V[i].Validate(itemPath)...)
+			validateErr.Errs = append(validateErr.Errs, a.Items.V[i].Validate(itemPath).Errs...)
 		}
 	}
 
 	// Validate reason
 	attrPath = path + ".reason"
-	errs = append(errs, a.Reason.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.Reason.Validate(attrPath).Errs...)
 
-	return errs
+	return validateErr
 }

@@ -19,14 +19,14 @@ func (a *ARCHETYPED) SetModelName() {
 	}
 }
 
-func (a *ARCHETYPED) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (a *ARCHETYPED) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if a.Type_.E && a.Type_.V != ARCHETYPED_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ARCHETYPED_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -36,18 +36,18 @@ func (a *ARCHETYPED) Validate(path string) []util.ValidationError {
 
 	// Validate archetype_id
 	attrPath = path + ".archetype_id"
-	errors = append(errors, a.ArchetypeID.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, a.ArchetypeID.Validate(attrPath).Errs...)
 
 	// Validate template_id
 	if a.TemplateID.E {
 		attrPath = path + ".template_id"
-		errors = append(errors, a.TemplateID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, a.TemplateID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate rm_version
 	if a.RMVersion == "" {
 		attrPath = path + ".rm_version"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ARCHETYPED_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "rm_version field cannot be empty",
@@ -55,5 +55,5 @@ func (a *ARCHETYPED) Validate(path string) []util.ValidationError {
 		})
 	}
 
-	return errors
+	return validateErr
 }

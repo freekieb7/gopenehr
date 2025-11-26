@@ -22,14 +22,14 @@ func (p *PARTY_SELF) SetModelName() {
 	}
 }
 
-func (p *PARTY_SELF) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (p *PARTY_SELF) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if p.Type_.E && p.Type_.V != PARTY_SELF_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          PARTY_SELF_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -40,10 +40,8 @@ func (p *PARTY_SELF) Validate(path string) []util.ValidationError {
 	// Validate external_ref
 	if p.ExternalRef.E {
 		attrPath = path + ".external_ref"
-		if err := p.ExternalRef.V.Validate(attrPath); len(err) > 0 {
-			errors = append(errors, err...)
-		}
+		validateErr.Errs = append(validateErr.Errs, p.ExternalRef.V.Validate(attrPath).Errs...)
 	}
 
-	return errors
+	return validateErr
 }

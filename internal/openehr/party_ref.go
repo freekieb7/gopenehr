@@ -16,14 +16,14 @@ func (p *PARTY_REF) SetModelName() {
 	p.ID.SetModelName()
 }
 
-func (p *PARTY_REF) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (p *PARTY_REF) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if p.Type_.E && p.Type_.V != PARTY_REF_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          PARTY_REF_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -34,7 +34,7 @@ func (p *PARTY_REF) Validate(path string) []util.ValidationError {
 	// Validate namespace
 	if p.Namespace == "" {
 		attrPath = path + ".namespace"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          PARTY_REF_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "namespace cannot be empty",
@@ -45,7 +45,7 @@ func (p *PARTY_REF) Validate(path string) []util.ValidationError {
 	// Validate type
 	if p.Type == "" {
 		attrPath = path + ".type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          PARTY_REF_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "type cannot be empty",
@@ -55,7 +55,7 @@ func (p *PARTY_REF) Validate(path string) []util.ValidationError {
 
 	// Validate id
 	attrPath = path + ".id"
-	errors = append(errors, p.ID.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, p.ID.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

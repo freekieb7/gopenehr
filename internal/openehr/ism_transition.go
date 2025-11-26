@@ -30,14 +30,14 @@ func (i *ISM_TRANSITION) SetModelName() {
 	}
 }
 
-func (i *ISM_TRANSITION) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (i *ISM_TRANSITION) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if i.Type_.E && i.Type_.V != ISM_TRANSITION_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          ISM_TRANSITION_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + ISM_TRANSITION_MODEL_NAME,
@@ -47,25 +47,25 @@ func (i *ISM_TRANSITION) Validate(path string) []util.ValidationError {
 
 	// Validate current_state
 	attrPath = path + ".current_state"
-	errs = append(errs, i.CurrentState.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, i.CurrentState.Validate(attrPath).Errs...)
 
 	// Validate transition
 	if i.Transition.E {
 		attrPath = path + ".transition"
-		errs = append(errs, i.Transition.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.Transition.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate careflow_step
 	if i.CareflowStep.E {
 		attrPath = path + ".careflow_step"
-		errs = append(errs, i.CareflowStep.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.CareflowStep.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate reason
 	if i.Reason.E {
 		attrPath = path + ".reason"
-		errs = append(errs, i.Reason.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, i.Reason.V.Validate(attrPath).Errs...)
 	}
 
-	return errs
+	return validateErr
 }

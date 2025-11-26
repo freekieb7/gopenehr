@@ -22,11 +22,21 @@ var (
 	ArchetypeIDRegex = regexp.MustCompile(`^([a-zA-Z0-9_]+)-([a-zA-Z0-9_]+)-([a-zA-Z0-9_]+)\.([a-zA-Z0-9_]+)(-[a-zA-Z0-9_]+)*\.v([0-9]+)$`)
 )
 
+// User friendly validation error structure
+// All of the values are displayed to the user
 type ValidationError struct {
 	Model          string `json:"model"`
 	Path           string `json:"path"`
 	Message        string `json:"message"`
 	Recommendation string `json:"recommendation"`
+}
+
+type ValidateError struct {
+	Errs []ValidationError `json:"errors"`
+}
+
+func (v ValidateError) Error() string {
+	return fmt.Sprintf("validation errors: %v", v.Errs)
 }
 
 func ValidateUID(uid string) error {

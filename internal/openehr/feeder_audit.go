@@ -34,14 +34,14 @@ func (f *FEEDER_AUDIT) SetModelName() {
 	}
 }
 
-func (f *FEEDER_AUDIT) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (f *FEEDER_AUDIT) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if f.Type_.E && f.Type_.V != FEEDER_AUDIT_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          FEEDER_AUDIT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -51,13 +51,13 @@ func (f *FEEDER_AUDIT) Validate(path string) []util.ValidationError {
 
 	// Validate originating_system_audit
 	attrPath = path + ".originating_system_audit"
-	errors = append(errors, f.OriginatingSystemAudit.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, f.OriginatingSystemAudit.Validate(attrPath).Errs...)
 
 	// Validate feeder_system_audit
 	if f.FeederSystemAudit.E {
 		attrPath = path + ".feeder_system_audit"
-		errors = append(errors, f.FeederSystemAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, f.FeederSystemAudit.V.Validate(attrPath).Errs...)
 	}
 
-	return errors
+	return validateErr
 }

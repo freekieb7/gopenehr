@@ -77,14 +77,14 @@ func (o *OBSERVATION) SetModelName() {
 	}
 }
 
-func (o *OBSERVATION) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (o *OBSERVATION) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if o.Type_.E && o.Type_.V != OBSERVATION_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          OBSERVATION_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + OBSERVATION_MODEL_NAME,
@@ -94,87 +94,87 @@ func (o *OBSERVATION) Validate(path string) []util.ValidationError {
 
 	// Validate name
 	attrPath = path + ".name"
-	errs = append(errs, o.Name.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, o.Name.Validate(attrPath).Errs...)
 
 	// Validate uid
 	if o.UID.E {
 		attrPath = path + ".uid"
-		errs = append(errs, o.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, o.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if o.Links.E {
 		for i := range o.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
-			errs = append(errs, o.Links.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, o.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if o.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errs = append(errs, o.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, o.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate feeder_audit
 	if o.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errs = append(errs, o.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, o.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate language
 	attrPath = path + ".language"
-	errs = append(errs, o.Language.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, o.Language.Validate(attrPath).Errs...)
 
 	// Validate encoding
 	attrPath = path + ".encoding"
-	errs = append(errs, o.Encoding.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, o.Encoding.Validate(attrPath).Errs...)
 
 	// Validate other_participations
 	if o.OtherParticipations.E {
 		for i := range o.OtherParticipations.V {
 			attrPath = fmt.Sprintf("%s.other_participations[%d]", path, i)
-			errs = append(errs, o.OtherParticipations.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, o.OtherParticipations.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate workflow_id
 	if o.WorkflowID.E {
 		attrPath = path + ".workflow_id"
-		errs = append(errs, o.WorkflowID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, o.WorkflowID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate subject
 	attrPath = path + ".subject"
-	errs = append(errs, o.Subject.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, o.Subject.Validate(attrPath).Errs...)
 
 	// Validate provider
 	if o.Provider.E {
 		attrPath = path + ".provider"
-		errs = append(errs, o.Provider.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, o.Provider.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate protocol
 	if o.Protocol.E {
 		attrPath = path + ".protocol"
-		errs = append(errs, o.Protocol.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, o.Protocol.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate guideline_id
 	if o.GuidelineID.E {
 		attrPath = path + ".guideline_id"
-		errs = append(errs, o.GuidelineID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, o.GuidelineID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate data
 	attrPath = path + ".data"
-	errs = append(errs, o.Data.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, o.Data.Validate(attrPath).Errs...)
 
 	// Validate state
 	if o.State.E {
 		attrPath = path + ".state"
-		errs = append(errs, o.State.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, o.State.V.Validate(attrPath).Errs...)
 	}
 
-	return errs
+	return validateErr
 }

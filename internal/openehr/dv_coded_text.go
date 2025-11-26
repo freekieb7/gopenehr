@@ -49,14 +49,14 @@ func (d *DV_CODED_TEXT) SetModelName() {
 	}
 }
 
-func (d *DV_CODED_TEXT) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (d *DV_CODED_TEXT) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if d.Type_.E && d.Type_.V != DV_CODED_TEXT_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_CODED_TEXT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_CODED_TEXT_MODEL_NAME, d.Type_.V),
@@ -66,14 +66,14 @@ func (d *DV_CODED_TEXT) Validate(path string) []util.ValidationError {
 
 	// Validate defining_code
 	attrPath = path + ".defining_code"
-	errors = append(errors, d.DefiningCode.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, d.DefiningCode.Validate(attrPath).Errs...)
 
 	// Validate formatting
 	if d.Formatting.E {
 		attrPath = path + ".formatting"
 		validFormats := []string{"plain", "plain_no_newlines", "markdown"}
 		if !slices.Contains(validFormats, d.Formatting.V) {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid formatting field: %s", d.Formatting.V),
@@ -85,14 +85,14 @@ func (d *DV_CODED_TEXT) Validate(path string) []util.ValidationError {
 	// Validate value
 	attrPath = path + ".value"
 	if d.Value == "" {
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_TEXT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "value field is required",
 			Recommendation: "Ensure value field is not empty",
 		})
 	} else if len(d.Value) > 10000 {
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_TEXT_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "value field exceeds maximum length of 10000 characters",
@@ -102,7 +102,7 @@ func (d *DV_CODED_TEXT) Validate(path string) []util.ValidationError {
 
 	if d.Formatting.E && d.Formatting.V == "plain_no_newlines" {
 		if strings.ContainsAny(d.Value, "\n\r") {
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
 				Message:        "value field contains newlines but formatting is 'plain_no_newlines'",
@@ -115,7 +115,7 @@ func (d *DV_CODED_TEXT) Validate(path string) []util.ValidationError {
 	if d.Mappings.E {
 		attrPath = path + ".mappings"
 		for i, v := range d.Mappings.V {
-			errors = append(errors, v.Validate(fmt.Sprintf("%s[%d]", attrPath, i))...)
+			validateErr.Errs = append(validateErr.Errs, v.Validate(fmt.Sprintf("%s[%d]", attrPath, i)).Errs...)
 		}
 	}
 
@@ -124,7 +124,7 @@ func (d *DV_CODED_TEXT) Validate(path string) []util.ValidationError {
 		attrPath = path + ".language"
 		if !terminology.IsValidLanguageTerminologyID(d.Language.V.TerminologyID.Value) {
 			attrPath = path + ".terminology_id.value"
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid language terminology ID: %s", d.Language.V.TerminologyID.Value),
@@ -134,14 +134,14 @@ func (d *DV_CODED_TEXT) Validate(path string) []util.ValidationError {
 
 		if !terminology.IsValidLanguageCode(d.Language.V.CodeString) {
 			attrPath = path + ".code_string"
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid language code: %s", d.Language.V.CodeString),
 				Recommendation: "Ensure language field is a known ISO 639-1 or ISO 639-2 language code",
 			})
 		}
-		errors = append(errors, d.Language.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.Language.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate encoding
@@ -149,7 +149,7 @@ func (d *DV_CODED_TEXT) Validate(path string) []util.ValidationError {
 		attrPath = path + ".encoding"
 		if !terminology.IsValidCharsetTerminologyID(d.Encoding.V.TerminologyID.Value) {
 			attrPath = path + ".terminology_id.value"
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid encoding terminology ID: %s", d.Encoding.V.TerminologyID.Value),
@@ -159,15 +159,15 @@ func (d *DV_CODED_TEXT) Validate(path string) []util.ValidationError {
 
 		if !terminology.IsValidCharset(d.Encoding.V.CodeString) {
 			attrPath = path + ".code_string"
-			errors = append(errors, util.ValidationError{
+			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          DV_TEXT_MODEL_NAME,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid encoding charset: %s", d.Encoding.V.CodeString),
 				Recommendation: "Ensure encoding field is a known IANA character set",
 			})
 		}
-		errors = append(errors, d.Encoding.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.Encoding.V.Validate(attrPath).Errs...)
 	}
 
-	return errors
+	return validateErr
 }

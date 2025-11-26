@@ -54,14 +54,14 @@ func (f *FOLDER) SetModelName() {
 	}
 }
 
-func (f *FOLDER) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (f *FOLDER) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if f.Type_.E && f.Type_.V != FOLDER_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          FOLDER_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -72,34 +72,34 @@ func (f *FOLDER) Validate(path string) []util.ValidationError {
 	// Validate uid
 	if f.UID.E {
 		attrPath = path + ".uid"
-		errors = append(errors, f.UID.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, f.UID.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate links
 	if f.Links.E {
 		for i := range f.Links.V {
 			attrPath = fmt.Sprintf("%s.links[%d]", path, i)
-			errors = append(errors, f.Links.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, f.Links.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate archetype_details
 	if f.ArchetypeDetails.E {
 		attrPath = path + ".archetype_details"
-		errors = append(errors, f.ArchetypeDetails.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, f.ArchetypeDetails.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate feeder_audit
 	if f.FeederAudit.E {
 		attrPath = path + ".feeder_audit"
-		errors = append(errors, f.FeederAudit.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, f.FeederAudit.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate items
 	if f.Items.E {
 		for i := range f.Items.V {
 			attrPath = fmt.Sprintf("%s.items[%d]", path, i)
-			errors = append(errors, f.Items.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, f.Items.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
@@ -107,15 +107,15 @@ func (f *FOLDER) Validate(path string) []util.ValidationError {
 	if f.Folders.E {
 		for i := range f.Folders.V {
 			attrPath = fmt.Sprintf("%s.folders[%d]", path, i)
-			errors = append(errors, f.Folders.V[i].Validate(attrPath)...)
+			validateErr.Errs = append(validateErr.Errs, f.Folders.V[i].Validate(attrPath).Errs...)
 		}
 	}
 
 	// Validate details
 	if f.Details.E {
 		attrPath = path + ".details"
-		errors = append(errors, f.Details.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, f.Details.V.Validate(attrPath).Errs...)
 	}
 
-	return errors
+	return validateErr
 }

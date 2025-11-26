@@ -39,14 +39,14 @@ func (d *DV_QUANTITY) SetModelName() {
 	d.Symbol.SetModelName()
 }
 
-func (d *DV_QUANTITY) Validate(path string) []util.ValidationError {
-	var errors []util.ValidationError
+func (d *DV_QUANTITY) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if d.Type_.E && d.Type_.V != DV_QUANTITY_MODEL_NAME {
 		attrPath = path + "._type"
-		errors = append(errors, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          DV_QUANTITY_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "invalid _type field",
@@ -57,26 +57,26 @@ func (d *DV_QUANTITY) Validate(path string) []util.ValidationError {
 	// Validate normal_status
 	if d.NormalStatus.E {
 		attrPath = path + ".normal_status"
-		errors = append(errors, d.NormalStatus.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.NormalStatus.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate normal_range
 	if d.NormalRange.E {
 		attrPath = path + ".normal_range"
-		errors = append(errors, d.NormalRange.V.Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, d.NormalRange.V.Validate(attrPath).Errs...)
 	}
 
 	// Validate other_reference_ranges
 	if d.OtherReferenceRanges.E {
 		for i := range d.OtherReferenceRanges.V {
 			itemPath := fmt.Sprintf("%s.other_reference_ranges[%d]", attrPath, i)
-			errors = append(errors, d.OtherReferenceRanges.V[i].Validate(itemPath)...)
+			validateErr.Errs = append(validateErr.Errs, d.OtherReferenceRanges.V[i].Validate(itemPath).Errs...)
 		}
 	}
 
 	// Validate symbol
 	attrPath = path + ".symbol"
-	errors = append(errors, d.Symbol.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, d.Symbol.Validate(attrPath).Errs...)
 
-	return errors
+	return validateErr
 }

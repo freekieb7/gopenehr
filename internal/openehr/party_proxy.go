@@ -29,7 +29,7 @@ type PartyProxyModel interface {
 	isPartyProxyModel()
 	HasModelName() bool
 	SetModelName()
-	Validate(path string) []util.ValidationError
+	Validate(path string) util.ValidateError
 }
 
 type X_PARTY_PROXY struct {
@@ -40,21 +40,21 @@ func (x *X_PARTY_PROXY) SetModelName() {
 	x.Value.SetModelName()
 }
 
-func (x *X_PARTY_PROXY) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (x *X_PARTY_PROXY) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Abstract model requires _type to be defined
 	if !x.Value.HasModelName() {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:   PARTY_PROXY_MODEL_NAME,
 			Path:    attrPath,
 			Message: "missing _type field for abstract model",
 		})
 	}
 
-	return errs
+	return validateErr
 }
 
 func (x X_PARTY_PROXY) MarshalJSON() ([]byte, error) {
@@ -75,10 +75,17 @@ func (x *X_PARTY_PROXY) UnmarshalJSON(data []byte) error {
 		x.Value = new(PARTY_IDENTIFIED)
 	case PARTY_RELATED_MODEL_NAME:
 		x.Value = new(PARTY_RELATED)
-	case "":
-		return fmt.Errorf("missing PARTY_PROXY _type field")
 	default:
-		return fmt.Errorf("PARTY_PROXY unexpected _type %s", t)
+		return util.ValidateError{
+			Errs: []util.ValidationError{
+				{
+					Model:          PARTY_PROXY_MODEL_NAME,
+					Path:           "$.**._type",
+					Message:        fmt.Sprintf("unexpected PARTY_PROXY _type %s", t),
+					Recommendation: "Ensure _type field is one of the known PARTY_PROXY subtypes",
+				},
+			},
+		}
 	}
 
 	return json.Unmarshal(data, x.Value)

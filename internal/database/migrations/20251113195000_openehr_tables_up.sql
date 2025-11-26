@@ -73,6 +73,7 @@ CREATE INDEX idx_contribution_data_gin ON openehr.tbl_contribution_data USING gi
 CREATE TABLE openehr.tbl_versioned_object (
     id UUID PRIMARY KEY,
     type TEXT NOT NULL,
+    object_type TEXT NOT NULL,
     ehr_id UUID REFERENCES openehr.tbl_ehr(id) ON DELETE CASCADE,
     contribution_id UUID NOT NULL REFERENCES openehr.tbl_contribution(id) ON DELETE CASCADE,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -80,6 +81,9 @@ CREATE TABLE openehr.tbl_versioned_object (
 
 -- Index for filtering by type (very common in AQL)
 CREATE INDEX idx_versioned_object_type ON openehr.tbl_versioned_object USING btree (type);
+
+-- Index for filtering on specific object types (partial indexes for common queries)
+CREATE INDEX idx_versioned_object_object_type ON openehr.tbl_versioned_object USING btree(object_type);
 
 -- Index for EHR-related versioned objects
 CREATE INDEX idx_versioned_object_ehr_id ON openehr.tbl_versioned_object 

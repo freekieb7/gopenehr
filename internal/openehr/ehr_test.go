@@ -66,10 +66,10 @@ func TestValidateValidEHR(t *testing.T) {
 		t.Fatalf("Failed to unmarshal EHR JSON: %v", err)
 	}
 
-	errors := ehr.Validate("$")
-	if len(errors) != 0 {
-		t.Errorf("Expected no validation errors, got %d", len(errors))
-		for _, err := range errors {
+	validateErr := ehr.Validate("$")
+	if len(validateErr.Errs) != 0 {
+		t.Errorf("Expected no validation errors, got %d", len(validateErr.Errs))
+		for _, err := range validateErr.Errs {
 			t.Logf("Validation error: %s", err.Message)
 		}
 	}
@@ -91,10 +91,10 @@ func TestValidateInvalidEHR(t *testing.T) {
 		TimeCreated: DV_DATE_TIME{Value: "2023-01-01T00:00:00Z"},
 	}
 
-	errors := ehr.Validate("$")
-	if len(errors) != 6 {
-		t.Errorf("Expected 5 validation errors, got %d", len(errors))
-		for _, err := range errors {
+	validateErr := ehr.Validate("$")
+	if len(validateErr.Errs) != 6 {
+		t.Errorf("Expected 5 validation errors, got %d", len(validateErr.Errs))
+		for _, err := range validateErr.Errs {
 			t.Logf("Validation error: %s", err.Message)
 		}
 	}

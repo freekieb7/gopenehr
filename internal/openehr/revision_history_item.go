@@ -22,14 +22,14 @@ func (r *REVISION_HISTORY_ITEM) SetModelName() {
 	}
 }
 
-func (r *REVISION_HISTORY_ITEM) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (r *REVISION_HISTORY_ITEM) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if r.Type_.E && r.Type_.V != REVISION_HISTORY_ITEM_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model: REVISION_HISTORY_ITEM_MODEL_NAME,
 			Path:  attrPath,
 		})
@@ -37,12 +37,12 @@ func (r *REVISION_HISTORY_ITEM) Validate(path string) []util.ValidationError {
 
 	// Validate version_id
 	attrPath = path + ".version_id"
-	errs = append(errs, r.VersionID.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, r.VersionID.Validate(attrPath).Errs...)
 
 	// Validate audits
 	if len(r.Audits) == 0 {
 		attrPath = path + ".audits"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          REVISION_HISTORY_ITEM_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "audits array cannot be empty",
@@ -52,8 +52,8 @@ func (r *REVISION_HISTORY_ITEM) Validate(path string) []util.ValidationError {
 
 	for i := range r.Audits {
 		attrPath = fmt.Sprintf("%s.audits[%d]", path, i)
-		errs = append(errs, r.Audits[i].Validate(attrPath)...)
+		validateErr.Errs = append(validateErr.Errs, r.Audits[i].Validate(attrPath).Errs...)
 	}
 
-	return errs
+	return validateErr
 }

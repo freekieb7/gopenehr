@@ -24,14 +24,14 @@ func (c *CONTRIBUTION) SetModelName() {
 	c.Audit.SetModelName()
 }
 
-func (c *CONTRIBUTION) Validate(path string) []util.ValidationError {
-	var errs []util.ValidationError
+func (c *CONTRIBUTION) Validate(path string) util.ValidateError {
+	var validateErr util.ValidateError
 	var attrPath string
 
 	// Validate _type
 	if c.Type_.E && c.Type_.V != CONTRIBUTION_MODEL_NAME {
 		attrPath = path + "._type"
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          CONTRIBUTION_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "_type must be " + CONTRIBUTION_MODEL_NAME,
@@ -41,12 +41,12 @@ func (c *CONTRIBUTION) Validate(path string) []util.ValidationError {
 
 	// Validate uid
 	attrPath = path + ".uid"
-	errs = append(errs, c.UID.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, c.UID.Validate(attrPath).Errs...)
 
 	// Validate versions
 	attrPath = path + ".versions"
 	if len(c.Versions) == 0 {
-		errs = append(errs, util.ValidationError{
+		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          CONTRIBUTION_MODEL_NAME,
 			Path:           attrPath,
 			Message:        "versions must contain at least one OBJECT_REF",
@@ -55,13 +55,13 @@ func (c *CONTRIBUTION) Validate(path string) []util.ValidationError {
 	} else {
 		for i := range c.Versions {
 			uidPath := fmt.Sprintf("%s[%d]", attrPath, i)
-			errs = append(errs, c.Versions[i].Validate(uidPath)...)
+			validateErr.Errs = append(validateErr.Errs, c.Versions[i].Validate(uidPath).Errs...)
 		}
 	}
 
 	// Validate audit
 	attrPath = path + ".audit"
-	errs = append(errs, c.Audit.Validate(attrPath)...)
+	validateErr.Errs = append(validateErr.Errs, c.Audit.Validate(attrPath).Errs...)
 
-	return errs
+	return validateErr
 }

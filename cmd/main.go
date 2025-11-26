@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/freekieb7/gopenehr/internal/audit"
+	auditHandler "github.com/freekieb7/gopenehr/internal/audit/handler"
 	"github.com/freekieb7/gopenehr/internal/cli"
 	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/database"
@@ -17,6 +18,7 @@ import (
 	healthHandler "github.com/freekieb7/gopenehr/internal/health/handler"
 	openehrHandler "github.com/freekieb7/gopenehr/internal/openehr/handler"
 	openehrService "github.com/freekieb7/gopenehr/internal/openehr/service"
+	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	_ "go.uber.org/automaxprocs/maxprocs"
@@ -66,9 +68,7 @@ func runServer(ctx context.Context) error {
 	}
 
 	// Init logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
+	logger := telemetry.NewLogger(cfg.LogLevel)
 
 	// Init database
 	db := database.New()
@@ -100,28 +100,26 @@ func runServer(ctx context.Context) error {
 		EnableSplittingOnParsers: true,
 	})
 
-	// Compression middleware (use in production)
-	if cfg.Environment == config.Production {
-		srv.Use(compress.New(compress.Config{
-			Level: compress.LevelBestSpeed, // Faster than LevelBestCompression
-		}))
-	}
+	// Compression middleware
+	srv.Use(compress.New(compress.Config{
+		Level: compress.LevelBestSpeed,
+	}))
 
 	// Services
+	healthChecker := health.NewChecker(cfg.Version, config.TARGET_MIGRATION_VERSION, &db)
+	auditService := audit.NewService(logger, &db)
 	ehrService := openehrService.NewEHRService(logger, &db)
 	demographicService := openehrService.NewDemographicService(logger, &db)
-	queryService := openehrService.NewQueryService(logger, &db)
+	queryService := openehrService.NewQueryService(logger, &db, &auditService)
 
 	// Routes
-	healthHandler := healthHandler.Handler{
-		HealthChecker: &health.Checker{
-			Version: cfg.Version,
-			DB:      &db,
-		},
-	}
+	healthHandler := healthHandler.NewHandler(&healthChecker)
 	healthHandler.RegisterRoutes(srv)
 
-	openEHRHandler := openehrHandler.NewHandler(&cfg, logger, &ehrService, &demographicService, &queryService)
+	auditHandler := auditHandler.NewHandler(logger, &auditService)
+	auditHandler.RegisterRoutes(srv)
+
+	openEHRHandler := openehrHandler.NewHandler(&cfg, logger, &ehrService, &demographicService, &queryService, &auditService)
 	openEHRHandler.RegisterRoutes(srv)
 
 	// Set up signal handling for graceful shutdown
@@ -167,9 +165,7 @@ func runMigrate(ctx context.Context, args []string) error {
 	}
 
 	// Init logger
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
+	logger := telemetry.NewLogger(cfg.LogLevel)
 
 	// Init database
 	db := database.Database{}
@@ -181,7 +177,7 @@ func runMigrate(ctx context.Context, args []string) error {
 	migrate := cli.Migrator{
 		DB:            &db,
 		Logger:        logger,
-		MigrationsDir: cfg.MigrationsDir,
+		MigrationsDir: "./migrations",
 	}
 
 	return migrate.Run(ctx, args)
@@ -194,9 +190,7 @@ func runHealthcheck(ctx context.Context) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	}))
+	logger := telemetry.NewLogger(cfg.LogLevel)
 
 	// Create HTTP client with timeout
 	client := &http.Client{

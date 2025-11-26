@@ -20,7 +20,7 @@ CREATE SCHEMA openehr;
 
 CREATE TABLE openehr.tbl_ehr (
     id UUID PRIMARY KEY,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Index for time-based EHR queries
@@ -41,7 +41,7 @@ CREATE INDEX idx_ehr_data_gin ON openehr.tbl_ehr_data USING gin (data jsonb_path
 CREATE TABLE openehr.tbl_contribution (
     id UUID PRIMARY KEY,
     ehr_id UUID REFERENCES openehr.tbl_ehr(id) ON DELETE CASCADE,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Index for filtering contributions by EHR
@@ -76,7 +76,7 @@ CREATE TABLE openehr.tbl_versioned_object (
     object_type TEXT NOT NULL,
     ehr_id UUID REFERENCES openehr.tbl_ehr(id) ON DELETE CASCADE,
     contribution_id UUID NOT NULL REFERENCES openehr.tbl_contribution(id) ON DELETE CASCADE,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Index for filtering by type (very common in AQL)
@@ -128,7 +128,7 @@ CREATE TABLE openehr.tbl_object_version (
     type TEXT NOT NULL,
     ehr_id UUID REFERENCES openehr.tbl_ehr(id) ON DELETE CASCADE,
     contribution_id UUID NOT NULL REFERENCES openehr.tbl_contribution(id) ON DELETE CASCADE,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- CRITICAL: Index for getting latest version of each versioned object (DISTINCT ON optimization)
@@ -230,7 +230,7 @@ CREATE TABLE openehr.tbl_query (
     name TEXT NOT NULL,
     version INT NOT NULL,
     query TEXT NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (name, version)
 );
 
@@ -241,6 +241,46 @@ CREATE INDEX idx_query_name_version ON openehr.tbl_query
 -- Index for time-based query lookups
 CREATE INDEX idx_query_created_at ON openehr.tbl_query 
     USING btree (created_at DESC);
+
+-- ========== Audit Schemas ==========
+
+CREATE SCHEMA audit;
+
+CREATE TABLE audit.tbl_audit_log (
+    id UUID PRIMARY KEY,
+    actor_id UUID NOT NULL,
+    actor_type TEXT NOT NULL,
+    resource TEXT NOT NULL,
+    action TEXT NOT NULL,
+    success BOOLEAN NOT NULL,
+    ip_address INET,
+    user_agent TEXT,
+    details JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Index for time-based audit log queries
+ALTER TABLE audit.tbl_audit_log ALTER COLUMN details SET COMPRESSION lz4;
+
+-- Index for time-based audit log queries
+CREATE INDEX idx_audit_log_created_at ON audit.tbl_audit_log USING btree (created_at DESC);
+
+-- ========== User Schema ==========
+
+CREATE SCHEMA account;
+
+CREATE TABLE account.tbl_account (
+    id UUID PRIMARY KEY,
+    type TEXT NOT NULL, -- e.g., 'USER', 'SYSTEM'
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Insert initial SYSTEM account
+INSERT INTO account.tbl_account (id, type, created_at) VALUES
+    ('9f5c8bd8-4c88-43f0-90e6-baadf00dc0de', 'SYSTEM', NOW());
+
+-- Unique index to ensure only one system account exists
+CREATE UNIQUE INDEX one_system_account ON account.tbl_account (type) WHERE type = 'SYSTEM';
 
 -- ========= Additional Performance Tuning ==========
 

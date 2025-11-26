@@ -13,6 +13,12 @@ type Handler struct {
 	HealthChecker *health.Checker
 }
 
+func NewHandler(healthChecker *health.Checker) Handler {
+	return Handler{
+		HealthChecker: healthChecker,
+	}
+}
+
 func (h *Handler) RegisterRoutes(app *fiber.App) {
 	healthGroup := app.Group("/health")
 	healthGroup.Use(middleware.NoCache)

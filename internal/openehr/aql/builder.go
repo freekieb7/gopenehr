@@ -590,7 +590,7 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 				LEFT JOIN openehr.tbl_object_version tmp_es_%[2]s ON tmp_es_%[2]s.ehr_id = %[3]s.id AND tmp_es_%[2]s.type = '%[4]s'
 				LEFT JOIN openehr.tbl_object_version_data tmp_esd_%[2]s ON tmp_es_%[2]s.id = tmp_esd_%[2]s.id
 				LEFT JOIN %[1]s
-					ON %[2]s.id = tmp_esd_%[2]s.object_data->'subject'->'external_ref'->'id'->>'value'
+					ON %[2]s.id::text = tmp_esd_%[2]s.object_data->'subject'->'external_ref'->'id'->>'value'
 					AND tmp_esd_%[2]s.object_data->'subject'->'external_ref'->>'namespace' = 'local'
 					AND tmp_esd_%[2]s.object_data->'subject'->'external_ref'->>'type' = '%[5]s'
 			`, expression, source.Table, prevSource.V.Table, openehr.EHR_STATUS_MODEL_NAME, openehr.VERSIONED_PARTY_MODEL_NAME), nil
@@ -752,12 +752,12 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 		if !allVersions {
 			expression += "DISTINCT ON (ov.versioned_object_id) "
 		}
-		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'PERSON'"
+		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'PERSON' "
 		if whereExpression != "" {
-			expression += " AND " + whereExpression
+			expression += "AND " + whereExpression
 		}
 		if !allVersions {
-			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
+			expression += " ORDER BY ov.versioned_object_id, ov.created_at DESC"
 		}
 		expression = "(" + expression + ") " + source.Table
 

@@ -1,9 +1,9 @@
 DATABASE_URL := postgres://gopenehr:gopenehrpass@localhost:5432/gopenehr
-MIGRATIONS_DIR := ./internal/database/migrations
+LOG_LEVEL := DEBUG
 
 APP_VARIABLES := \
 	DATABASE_URL=$(DATABASE_URL) \
-	MIGRATIONS_DIR=$(MIGRATIONS_DIR)
+	APP_ENV=$(APP_ENV)
 
 .PHONY: up
 up:
@@ -22,8 +22,8 @@ lint:
 migrate:
 	$(APP_VARIABLES) go run -mod=vendor ./... migrate up
 
-.PHONY: run
-run:
+.PHONY: serve
+serve:
 	$(APP_VARIABLES) go run -mod=vendor ./... serve
 
 .PHONY: aql-gen

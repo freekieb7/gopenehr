@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/freekieb7/gopenehr/internal/audit"
 	"github.com/freekieb7/gopenehr/internal/database"
 	"github.com/freekieb7/gopenehr/internal/openehr/aql"
 	"github.com/google/uuid"
@@ -28,14 +29,16 @@ type StoredQuery struct {
 }
 
 type QueryService struct {
-	Logger *slog.Logger
-	DB     *database.Database
+	Logger       *slog.Logger
+	DB           *database.Database
+	AuditService *audit.Service
 }
 
-func NewQueryService(logger *slog.Logger, db *database.Database) QueryService {
+func NewQueryService(logger *slog.Logger, db *database.Database, auditService *audit.Service) QueryService {
 	return QueryService{
-		Logger: logger,
-		DB:     db,
+		Logger:       logger,
+		DB:           db,
+		AuditService: auditService,
 	}
 }
 
@@ -50,9 +53,11 @@ func (s *QueryService) QueryAndCopyTo(ctx context.Context, w io.Writer, aqlQuery
 		return err
 	}
 
+	s.Logger.DebugContext(ctx, "query error", "error", err, "aql", aqlQuery, "sql", strings.ReplaceAll(strings.ReplaceAll(sqlQuery, "\n", " "), "\t", " "))
+
 	rows, err := s.DB.Query(ctx, sqlQuery)
 	if err != nil {
-		s.Logger.Error("query error", "error", err, "aql", aqlQuery, "sql", strings.ReplaceAll(strings.ReplaceAll(sqlQuery, "\n", " "), "\t", " "))
+		s.Logger.ErrorContext(ctx, "query error", "error", err, "aql", aqlQuery, "sql", strings.ReplaceAll(strings.ReplaceAll(sqlQuery, "\n", " "), "\t", " "))
 		return err
 	}
 

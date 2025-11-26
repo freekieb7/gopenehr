@@ -1497,10 +1497,7 @@ func (s *EHRService) ValidateDirectory(ctx context.Context, ehrID uuid.UUID, dir
 	pathQueue := make([]string, 0)
 	pathQueue = append(pathQueue, "$")
 
-	for {
-		if len(folderQueue) == 0 {
-			break
-		}
+	for len(folderQueue) > 0 {
 		currentFolder := folderQueue[0]
 		folderQueue = folderQueue[1:]
 		currentPath := pathQueue[0]

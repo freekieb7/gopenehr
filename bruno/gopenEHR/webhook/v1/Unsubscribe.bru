@@ -1,0 +1,20 @@
+meta {
+  name: Unsubscribe
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/webhooks/v1/:subscription_id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  subscription_id: f80ba870-67b9-4596-bac6-1ab12ee2823d
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

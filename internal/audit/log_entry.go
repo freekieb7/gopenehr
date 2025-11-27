@@ -40,6 +40,7 @@ const (
 	ResourceVersionedParty        Resource = "versioned_party"
 	ResourceVersionedPartyVersion Resource = "versioned_party_version"
 	ResourceQuery                 Resource = "query"
+	ResourceWebhook               Resource = "webhook"
 )
 
 type Action string

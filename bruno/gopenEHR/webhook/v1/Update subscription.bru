@@ -1,0 +1,27 @@
+meta {
+  name: Update subscription
+  type: http
+  seq: 3
+}
+
+patch {
+  url: {{baseUrl}}/webhooks/v1/:subscription_id
+  body: json
+  auth: inherit
+}
+
+params:path {
+  subscription_id: 5cef228b-acad-4a8d-a8d3-95e8fe1350be
+}
+
+body:json {
+  {
+    "url": "https://webhook.site/4055cd54-60c7-4002-b58a-480a8a0fd05f",
+    "event_types": ["ehr.created"]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

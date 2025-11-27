@@ -10,15 +10,13 @@ import (
 	"time"
 
 	"github.com/freekieb7/gopenehr/internal/audit"
-	auditHandler "github.com/freekieb7/gopenehr/internal/audit/handler"
 	"github.com/freekieb7/gopenehr/internal/cli"
 	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/database"
 	"github.com/freekieb7/gopenehr/internal/health"
-	healthHandler "github.com/freekieb7/gopenehr/internal/health/handler"
-	openehrHandler "github.com/freekieb7/gopenehr/internal/openehr/handler"
-	openehrService "github.com/freekieb7/gopenehr/internal/openehr/service"
+	"github.com/freekieb7/gopenehr/internal/openehr"
 	"github.com/freekieb7/gopenehr/internal/telemetry"
+	"github.com/freekieb7/gopenehr/internal/webhook"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	_ "go.uber.org/automaxprocs/maxprocs"
@@ -62,17 +60,17 @@ func run(ctx context.Context, args []string) error {
 
 func runServer(ctx context.Context) error {
 	// Load config
-	cfg := config.Config{}
-	if err := cfg.Load(); err != nil {
+	settings := config.NewSettings()
+	if err := settings.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	// Init logger
-	logger := telemetry.NewLogger(cfg.LogLevel)
+	logger := telemetry.NewLogger(settings.LogLevel)
 
 	// Init database
 	db := database.New()
-	if err := db.Connect(ctx, cfg.DatabaseURL); err != nil {
+	if err := db.Connect(ctx, settings.DatabaseURL); err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 	defer db.Close()
@@ -106,20 +104,22 @@ func runServer(ctx context.Context) error {
 	}))
 
 	// Services
-	healthChecker := health.NewChecker(cfg.Version, config.TARGET_MIGRATION_VERSION, &db)
+	healthChecker := health.NewChecker(settings.Version, config.TARGET_MIGRATION_VERSION, &db)
 	auditService := audit.NewService(logger, &db)
-	ehrService := openehrService.NewEHRService(logger, &db)
-	demographicService := openehrService.NewDemographicService(logger, &db)
-	queryService := openehrService.NewQueryService(logger, &db, &auditService)
+	webhookService := webhook.NewService(logger, &db)
+	openEHRService := openehr.NewService(logger, &db)
 
 	// Routes
-	healthHandler := healthHandler.NewHandler(&healthChecker)
+	healthHandler := health.NewHandler(&healthChecker)
 	healthHandler.RegisterRoutes(srv)
 
-	auditHandler := auditHandler.NewHandler(logger, &auditService)
+	auditHandler := audit.NewHandler(&settings, logger, &auditService)
 	auditHandler.RegisterRoutes(srv)
 
-	openEHRHandler := openehrHandler.NewHandler(&cfg, logger, &ehrService, &demographicService, &queryService, &auditService)
+	webhookHandler := webhook.NewHandler(&settings, logger, &auditService, &webhookService)
+	webhookHandler.RegisterRoutes(srv)
+
+	openEHRHandler := openehr.NewHandler(&settings, logger, &openEHRService, &auditService, &webhookService)
 	openEHRHandler.RegisterRoutes(srv)
 
 	// Set up signal handling for graceful shutdown
@@ -131,9 +131,21 @@ func runServer(ctx context.Context) error {
 
 	// Start server
 	go func() {
-		logger.InfoContext(ctx, "Starting server", "port", cfg.Port)
-		if err := srv.Listen(":" + cfg.Port); err != nil {
+		logger.InfoContext(ctx, "Starting server", "port", settings.Port)
+		if err := srv.Listen(":" + settings.Port); err != nil {
 			serverErrChan <- err
+		}
+	}()
+
+	// Start webhook delivery worker
+	worker := webhook.NewWorker(logger, &db, &http.Client{
+		Timeout: 10 * time.Second,
+	})
+	go func() {
+		logger.InfoContext(ctx, "Starting webhook delivery worker")
+		err := worker.Run(ctx)
+		if err != nil {
+			logger.ErrorContext(ctx, "Webhook delivery worker error", "error", err)
 		}
 	}()
 
@@ -159,17 +171,17 @@ func runServer(ctx context.Context) error {
 
 func runMigrate(ctx context.Context, args []string) error {
 	// Load config
-	cfg := config.Config{}
-	if err := cfg.Load(); err != nil {
+	settings := config.NewSettings()
+	if err := settings.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	// Init logger
-	logger := telemetry.NewLogger(cfg.LogLevel)
+	logger := telemetry.NewLogger(settings.LogLevel)
 
 	// Init database
 	db := database.Database{}
-	if err := db.Connect(ctx, cfg.DatabaseURL); err != nil {
+	if err := db.Connect(ctx, settings.DatabaseURL); err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}
 	defer db.Close()
@@ -185,12 +197,12 @@ func runMigrate(ctx context.Context, args []string) error {
 
 func runHealthcheck(ctx context.Context) error {
 	// Get port from environment variable (default: 3000)
-	cfg := config.Config{}
-	if err := cfg.Load(); err != nil {
+	settings := config.NewSettings()
+	if err := settings.Load(); err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	logger := telemetry.NewLogger(cfg.LogLevel)
+	logger := telemetry.NewLogger(settings.LogLevel)
 
 	// Create HTTP client with timeout
 	client := &http.Client{
@@ -198,7 +210,7 @@ func runHealthcheck(ctx context.Context) error {
 	}
 
 	// Check health endpoint
-	url := fmt.Sprintf("http://localhost:%s/health/readyz", cfg.Port)
+	url := fmt.Sprintf("http://localhost:%s/health/readyz", settings.Port)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)

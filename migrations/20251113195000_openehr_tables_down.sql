@@ -4,6 +4,7 @@
 
 -- Add your down migration SQL here
 
-DROP SCHEMA user CASCADE;
+DROP SCHEMA webhook CASCADE;
+DROP SCHEMA account CASCADE;
 DROP SCHEMA audit CASCADE;
 DROP SCHEMA openehr CASCADE;

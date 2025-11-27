@@ -26,16 +26,6 @@ CREATE TABLE openehr.tbl_ehr (
 -- Index for time-based EHR queries
 CREATE INDEX idx_ehr_created_at ON openehr.tbl_ehr USING btree (created_at DESC);
 
-CREATE TABLE openehr.tbl_ehr_data (
-    id UUID PRIMARY KEY REFERENCES openehr.tbl_ehr(id) ON DELETE CASCADE,
-    data JSONB NOT NULL
-);
-
-ALTER TABLE openehr.tbl_ehr_data ALTER COLUMN data SET COMPRESSION lz4;
-
--- GIN index for general JSONB queries on EHR data
-CREATE INDEX idx_ehr_data_gin ON openehr.tbl_ehr_data USING gin (data jsonb_path_ops);
-
 -- ========= Contribution Table ==========
 
 CREATE TABLE openehr.tbl_contribution (
@@ -73,17 +63,13 @@ CREATE INDEX idx_contribution_data_gin ON openehr.tbl_contribution_data USING gi
 CREATE TABLE openehr.tbl_versioned_object (
     id UUID PRIMARY KEY,
     type TEXT NOT NULL,
-    object_type TEXT NOT NULL,
     ehr_id UUID REFERENCES openehr.tbl_ehr(id) ON DELETE CASCADE,
-    contribution_id UUID NOT NULL REFERENCES openehr.tbl_contribution(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Index for filtering by type (very common in AQL)
-CREATE INDEX idx_versioned_object_type ON openehr.tbl_versioned_object USING btree (type);
-
--- Index for filtering on specific object types (partial indexes for common queries)
-CREATE INDEX idx_versioned_object_object_type ON openehr.tbl_versioned_object USING btree(object_type);
+CREATE INDEX idx_versioned_object_type ON openehr.tbl_versioned_object 
+    USING btree (type);
 
 -- Index for EHR-related versioned objects
 CREATE INDEX idx_versioned_object_ehr_id ON openehr.tbl_versioned_object 
@@ -92,10 +78,6 @@ CREATE INDEX idx_versioned_object_ehr_id ON openehr.tbl_versioned_object
 -- Composite index for EHR + type queries (common AQL pattern)
 CREATE INDEX idx_versioned_object_ehr_type ON openehr.tbl_versioned_object 
     USING btree (ehr_id, type) WHERE ehr_id IS NOT NULL;
-
--- Index for contribution lookups
-CREATE INDEX idx_versioned_object_contribution_id ON openehr.tbl_versioned_object 
-    USING btree (contribution_id);
 
 -- Index for time-based queries
 CREATE INDEX idx_versioned_object_created_at ON openehr.tbl_versioned_object 
@@ -175,21 +157,16 @@ CREATE INDEX idx_object_version_demographic ON openehr.tbl_object_version
 
 CREATE TABLE openehr.tbl_object_version_data (
     id TEXT PRIMARY KEY REFERENCES openehr.tbl_object_version(id) ON DELETE CASCADE,
-    data JSONB NOT NULL,
-    object_data JSONB GENERATED ALWAYS AS (
-        CASE 
-            WHEN data->>'_type' = 'ORIGINAL_VERSION' 
-            THEN data->'data'
-            ELSE data->'item'->'data'
-        END
-    ) STORED
+    version_data JSONB NOT NULL,
+    object_data JSONB NOT NULL
 );
 
-ALTER TABLE openehr.tbl_object_version_data ALTER COLUMN data SET COMPRESSION lz4;
+ALTER TABLE openehr.tbl_object_version_data ALTER COLUMN version_data SET COMPRESSION lz4;
+ALTER TABLE openehr.tbl_object_version_data ALTER COLUMN object_data SET COMPRESSION lz4;
 
--- GIN index for general JSONB queries on full data
-CREATE INDEX idx_object_version_data_gin ON openehr.tbl_object_version_data 
-    USING gin (data jsonb_path_ops);
+-- GIN index for general JSONB queries on version_data
+CREATE INDEX idx_object_version_version_data_gin ON openehr.tbl_object_version_data 
+    USING gin (version_data jsonb_path_ops);
 
 -- GIN index for queries on extracted object_data (most common)
 CREATE INDEX idx_object_version_object_data_gin ON openehr.tbl_object_version_data 
@@ -242,6 +219,82 @@ CREATE INDEX idx_query_name_version ON openehr.tbl_query
 CREATE INDEX idx_query_created_at ON openehr.tbl_query 
     USING btree (created_at DESC);
 
+-- ========= EHR View ==========
+CREATE VIEW openehr.vw_ehr AS
+SELECT
+    e.id,
+    jsonb_build_object(
+        'system_id', jsonb_build_object(
+            'value', 'gopenehr'
+        ),
+        'ehr_id', jsonb_build_object(
+            'value', e.id
+        ),
+        'ehr_status', jsonb_build_object(
+            'namespace', 'local',
+            'type', 'EHR_STATUS',
+            'id', jsonb_build_object(
+                '_type', 'OBJECT_VERSION_ID',
+                'value', es.id
+            )
+        ),
+        'ehr_access', jsonb_build_object(
+            'namespace', 'local',
+            'type', 'EHR_ACCESS',
+            'id', jsonb_build_object(
+                '_type', 'OBJECT_VERSION_ID',
+                'value', ea.id
+            )
+        ),
+        'contributions', coalesce(contrib.contributions, '[]'::jsonb),
+        'compositions', coalesce(comp.compositions, '[]'::jsonb),
+        'directory', jsonb_build_object(
+            'namespace', 'local',
+            'type', 'FOLDER',
+            'id', jsonb_build_object(
+                '_type', 'OBJECT_VERSION_ID',
+                'value', fo.id
+            )
+        ),
+        'time_created', jsonb_build_object(
+            'value', to_char(e.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.USZ')
+        )
+    ) AS data,
+    e.created_at
+FROM openehr.tbl_ehr e
+
+JOIN openehr.tbl_object_version es 
+  ON es.ehr_id = e.id AND es.type = 'EHR_STATUS'
+JOIN openehr.tbl_object_version ea 
+  ON ea.ehr_id = e.id AND ea.type = 'EHR_ACCESS'
+LEFT JOIN openehr.tbl_object_version fo 
+  ON fo.ehr_id = e.id AND fo.type = 'FOLDER'
+LEFT JOIN LATERAL (
+    SELECT jsonb_agg(jsonb_build_object(
+        'namespace', 'local',
+        'type', 'CONTRIBUTION',
+        'id', jsonb_build_object(
+            '_type', 'HIER_OBJECT_ID',
+            'value', id
+        )
+    )) AS contributions
+    FROM openehr.tbl_contribution
+    WHERE ehr_id = e.id
+) contrib ON true
+LEFT JOIN LATERAL (
+    SELECT jsonb_agg(jsonb_build_object(
+        'namespace', 'local',
+        'type', 'VERSIONED_COMPOSITION',
+        'id', jsonb_build_object(
+            '_type', 'HIER_OBJECT_ID',
+            'value', id
+        )
+    )) AS compositions
+    FROM openehr.tbl_versioned_object
+    WHERE ehr_id = e.id
+      AND type = 'VERSIONED_COMPOSITION'
+) comp ON true;
+
 -- ========== Audit Schemas ==========
 
 CREATE SCHEMA audit;
@@ -272,15 +325,55 @@ CREATE SCHEMA account;
 CREATE TABLE account.tbl_account (
     id UUID PRIMARY KEY,
     type TEXT NOT NULL, -- e.g., 'USER', 'SYSTEM'
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- Insert initial SYSTEM account
-INSERT INTO account.tbl_account (id, type, created_at) VALUES
-    ('9f5c8bd8-4c88-43f0-90e6-baadf00dc0de', 'SYSTEM', NOW());
+INSERT INTO account.tbl_account (id, type, created_at, updated_at) VALUES
+    ('00000000-0000-0000-0000-000000000001', 'SYSTEM', NOW(), NOW());
 
 -- Unique index to ensure only one system account exists
 CREATE UNIQUE INDEX one_system_account ON account.tbl_account (type) WHERE type = 'SYSTEM';
+
+
+-- ========= Webhook Schema ==========
+CREATE SCHEMA webhook;
+
+CREATE TABLE webhook.tbl_event (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    type TEXT NOT NULL,  -- e.g., 'ehr_created', 'ehr_deleted'
+    payload JSONB NOT NULL,    -- The payload sent to the webhook
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE webhook.tbl_subscription (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    url TEXT NOT NULL,
+    secret TEXT NOT NULL,      
+    event_types TEXT[] NOT NULL,
+    is_active BOOLEAN NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (url)
+);
+
+CREATE TABLE webhook.tbl_delivery (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_id UUID NOT NULL REFERENCES webhook.tbl_event(id) ON DELETE CASCADE,
+    subscription_id UUID NOT NULL REFERENCES webhook.tbl_subscription(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    attempt_count INT NOT NULL,
+    next_attempt_at TIMESTAMPTZ,
+    last_attempt_at TIMESTAMPTZ,
+    last_response_code INT,
+    last_response_body TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (event_id, subscription_id)
+);
+
+CREATE INDEX idx_delivery_pending ON webhook.tbl_delivery (status, next_attempt_at);
 
 -- ========= Additional Performance Tuning ==========
 

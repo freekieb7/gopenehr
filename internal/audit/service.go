@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/freekieb7/gopenehr/internal/database"
-	"github.com/freekieb7/gopenehr/internal/openehr/util"
+	"github.com/freekieb7/gopenehr/pkg/utils"
 	"github.com/google/uuid"
 )
 
@@ -84,8 +84,8 @@ type ListLogEntriesRequest struct {
 
 type ListLogEntriesResponse struct {
 	LogEntries []LogEntry
-	NextToken  util.Optional[string]
-	PrevToken  util.Optional[string]
+	NextToken  utils.Optional[string]
+	PrevToken  utils.Optional[string]
 }
 
 type ListLogEntriesCursor struct {
@@ -172,7 +172,7 @@ func (s *Service) ListLogEntriesPaginated(ctx context.Context, req ListLogEntrie
 	}
 
 	// Generate next/prev tokens based on actual data availability
-	var nextCursor, prevCursor util.Optional[string]
+	var nextCursor, prevCursor utils.Optional[string]
 
 	if len(logEntries) > 0 {
 		// Generate next token (for older records)
@@ -183,7 +183,7 @@ func (s *Service) ListLogEntriesPaginated(ctx context.Context, req ListLogEntrie
 				CreatedAt: logEntries[len(logEntries)-1].CreatedAt,
 				Direction: "next",
 			}); err == nil {
-				nextCursor = util.Some(nextCursorStr)
+				nextCursor = utils.Some(nextCursorStr)
 			}
 		}
 
@@ -195,7 +195,7 @@ func (s *Service) ListLogEntriesPaginated(ctx context.Context, req ListLogEntrie
 				CreatedAt: logEntries[0].CreatedAt,
 				Direction: "prev",
 			}); err == nil {
-				prevCursor = util.Some(prevCursorStr)
+				prevCursor = utils.Some(prevCursorStr)
 			}
 		}
 	}
@@ -215,15 +215,15 @@ func encodeListLogEntriesCursor(cursor ListLogEntriesCursor) (string, error) {
 	return base64.URLEncoding.EncodeToString(data), nil
 }
 
-func decodeListLogEntriesCursor(token string) (util.Optional[ListLogEntriesCursor], error) {
+func decodeListLogEntriesCursor(token string) (utils.Optional[ListLogEntriesCursor], error) {
 	if token == "" {
-		return util.None[ListLogEntriesCursor](), nil
+		return utils.None[ListLogEntriesCursor](), nil
 	}
 	data, err := base64.URLEncoding.DecodeString(token)
 	if err != nil {
-		return util.None[ListLogEntriesCursor](), err
+		return utils.None[ListLogEntriesCursor](), err
 	}
 	var cursor ListLogEntriesCursor
 	err = json.Unmarshal(data, &cursor)
-	return util.Some(cursor), err
+	return utils.Some(cursor), err
 }

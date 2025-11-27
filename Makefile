@@ -18,9 +18,13 @@ lint:
 # 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.6.1
 	~/go/bin/golangci-lint run
 
-.PHONY: migrate
-migrate:
+.PHONY: migrate-up
+migrate-up:
 	$(APP_VARIABLES) go run -mod=vendor ./... migrate up
+
+.PHONY: migrate-down
+migrate-down:
+	$(APP_VARIABLES) go run -mod=vendor ./... migrate down
 
 .PHONY: serve
 serve:

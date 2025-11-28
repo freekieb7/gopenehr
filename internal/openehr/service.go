@@ -98,7 +98,6 @@ func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus mode
 		return model.EHR{}, err
 	}
 
-	// Provide ID when EHR Status does not have one
 	err = UpgradeObjectVersionID(&ehrStatus.UID, utils.None[model.OBJECT_VERSION_ID]())
 	if err != nil {
 		return model.EHR{}, fmt.Errorf("failed to upgrade EHR Status UID: %w", err)
@@ -430,7 +429,7 @@ func (s *Service) UpdateEHRStatus(ctx context.Context, ehrID uuid.UUID, ehrStatu
 	return ehrStatus, nil
 }
 
-func (s *Service) GetVersionedEHRStatus(ctx context.Context, ehrID string) (model.VERSIONED_EHR_STATUS, error) {
+func (s *Service) GetVersionedEHRStatus(ctx context.Context, ehrID uuid.UUID) (model.VERSIONED_EHR_STATUS, error) {
 	query := `
 		SELECT vod.data 
 		FROM openehr.tbl_versioned_object vo
@@ -455,7 +454,7 @@ func (s *Service) GetVersionedEHRStatus(ctx context.Context, ehrID string) (mode
 	return versionedEHRStatus, nil
 }
 
-func (s *Service) GetVersionedEHRStatusRevisionHistory(ctx context.Context, ehrID string) (model.REVISION_HISTORY, error) {
+func (s *Service) GetVersionedEHRStatusRevisionHistory(ctx context.Context, ehrID uuid.UUID) (model.REVISION_HISTORY, error) {
 	query := `
         SELECT jsonb_build_object(
 			'items', jsonb_agg(
@@ -635,7 +634,8 @@ func (s *Service) GetComposition(ctx context.Context, ehrID uuid.UUID, uidBasedI
 		SELECT ovd.object_data 
 		FROM openehr.tbl_object_version ov 
 		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.type = $1 AND ov.ehr_id = $2`
+		WHERE ov.type = $1 AND ov.ehr_id = $2
+	`
 	args := []any{model.COMPOSITION_MODEL_NAME, ehrID}
 
 	if strings.Count(uidBasedID, "::") == 2 {
@@ -745,7 +745,7 @@ func (s *Service) DeleteComposition(ctx context.Context, ehrID uuid.UUID, versio
 	return nil
 }
 
-func (s *Service) GetVersionedComposition(ctx context.Context, ehrID, versionedObjectID string) (model.VERSIONED_COMPOSITION, error) {
+func (s *Service) GetVersionedComposition(ctx context.Context, ehrID uuid.UUID, versionedObjectID string) (model.VERSIONED_COMPOSITION, error) {
 	query := `
 		SELECT vod.data 
 		FROM openehr.tbl_versioned_object vo
@@ -769,7 +769,7 @@ func (s *Service) GetVersionedComposition(ctx context.Context, ehrID, versionedO
 	return versionedComposition, nil
 }
 
-func (s *Service) GetVersionedCompositionRevisionHistory(ctx context.Context, ehrID, versionedObjectID string) (model.REVISION_HISTORY, error) {
+func (s *Service) GetVersionedCompositionRevisionHistory(ctx context.Context, ehrID uuid.UUID, versionedObjectID string) (model.REVISION_HISTORY, error) {
 	query := `
 		SELECT jsonb_build_object(
 			'items', jsonb_agg(
@@ -811,7 +811,7 @@ func (s *Service) GetVersionedCompositionRevisionHistory(ctx context.Context, eh
 	return revisionHistory, nil
 }
 
-func (s *Service) GetVersionedCompositionVersionJSON(ctx context.Context, ehrID, versionedObjectID string, filterAtTime time.Time, filterVersionID string) ([]byte, error) {
+func (s *Service) GetVersionedCompositionVersionJSON(ctx context.Context, ehrID uuid.UUID, versionedObjectID string, filterAtTime time.Time, filterVersionID string) ([]byte, error) {
 	var query strings.Builder
 	var args []any
 	argNum := 1
@@ -1133,7 +1133,7 @@ func (s *Service) DeleteDirectory(ctx context.Context, ehrID uuid.UUID, versione
 	return nil
 }
 
-func (s *Service) GetFolderInDirectoryVersion(ctx context.Context, ehrID string, filterAtTime time.Time, filterVersionID string, filterPathParts []string) (model.FOLDER, error) {
+func (s *Service) GetFolderInDirectoryVersion(ctx context.Context, ehrID uuid.UUID, filterAtTime time.Time, filterVersionID string, filterPathParts []string) (model.FOLDER, error) {
 	var queryBuilder strings.Builder
 	var args []any
 	argNum := 1

@@ -1,9 +1,13 @@
 DATABASE_URL := postgres://gopenehr:gopenehrpass@localhost:5432/gopenehr
 LOG_LEVEL := DEBUG
+OAUTH_TRUSTED_ISSUERS := https://dev-3pgtw461x5f8dd7k.us.auth0.com
+OAUTH_AUDIENCE := http://localhost:3000
 
 APP_VARIABLES := \
 	DATABASE_URL=$(DATABASE_URL) \
-	APP_ENV=$(APP_ENV)
+	LOG_LEVEL=$(LOG_LEVEL) \
+# 	OAUTH_TRUSTED_ISSUERS=$(OAUTH_TRUSTED_ISSUERS) \
+	OAUTH_AUDIENCE=$(OAUTH_AUDIENCE)
 
 .PHONY: up
 up:

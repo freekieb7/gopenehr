@@ -2,7 +2,6 @@ package webhook
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -24,76 +23,6 @@ type Service struct {
 
 func NewService(logger *slog.Logger, db *database.Database) Service {
 	return Service{Logger: logger, DB: db}
-}
-
-type EventType string
-
-const (
-	EventTypeEHRCreated EventType = "ehr.created"
-	EventTypeEHRDeleted EventType = "ehr.deleted"
-
-	EventTypeEHRStatusUpdated EventType = "ehr_status.updated"
-
-	EventTypeCompositionCreated EventType = "composition.created"
-	EventTypeCompositionUpdated EventType = "composition.updated"
-	EventTypeCompositionDeleted EventType = "composition.deleted"
-
-	EventTypeDirectoryCreated EventType = "directory.created"
-	EventTypeDirectoryUpdated EventType = "directory.updated"
-	EventTypeDirectoryDeleted EventType = "directory.deleted"
-
-	EventTypePersonCreated EventType = "person.created"
-	EventTypePersonUpdated EventType = "person.updated"
-	EventTypePersonDeleted EventType = "person.deleted"
-
-	EventTypeAgentCreated EventType = "agent.created"
-	EventTypeAgentUpdated EventType = "agent.updated"
-	EventTypeAgentDeleted EventType = "agent.deleted"
-
-	EventTypeGroupCreated EventType = "group.created"
-	EventTypeGroupUpdated EventType = "group.updated"
-	EventTypeGroupDeleted EventType = "group.deleted"
-
-	EventTypeOrganisationCreated EventType = "organisation.created"
-	EventTypeOrganisationUpdated EventType = "organisation.updated"
-	EventTypeOrganisationDeleted EventType = "organisation.deleted"
-
-	EventTypeRoleCreated EventType = "role.created"
-	EventTypeRoleUpdated EventType = "role.updated"
-	EventTypeRoleDeleted EventType = "role.deleted"
-
-	EventTypeQueryExecuted EventType = "query.executed"
-	EventTypeQueryStored   EventType = "query.stored"
-)
-
-var EventTypes = map[EventType]string{
-	EventTypeEHRCreated:          "EHR Created",
-	EventTypeEHRDeleted:          "EHR Deleted",
-	EventTypeEHRStatusUpdated:    "EHR Status Updated",
-	EventTypeCompositionCreated:  "Composition Created",
-	EventTypeCompositionDeleted:  "Composition Deleted",
-	EventTypePersonCreated:       "Person Created",
-	EventTypePersonUpdated:       "Person Updated",
-	EventTypePersonDeleted:       "Person Deleted",
-	EventTypeAgentCreated:        "Agent Created",
-	EventTypeAgentUpdated:        "Agent Updated",
-	EventTypeAgentDeleted:        "Agent Deleted",
-	EventTypeGroupCreated:        "Group Created",
-	EventTypeGroupUpdated:        "Group Updated",
-	EventTypeGroupDeleted:        "Group Deleted",
-	EventTypeOrganisationCreated: "Organisation Created",
-	EventTypeOrganisationUpdated: "Organisation Updated",
-	EventTypeOrganisationDeleted: "Organisation Deleted",
-	EventTypeRoleCreated:         "Role Created",
-	EventTypeRoleUpdated:         "Role Updated",
-	EventTypeRoleDeleted:         "Role Deleted",
-	EventTypeQueryExecuted:       "Query Executed",
-	EventTypeQueryStored:         "Query Stored",
-}
-
-func IsValidEventType(event EventType) bool {
-	_, exists := EventTypes[event]
-	return exists
 }
 
 type Subscription struct {
@@ -212,47 +141,5 @@ func (s *Service) Unsubscribe(ctx context.Context, subscriptionID uuid.UUID) err
 	if err != nil {
 		return fmt.Errorf("failed to delete webhook subscription: %w", err)
 	}
-	return nil
-}
-
-func (s *Service) RegisterEvent(ctx context.Context, eventType EventType, data map[string]any) error {
-	dataBytes, err := json.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("failed to marshal webhook event data: %w", err)
-	}
-
-	tx, err := s.DB.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer func() {
-		if err := tx.Rollback(ctx); err != nil && !errors.Is(err, database.ErrTxClosed) {
-			s.Logger.ErrorContext(ctx, "failed to rollback transaction", "error", err)
-		}
-	}()
-
-	var eventID uuid.UUID
-	row := tx.QueryRow(ctx, `INSERT INTO webhook.tbl_event (type, payload) VALUES ($1, $2) RETURNING id`, string(eventType), dataBytes)
-	err = row.Scan(&eventID)
-	if err != nil {
-		return fmt.Errorf("failed to insert webhook event: %w", err)
-	}
-
-	_, err = tx.Exec(ctx, `
-		INSERT INTO webhook.tbl_delivery (event_id, subscription_id, attempt_count, status, created_at)
-		SELECT e.id, s.id, 0, 'pending', NOW()
-		FROM webhook.tbl_event e
-		CROSS JOIN webhook.tbl_subscription s
-		WHERE s.is_active = TRUE AND e.id = $1 AND $2 = ANY(s.event_types)
-	`, eventID, string(eventType))
-	if err != nil {
-		return fmt.Errorf("failed to insert webhook deliveries: %w", err)
-	}
-
-	err = tx.Commit(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
 	return nil
 }

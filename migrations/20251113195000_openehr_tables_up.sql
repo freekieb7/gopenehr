@@ -300,7 +300,7 @@ LEFT JOIN LATERAL (
 CREATE SCHEMA audit;
 
 CREATE TABLE audit.tbl_audit_log (
-    id UUID PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT uuidv7(),
     actor_id UUID NOT NULL,
     actor_type TEXT NOT NULL,
     resource TEXT NOT NULL,
@@ -341,14 +341,14 @@ CREATE UNIQUE INDEX one_system_account ON account.tbl_account (type) WHERE type 
 CREATE SCHEMA webhook;
 
 CREATE TABLE webhook.tbl_event (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuidv4(),
     type TEXT NOT NULL,  -- e.g., 'ehr_created', 'ehr_deleted'
     payload JSONB NOT NULL,    -- The payload sent to the webhook
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE webhook.tbl_subscription (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuidv4(),
     url TEXT NOT NULL,
     secret TEXT NOT NULL,      
     event_types TEXT[] NOT NULL,
@@ -359,7 +359,7 @@ CREATE TABLE webhook.tbl_subscription (
 );
 
 CREATE TABLE webhook.tbl_delivery (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY DEFAULT uuidv4(),
     event_id UUID NOT NULL REFERENCES webhook.tbl_event(id) ON DELETE CASCADE,
     subscription_id UUID NOT NULL REFERENCES webhook.tbl_subscription(id) ON DELETE CASCADE,
     status TEXT NOT NULL,

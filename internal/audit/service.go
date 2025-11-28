@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"time"
 
 	"github.com/freekieb7/gopenehr/internal/database"
@@ -27,84 +26,77 @@ func NewService(logger *slog.Logger, db *database.Database) Service {
 	}
 }
 
-type LogEventRequest struct {
-	ActorID   uuid.UUID
-	ActorType string
-	Resource  Resource
-	Action    Action
-	Success   bool
-	IPAddress string
-	UserAgent string
-	Details   map[string]any
-}
+// type LogEventRequest struct {
+// 	ActorID   uuid.UUID
+// 	ActorType string
+// 	Resource  Resource
+// 	Action    Action
+// 	Success   bool
+// 	IPAddress string
+// 	UserAgent string
+// 	Details   map[string]any
+// }
 
-func (s *Service) LogEvent(ctx context.Context, req LogEventRequest) error {
-	// Create a new log entry
-	details, err := json.Marshal(req.Details)
-	if err != nil {
-		s.Logger.Error("Failed to marshal audit log details", "error", err, "actor_id", req.ActorID, "actor_type", req.ActorType)
-		return err
-	}
+// func (s *Service) LogEvent(ctx context.Context, req LogEventRequest) error {
+// 	id, err := uuid.NewV7()
+// 	if err != nil {
+// 		s.Logger.Error("Failed to generate UUID for audit log", "error", err, "actor_id", req.ActorID, "actor_type", req.ActorType)
+// 		return err
+// 	}
 
-	id, err := uuid.NewV7()
-	if err != nil {
-		s.Logger.Error("Failed to generate UUID for audit log", "error", err, "actor_id", req.ActorID, "actor_type", req.ActorType)
-		return err
-	}
+// 	event := Event{
+// 		ID:        id,
+// 		ActorID:   req.ActorID,
+// 		ActorType: req.ActorType,
+// 		Resource:  string(req.Resource),
+// 		Action:    string(req.Action),
+// 		Success:   req.Success,
+// 		IPAddress: net.ParseIP(req.IPAddress),
+// 		UserAgent: req.UserAgent,
+// 		Details:   req.Details,
+// 		CreatedAt: time.Now(),
+// 	}
 
-	entry := LogEntry{
-		ID:        id,
-		ActorID:   req.ActorID,
-		ActorType: req.ActorType,
-		Resource:  req.Resource,
-		Action:    req.Action,
-		Success:   req.Success,
-		IPAddress: net.ParseIP(req.IPAddress),
-		UserAgent: req.UserAgent,
-		Details:   details,
-		CreatedAt: time.Now(),
-	}
+// 	_, err = s.DB.Exec(ctx, `
+// 		INSERT INTO audit.tbl_audit_log (id, actor_id, actor_type, resource, action, success, ip_address, user_agent, details, created_at)
+// 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+// 	`, event.ID, event.ActorID, event.ActorType, event.Resource, event.Action, event.Success, event.IPAddress, event.UserAgent, event.Details, event.CreatedAt)
+// 	if err != nil {
+// 		s.Logger.Error("Failed to create audit log", "error", err, "entry", event)
+// 	}
 
-	_, err = s.DB.Exec(ctx, `
-		INSERT INTO audit.tbl_audit_log (id, actor_id, actor_type, resource, action, success, ip_address, user_agent, details, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, entry.ID, entry.ActorID, entry.ActorType, entry.Resource, entry.Action, entry.Success, entry.IPAddress, entry.UserAgent, entry.Details, entry.CreatedAt)
-	if err != nil {
-		s.Logger.Error("Failed to create audit log", "error", err, "entry", entry)
-	}
-
-	return nil
-}
+// 	return nil
+// }
 
 // Pagination types for audit log listing
-type ListLogEntriesRequest struct {
+type ListEventsRequest struct {
 	PageSize int
 	Token    string
 }
 
-type ListLogEntriesResponse struct {
-	LogEntries []LogEntry
-	NextToken  utils.Optional[string]
-	PrevToken  utils.Optional[string]
+type ListEventsResponse struct {
+	Events    []Event
+	NextToken utils.Optional[string]
+	PrevToken utils.Optional[string]
 }
 
-type ListLogEntriesCursor struct {
+type ListEventsCursor struct {
 	CreatedAt time.Time `json:"created_at"`
 	ID        uuid.UUID `json:"id"`
 	Direction string    `json:"direction"`
 }
 
-func (s *Service) ListLogEntriesPaginated(ctx context.Context, req ListLogEntriesRequest) (ListLogEntriesResponse, error) {
+func (s *Service) ListEventsPaginated(ctx context.Context, req ListEventsRequest) (ListEventsResponse, error) {
 	// Set default page size if invalid
 	pageSize := req.PageSize
 	if pageSize <= 0 || pageSize > 100 {
 		pageSize = 25
 	}
 
-	cursor, err := decodeListLogEntriesCursor(req.Token)
+	cursor, err := decodeListEventsCursor(req.Token)
 	if err != nil {
 		s.Logger.Warn("Failed to decode page token", "token", req.Token, "error", err)
-		return ListLogEntriesResponse{}, errors.New("invalid page token")
+		return ListEventsResponse{}, errors.New("invalid page token")
 	}
 
 	// Extract direction from cursor, default to "next" for first page
@@ -138,49 +130,49 @@ func (s *Service) ListLogEntriesPaginated(ctx context.Context, req ListLogEntrie
 	rows, err := s.DB.Query(ctx, query, args...)
 	if err != nil {
 		s.Logger.Warn("Failed to query audit logs", "error", err)
-		return ListLogEntriesResponse{}, err
+		return ListEventsResponse{}, err
 	}
 	defer rows.Close()
 
-	logEntries := []LogEntry{}
+	events := []Event{}
 	for rows.Next() {
-		var entry LogEntry
-		if err := rows.Scan(&entry.ID, &entry.ActorID, &entry.ActorType, &entry.Resource, &entry.Action, &entry.Success, &entry.IPAddress, &entry.UserAgent, &entry.Details, &entry.CreatedAt); err != nil {
-			s.Logger.Warn("Failed to scan log entry", "error", err)
-			return ListLogEntriesResponse{}, err
+		var event Event
+		if err := rows.Scan(&event.ID, &event.ActorID, &event.ActorType, &event.Resource, &event.Action, &event.Success, &event.IPAddress, &event.UserAgent, &event.Details, &event.CreatedAt); err != nil {
+			s.Logger.Warn("Failed to scan event", "error", err)
+			return ListEventsResponse{}, err
 		}
-		logEntries = append(logEntries, entry)
+		events = append(events, event)
 	}
 
-	if len(logEntries) == 0 {
-		return ListLogEntriesResponse{
-			LogEntries: logEntries,
+	if len(events) == 0 {
+		return ListEventsResponse{
+			Events: events,
 		}, nil
 	}
 
 	// Check if we have more results than requested (indicates more pages)
-	hasMore := len(logEntries) > pageSize
+	hasMore := len(events) > pageSize
 	if hasMore {
-		logEntries = logEntries[:pageSize] // Remove the extra record
+		events = events[:pageSize] // Remove the extra record
 	}
 
 	// If fetching previous page, reverse results to maintain order
 	if direction == "prev" {
-		for i, j := 0, len(logEntries)-1; i < j; i, j = i+1, j-1 {
-			logEntries[i], logEntries[j] = logEntries[j], logEntries[i]
+		for i, j := 0, len(events)-1; i < j; i, j = i+1, j-1 {
+			events[i], events[j] = events[j], events[i]
 		}
 	}
 
 	// Generate next/prev tokens based on actual data availability
 	var nextCursor, prevCursor utils.Optional[string]
 
-	if len(logEntries) > 0 {
+	if len(events) > 0 {
 		// Generate next token (for older records)
 		showNext := (direction == "next" && hasMore) || (direction == "prev")
 		if showNext {
-			if nextCursorStr, err := encodeListLogEntriesCursor(ListLogEntriesCursor{
-				ID:        logEntries[len(logEntries)-1].ID,
-				CreatedAt: logEntries[len(logEntries)-1].CreatedAt,
+			if nextCursorStr, err := encodeListEventsCursor(ListEventsCursor{
+				ID:        events[len(events)-1].ID,
+				CreatedAt: events[len(events)-1].CreatedAt,
 				Direction: "next",
 			}); err == nil {
 				nextCursor = utils.Some(nextCursorStr)
@@ -190,9 +182,9 @@ func (s *Service) ListLogEntriesPaginated(ctx context.Context, req ListLogEntrie
 		// Generate prev token (for newer records)
 		showPrev := (direction == "prev" && hasMore) || (direction == "next" && req.Token != "")
 		if showPrev {
-			if prevCursorStr, err := encodeListLogEntriesCursor(ListLogEntriesCursor{
-				ID:        logEntries[0].ID,
-				CreatedAt: logEntries[0].CreatedAt,
+			if prevCursorStr, err := encodeListEventsCursor(ListEventsCursor{
+				ID:        events[0].ID,
+				CreatedAt: events[0].CreatedAt,
 				Direction: "prev",
 			}); err == nil {
 				prevCursor = utils.Some(prevCursorStr)
@@ -200,14 +192,14 @@ func (s *Service) ListLogEntriesPaginated(ctx context.Context, req ListLogEntrie
 		}
 	}
 
-	return ListLogEntriesResponse{
-		LogEntries: logEntries,
-		NextToken:  nextCursor,
-		PrevToken:  prevCursor,
+	return ListEventsResponse{
+		Events:    events,
+		NextToken: nextCursor,
+		PrevToken: prevCursor,
 	}, nil
 }
 
-func encodeListLogEntriesCursor(cursor ListLogEntriesCursor) (string, error) {
+func encodeListEventsCursor(cursor ListEventsCursor) (string, error) {
 	data, err := json.Marshal(cursor)
 	if err != nil {
 		return "", err
@@ -215,15 +207,15 @@ func encodeListLogEntriesCursor(cursor ListLogEntriesCursor) (string, error) {
 	return base64.URLEncoding.EncodeToString(data), nil
 }
 
-func decodeListLogEntriesCursor(token string) (utils.Optional[ListLogEntriesCursor], error) {
+func decodeListEventsCursor(token string) (utils.Optional[ListEventsCursor], error) {
 	if token == "" {
-		return utils.None[ListLogEntriesCursor](), nil
+		return utils.None[ListEventsCursor](), nil
 	}
 	data, err := base64.URLEncoding.DecodeString(token)
 	if err != nil {
-		return utils.None[ListLogEntriesCursor](), err
+		return utils.None[ListEventsCursor](), err
 	}
-	var cursor ListLogEntriesCursor
+	var cursor ListEventsCursor
 	err = json.Unmarshal(data, &cursor)
 	return utils.Some(cursor), err
 }

@@ -6,11 +6,15 @@ import (
 )
 
 func APIKeyProtected(secret string) func(c *fiber.Ctx) error {
-	return func(c *fiber.Ctx) error {
-		if secret == "" {
+	enabled := secret != ""
+
+	if !enabled {
+		return func(c *fiber.Ctx) error {
 			return c.Next()
 		}
+	}
 
+	return func(c *fiber.Ctx) error {
 		apiKey := c.Get(config.API_KEY_HEADER)
 		if apiKey != secret {
 			return c.Status(fiber.StatusUnauthorized).SendString("Unauthorized")

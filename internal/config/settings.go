@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -36,11 +37,13 @@ func (e Environment) IsValid() bool {
 }
 
 type Settings struct {
-	Port        string
-	Version     string
-	LogLevel    slog.Level
-	DatabaseURL string
-	APIKey      string
+	Port                string
+	Version             string
+	DatabaseURL         string
+	LogLevel            slog.Level
+	APIKey              string
+	OAuthTrustedIssuers []string
+	OAuthAudience       string
 }
 
 func NewSettings() Settings {
@@ -49,12 +52,6 @@ func NewSettings() Settings {
 
 func (s *Settings) Load() error {
 	s.Version = Version
-
-	logLevel, err := getEnvLogLevel("LOG_LEVEL", slog.LevelInfo, false)
-	if err != nil {
-		return fmt.Errorf("invalid LOG_LEVEL value")
-	}
-	s.LogLevel = logLevel
 
 	port, err := getEnvString("APP_PORT", "3000", false)
 	if err != nil {
@@ -68,11 +65,36 @@ func (s *Settings) Load() error {
 	}
 	s.DatabaseURL = dbURL
 
+	logLevel, err := getEnvLogLevel("LOG_LEVEL", slog.LevelInfo, false)
+	if err != nil {
+		return err
+	}
+	s.LogLevel = logLevel
+
 	apiKey, err := getEnvString("API_KEY", "", false)
 	if err != nil {
 		return err
 	}
 	s.APIKey = apiKey
+
+	trustedIssuersStr, err := getEnvString("OAUTH_TRUSTED_ISSUERS", "", false)
+	if err != nil {
+		return err
+	}
+	s.OAuthTrustedIssuers = []string{}
+	for issuer := range strings.SplitSeq(trustedIssuersStr, ",") {
+		issuer = strings.TrimSpace(issuer)
+		if issuer == "" {
+			continue
+		}
+		s.OAuthTrustedIssuers = append(s.OAuthTrustedIssuers, issuer)
+	}
+
+	audience, err := getEnvString("OAUTH_AUDIENCE", "", false)
+	if err != nil {
+		return err
+	}
+	s.OAuthAudience = audience
 
 	return nil
 }

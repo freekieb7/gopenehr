@@ -32,53 +32,53 @@ type DeliveryJob struct {
 	AttemptCount int
 }
 
-type Worker struct {
+type Sender struct {
 	Logger *slog.Logger
 	DB     *database.Database
 	Client *http.Client
 }
 
-func NewWorker(logger *slog.Logger, db *database.Database, client *http.Client) Worker {
+func NewSender(logger *slog.Logger, db *database.Database, client *http.Client) Sender {
 	if client.Timeout == 0 {
 		client.Timeout = 10 * time.Second
 	}
 
-	return Worker{
+	return Sender{
 		Logger: logger,
 		DB:     db,
 		Client: client,
 	}
 }
 
-func (w *Worker) Run(ctx context.Context) error {
+func (s *Sender) Run(ctx context.Context) error {
 	ticker := time.NewTicker(PollInterval)
 	defer ticker.Stop()
 
-	w.Logger.Info("Webhook worker started")
+	s.Logger.Info("Webhook worker started")
 
 	for {
 		select {
 		case <-ctx.Done():
-			w.Logger.Info("Webhook worker shutting down")
+			s.Logger.Info("Webhook worker shutting down")
 			return nil
 
 		case <-ticker.C:
-			if err := w.processBatch(ctx); err != nil {
-				w.Logger.ErrorContext(ctx, "Batch processing failed", "error", err)
+			if err := s.processBatch(ctx); err != nil {
+				s.Logger.ErrorContext(ctx, "Batch processing failed", "error", err)
 			}
 		}
 	}
 }
 
-func (w *Worker) processBatch(ctx context.Context) error {
-	tx, err := w.DB.Begin(ctx)
+func (s *Sender) processBatch(ctx context.Context) error {
+	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() {
 		err = tx.Rollback(ctx)
 		if err != nil && err != database.ErrTxClosed {
-			w.Logger.ErrorContext(ctx, "Failed to rollback transaction", "error", err)
+			s.Logger.ErrorContext(ctx, "Failed to rollback transaction", "error", err)
 		}
 	}()
 
@@ -138,15 +138,15 @@ func (w *Worker) processBatch(ctx context.Context) error {
 	}
 
 	for _, job := range jobs {
-		if err := w.handleJob(ctx, job); err != nil {
-			w.Logger.ErrorContext(ctx, "Job failed", "jobID", job.ID, "error", err)
+		if err := s.handleJob(ctx, job); err != nil {
+			s.Logger.ErrorContext(ctx, "Job failed", "jobID", job.ID, "error", err)
 		}
 	}
 
 	return nil
 }
 
-func (w *Worker) handleJob(ctx context.Context, job DeliveryJob) error {
+func (s *Sender) handleJob(ctx context.Context, job DeliveryJob) error {
 	sig := sign(job.Secret, job.Payload)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, job.URL, bytes.NewReader(job.Payload))
@@ -160,34 +160,34 @@ func (w *Worker) handleJob(ctx context.Context, job DeliveryJob) error {
 	req.Header.Set("X-Webhook-Signature", sig)
 	req.Header.Set("Idempotency-Key", job.ID)
 
-	resp, err := w.Client.Do(req)
+	resp, err := s.Client.Do(req)
 	if err != nil {
-		return w.fail(ctx, job, "network_error", nil, err)
+		return s.fail(ctx, job, "network_error", nil, err)
 	}
 	defer func() {
 		_, err = io.Copy(io.Discard, resp.Body)
 		if err != nil {
-			w.Logger.Warn("Failed to drain response body", "jobID", job.ID, "error", err)
+			s.Logger.Warn("Failed to drain response body", "jobID", job.ID, "error", err)
 		}
 		err = resp.Body.Close()
 		if err != nil {
-			w.Logger.Warn("Failed to close response body", "jobID", job.ID, "error", err)
+			s.Logger.Warn("Failed to close response body", "jobID", job.ID, "error", err)
 		}
 	}()
 
 	if resp.StatusCode >= 500 {
-		return w.fail(ctx, job, "server_error", resp, nil)
+		return s.fail(ctx, job, "server_error", resp, nil)
 	}
 
 	if resp.StatusCode >= 400 {
-		return w.fail(ctx, job, "client_error", resp, nil)
+		return s.fail(ctx, job, "client_error", resp, nil)
 	}
 
-	return w.success(ctx, job, resp)
+	return s.success(ctx, job, resp)
 }
 
-func (w *Worker) success(ctx context.Context, job DeliveryJob, resp *http.Response) error {
-	_, err := w.DB.Exec(ctx, `
+func (s *Sender) success(ctx context.Context, job DeliveryJob, resp *http.Response) error {
+	_, err := s.DB.Exec(ctx, `
 		UPDATE webhook.tbl_delivery
 		SET
 			status = 'delivered',
@@ -199,7 +199,7 @@ func (w *Worker) success(ctx context.Context, job DeliveryJob, resp *http.Respon
 	return err
 }
 
-func (w *Worker) fail(ctx context.Context, job DeliveryJob, reason string, resp *http.Response, cause error) error {
+func (s *Sender) fail(ctx context.Context, job DeliveryJob, reason string, resp *http.Response, cause error) error {
 	status := "retry"
 	if job.AttemptCount+1 >= MaxRetries || reason == "client_error" {
 		status = "dead"
@@ -219,7 +219,7 @@ func (w *Worker) fail(ctx context.Context, job DeliveryJob, reason string, resp 
 		code = &c
 	}
 
-	w.Logger.Warn("Webhook failed",
+	s.Logger.Warn("Webhook failed",
 		"jobID", job.ID,
 		"reason", reason,
 		"attempt", job.AttemptCount,
@@ -227,7 +227,7 @@ func (w *Worker) fail(ctx context.Context, job DeliveryJob, reason string, resp 
 		"error", cause,
 	)
 
-	_, err := w.DB.Exec(ctx, `
+	_, err := s.DB.Exec(ctx, `
 		UPDATE webhook.tbl_delivery
 		SET
 			attempt_count = attempt_count + 1,

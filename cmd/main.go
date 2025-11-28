@@ -14,6 +14,7 @@ import (
 	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/database"
 	"github.com/freekieb7/gopenehr/internal/health"
+	"github.com/freekieb7/gopenehr/internal/oauth"
 	"github.com/freekieb7/gopenehr/internal/openehr"
 	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/freekieb7/gopenehr/internal/webhook"
@@ -103,23 +104,31 @@ func runServer(ctx context.Context) error {
 		Level: compress.LevelBestSpeed,
 	}))
 
+	// Audit logger
+	auditLogger := audit.NewLogger(&db)
+	webhookSaver := webhook.NewSaver(logger, &db)
+	webhookSender := webhook.NewSender(logger, &db, &http.Client{
+		Timeout: 10 * time.Second,
+	})
+
 	// Services
 	healthChecker := health.NewChecker(settings.Version, config.TARGET_MIGRATION_VERSION, &db)
 	auditService := audit.NewService(logger, &db)
 	webhookService := webhook.NewService(logger, &db)
+	oauthService := oauth.NewService(logger, settings.OAuthTrustedIssuers, settings.OAuthAudience)
 	openEHRService := openehr.NewService(logger, &db)
 
 	// Routes
 	healthHandler := health.NewHandler(&healthChecker)
 	healthHandler.RegisterRoutes(srv)
 
-	auditHandler := audit.NewHandler(&settings, logger, &auditService)
+	auditHandler := audit.NewHandler(&settings, logger, &auditService, &oauthService, &auditLogger)
 	auditHandler.RegisterRoutes(srv)
 
-	webhookHandler := webhook.NewHandler(&settings, logger, &auditService, &webhookService)
+	webhookHandler := webhook.NewHandler(&settings, logger, &auditLogger, &oauthService, &webhookService)
 	webhookHandler.RegisterRoutes(srv)
 
-	openEHRHandler := openehr.NewHandler(&settings, logger, &openEHRService, &auditService, &webhookService)
+	openEHRHandler := openehr.NewHandler(&settings, logger, &openEHRService, &auditService, &webhookService, &auditLogger, &webhookSaver)
 	openEHRHandler.RegisterRoutes(srv)
 
 	// Set up signal handling for graceful shutdown
@@ -129,6 +138,21 @@ func runServer(ctx context.Context) error {
 	// Create a channel for server errors
 	serverErrChan := make(chan error, 1)
 
+	// Warmup cache
+	go func() {
+		logger.InfoContext(ctx, "Warming up cache")
+		if err := oauthService.WarmupCache(ctx); err != nil {
+			logger.ErrorContext(ctx, "Cache warmup failed", "error", err)
+		} else {
+			logger.InfoContext(ctx, "Cache warmup completed")
+		}
+	}()
+
+	// Start audit logger
+	go func() {
+		auditLogger.Start(ctx)
+	}()
+
 	// Start server
 	go func() {
 		logger.InfoContext(ctx, "Starting server", "port", settings.Port)
@@ -137,13 +161,13 @@ func runServer(ctx context.Context) error {
 		}
 	}()
 
+	webhookSaver.Start(ctx)
+
 	// Start webhook delivery worker
-	worker := webhook.NewWorker(logger, &db, &http.Client{
-		Timeout: 10 * time.Second,
-	})
 	go func() {
+
 		logger.InfoContext(ctx, "Starting webhook delivery worker")
-		err := worker.Run(ctx)
+		err := webhookSender.Run(ctx)
 		if err != nil {
 			logger.ErrorContext(ctx, "Webhook delivery worker error", "error", err)
 		}
@@ -180,7 +204,7 @@ func runMigrate(ctx context.Context, args []string) error {
 	logger := telemetry.NewLogger(settings.LogLevel)
 
 	// Init database
-	db := database.Database{}
+	db := database.New()
 	if err := db.Connect(ctx, settings.DatabaseURL); err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
 	}

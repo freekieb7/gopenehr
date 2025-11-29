@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/freekieb7/gopenehr/internal/openehr/model"
 	"github.com/freekieb7/gopenehr/internal/openehr/terminology"
 	outil "github.com/freekieb7/gopenehr/internal/openehr/util"
+	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/freekieb7/gopenehr/pkg/utils"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -81,11 +81,11 @@ type StoredQuery struct {
 }
 
 type Service struct {
-	Logger *slog.Logger
+	Logger *telemetry.Logger
 	DB     *database.Database
 }
 
-func NewService(logger *slog.Logger, db *database.Database) Service {
+func NewService(logger *telemetry.Logger, db *database.Database) Service {
 	return Service{
 		Logger: logger,
 		DB:     db,

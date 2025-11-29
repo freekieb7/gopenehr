@@ -2,14 +2,14 @@ package webhook
 
 import (
 	"context"
-	"log/slog"
 	"time"
 
 	"github.com/freekieb7/gopenehr/internal/database"
+	"github.com/freekieb7/gopenehr/internal/telemetry"
 )
 
 type Saver struct {
-	Logger *slog.Logger
+	Logger *telemetry.Logger
 	DB     *database.Database
 
 	Queue      chan Event
@@ -19,7 +19,7 @@ type Saver struct {
 	dropped uint64
 }
 
-func NewSaver(logger *slog.Logger, db *database.Database) Saver {
+func NewSaver(logger *telemetry.Logger, db *database.Database) Saver {
 	return Saver{
 		Logger:     logger,
 		DB:         db,

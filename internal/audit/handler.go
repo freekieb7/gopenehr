@@ -1,24 +1,24 @@
 package audit
 
 import (
-	"log/slog"
 	"strconv"
 
 	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/oauth"
+	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/freekieb7/gopenehr/pkg/web/middleware"
 	"github.com/gofiber/fiber/v2"
 )
 
 type Handler struct {
 	Settings     *config.Settings
-	Logger       *slog.Logger
+	Logger       *telemetry.Logger
 	AuditService *Service
 	OAuthService *oauth.Service
 	AuditLogger  *Logger
 }
 
-func NewHandler(settings *config.Settings, logger *slog.Logger, auditService *Service, oauthService *oauth.Service, auditLogger *Logger) Handler {
+func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditService *Service, oauthService *oauth.Service, auditLogger *Logger) Handler {
 	return Handler{
 		Settings:     settings,
 		Logger:       logger,
@@ -41,8 +41,9 @@ func (h *Handler) RegisterRoutes(c *fiber.App) {
 
 func (h *Handler) ListLogEntries(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := From(c)
+
+	h.Logger.InfoContext(ctx, "Listing log entries")
 
 	// Parse pagination parameters
 	pageSize := 25 // default

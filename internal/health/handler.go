@@ -34,7 +34,7 @@ func (h *Handler) HandleLiveness(c *fiber.Ctx) error {
 
 // READINESS — checks DB + migration version
 func (h *Handler) HandleReadiness(c *fiber.Ctx) error {
-	ctx, cancel := context.WithTimeout(c.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(c.Context(), 5*time.Second)
 	defer cancel()
 
 	status := h.HealthChecker.CheckHealth(ctx)

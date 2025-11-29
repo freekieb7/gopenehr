@@ -11,13 +11,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"math/big"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/freekieb7/gopenehr/internal/telemetry"
 )
 
 // ---------------- Errors ----------------
@@ -64,7 +65,7 @@ type CachedJWKS struct {
 }
 
 type Service struct {
-	Logger *slog.Logger
+	Logger *telemetry.Logger
 
 	TrustedIssuers []string
 	Audience       string
@@ -75,7 +76,7 @@ type Service struct {
 }
 
 // NewService returns a pointer (so receiver methods work on it)
-func NewService(logger *slog.Logger, trustedIssuers []string, audience string) Service {
+func NewService(logger *telemetry.Logger, trustedIssuers []string, audience string) Service {
 	return Service{
 		Logger:         logger,
 		TrustedIssuers: trustedIssuers,

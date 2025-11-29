@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -37,6 +38,7 @@ func (e Environment) IsValid() bool {
 }
 
 type Settings struct {
+	Name                string
 	Port                string
 	Version             string
 	DatabaseURL         string
@@ -44,15 +46,18 @@ type Settings struct {
 	APIKey              string
 	OAuthTrustedIssuers []string
 	OAuthAudience       string
+	OtelEndpoint        string
+	OtelInsecure        bool
 }
 
 func NewSettings() Settings {
-	return Settings{}
+	return Settings{
+		Name:    SYSTEM_ID_GOPENEHR,
+		Version: Version,
+	}
 }
 
 func (s *Settings) Load() error {
-	s.Version = Version
-
 	port, err := getEnvString("APP_PORT", "3000", false)
 	if err != nil {
 		return err
@@ -96,6 +101,18 @@ func (s *Settings) Load() error {
 	}
 	s.OAuthAudience = audience
 
+	OtelEndpoint, err := getEnvString("OTEL_ENDPOINT", "", false)
+	if err != nil {
+		return err
+	}
+	s.OtelEndpoint = OtelEndpoint
+
+	otelInsecure, err := getEnvBool("OTEL_INSECURE", false, false)
+	if err != nil {
+		return err
+	}
+	s.OtelInsecure = otelInsecure
+
 	return nil
 }
 
@@ -106,6 +123,21 @@ func getEnvString(key string, defaultValue string, required bool) (string, error
 			return "", fmt.Errorf("environment variable %s is required", key)
 		}
 		return defaultValue, nil
+	}
+	return value, nil
+}
+
+func getEnvBool(key string, defaultValue bool, required bool) (bool, error) {
+	valueStr, exists := os.LookupEnv(key)
+	if !exists {
+		if required {
+			return false, fmt.Errorf("environment variable %s is required", key)
+		}
+		return defaultValue, nil
+	}
+	value, err := strconv.ParseBool(valueStr)
+	if err != nil {
+		return false, fmt.Errorf("environment variable %s has invalid value: %s", key, valueStr)
 	}
 	return value, nil
 }

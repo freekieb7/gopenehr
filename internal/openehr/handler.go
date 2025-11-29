@@ -1,7 +1,6 @@
 package openehr
 
 import (
-	"log/slog"
 	"net/url"
 	"strings"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/openehr/model"
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
+	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/freekieb7/gopenehr/internal/webhook"
 	"github.com/freekieb7/gopenehr/pkg/utils"
 	"github.com/freekieb7/gopenehr/pkg/web/middleware"
@@ -19,7 +19,7 @@ import (
 
 type Handler struct {
 	Settings       *config.Settings
-	Logger         *slog.Logger
+	Telemetry      *telemetry.Telemetry
 	OpenEHRService *Service
 	AuditService   *audit.Service
 	WebhookService *webhook.Service
@@ -27,10 +27,10 @@ type Handler struct {
 	WebhookSaver   *webhook.Saver
 }
 
-func NewHandler(settings *config.Settings, logger *slog.Logger, openEHRService *Service, auditService *audit.Service, webhookService *webhook.Service, auditLogger *audit.Logger, webhookSaver *webhook.Saver) Handler {
+func NewHandler(settings *config.Settings, telemetry *telemetry.Telemetry, openEHRService *Service, auditService *audit.Service, webhookService *webhook.Service, auditLogger *audit.Logger, webhookSaver *webhook.Saver) Handler {
 	return Handler{
 		Settings:       settings,
-		Logger:         logger,
+		Telemetry:      telemetry,
 		OpenEHRService: openEHRService,
 		AuditService:   auditService,
 		WebhookService: webhookService,
@@ -41,6 +41,9 @@ func NewHandler(settings *config.Settings, logger *slog.Logger, openEHRService *
 
 func (h *Handler) RegisterRoutes(app *fiber.App) {
 	v1 := app.Group("/openehr/v1")
+	v1.Use(middleware.NoCache)
+
+	v1.Use(middleware.Telemetry(h.Telemetry))
 	v1.Use(middleware.APIKeyProtected(h.Settings.APIKey))
 
 	v1.Options("", h.SystemInfo)
@@ -164,7 +167,7 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 
 func (h *Handler) SystemInfo(c *fiber.Ctx) error {
 	response := map[string]any{
-		"solution":              "gopenEHR",
+		"solution":              h.Settings.Name,
 		"version":               h.Settings.Version,
 		"vendor":                "freekieb7",
 		"restapi_specs_version": "development",
@@ -213,7 +216,7 @@ func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get EHR by subject", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get EHR by subject", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -267,7 +270,7 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to create EHR", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to create EHR", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to create EHR",
@@ -315,7 +318,7 @@ func (h *Handler) GetEHR(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get EHR by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get EHR by ID", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -380,7 +383,7 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to create EHR", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to create EHR", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -405,7 +408,7 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + ehrID.String() + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusCreated).JSON(ehr)
 	}
 }
@@ -443,7 +446,7 @@ func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get EHR Status at time", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get EHR Status at time", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -497,7 +500,7 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get current EHR Status", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get current EHR Status", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -551,7 +554,7 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to update EHR Status", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to update EHR Status", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -580,7 +583,7 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + updatedEHRStatusID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusOK).JSON(updatedEHRStatus)
 	}
 }
@@ -614,7 +617,7 @@ func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get EHR Status at time", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get EHR Status at time", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -647,7 +650,7 @@ func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -680,7 +683,7 @@ func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status revision history", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status revision history", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -727,7 +730,7 @@ func (h *Handler) GetVersionedEHRStatusVersion(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status version at time", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status version at time", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -770,7 +773,7 @@ func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status version by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status version by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -812,7 +815,7 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 
 	exists, err := h.OpenEHRService.ExistsEHR(ctx, ehrID)
 	if err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to check if EHR exists", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to check if EHR exists", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -852,7 +855,7 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to create Composition", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to create Composition", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -880,7 +883,7 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + compositionID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusCreated).JSON(composition)
 	}
 }
@@ -917,7 +920,7 @@ func (h *Handler) GetComposition(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Composition by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Composition by ID", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -972,7 +975,7 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get current Composition", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get current Composition", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -1040,7 +1043,7 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to update Composition", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to update Composition", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -1069,7 +1072,7 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.JSON(`{"uid":"` + updatedCompositionID + `"}`)
 	default:
-		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusOK).JSON(updatedComposition)
 	}
 }
@@ -1101,7 +1104,7 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Composition by ID before deletion", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Composition by ID before deletion", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
@@ -1132,7 +1135,7 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to delete Composition by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to delete Composition by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1185,7 +1188,7 @@ func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Versioned Composition by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Composition by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1232,7 +1235,7 @@ func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Versioned Composition revision history", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Composition revision history", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1288,7 +1291,7 @@ func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Versioned Composition version at time", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Composition version at time", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1350,7 +1353,7 @@ func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Versioned Composition version by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Composition version by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1414,7 +1417,7 @@ func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to create Directory", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to create Directory", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1442,7 +1445,7 @@ func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + directoryID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusCreated).JSON(directory)
 	}
 }
@@ -1495,7 +1498,7 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get current Directory", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get current Directory", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1545,7 +1548,7 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to update Directory", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to update Directory", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1574,7 +1577,7 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + updatedDirectoryID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusOK).JSON(updatedDirectory)
 	}
 }
@@ -1611,7 +1614,7 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get current Directory", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get current Directory", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1643,7 +1646,7 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to delete Directory", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to delete Directory", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1715,7 +1718,7 @@ func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Folder in Directory version at time", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Folder in Directory version at time", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1776,7 +1779,7 @@ func (h *Handler) GetFolderInDirectoryVersion(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Folder in Directory version", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Folder in Directory version", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1825,7 +1828,7 @@ func (h *Handler) GetContribution(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Contribution by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Contribution by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1907,7 +1910,7 @@ func (h *Handler) CreateAgent(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to create Agent", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to create Agent", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -1935,7 +1938,7 @@ func (h *Handler) CreateAgent(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + createdAgentID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusCreated).JSON(createdAgent)
 	}
 }
@@ -1961,7 +1964,7 @@ func (h *Handler) GetAgent(c *fiber.Ctx) error {
 				})
 			}
 
-			h.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
+			h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
 
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusInternalServerError,
@@ -1993,7 +1996,7 @@ func (h *Handler) GetAgent(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2055,7 +2058,7 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get current Agent by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get current Agent by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2103,7 +2106,7 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to update Agent", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to update Agent", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2132,7 +2135,7 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + updatedAgentID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusOK).JSON(updatedAgent)
 	}
 }
@@ -2174,7 +2177,7 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Agent by ID before deletion", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Agent by ID before deletion", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2199,7 +2202,7 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to delete Agent by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to delete Agent by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2250,7 +2253,7 @@ func (h *Handler) CreateGroup(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(err)
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to create Group", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to create Group", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2278,7 +2281,7 @@ func (h *Handler) CreateGroup(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + createdGroupID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusCreated).JSON(createdGroup)
 	}
 }
@@ -2304,7 +2307,7 @@ func (h *Handler) GetGroup(c *fiber.Ctx) error {
 				})
 			}
 
-			h.Logger.ErrorContext(ctx, "Failed to get Group by ID", "error", err)
+			h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Group by ID", "error", err)
 
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusInternalServerError,
@@ -2336,7 +2339,7 @@ func (h *Handler) GetGroup(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Group by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Group by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2397,7 +2400,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get current Group by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get current Group by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2445,7 +2448,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to update Agent", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to update Agent", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2474,7 +2477,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + updatedGroupID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusOK).JSON(updatedGroup)
 	}
 }
@@ -2515,7 +2518,7 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Group by ID before deletion", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Group by ID before deletion", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2540,7 +2543,7 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to delete Group by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to delete Group by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2596,7 +2599,7 @@ func (h *Handler) CreatePerson(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to create Person", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to create Person", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2624,7 +2627,7 @@ func (h *Handler) CreatePerson(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + createdPersonID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusCreated).JSON(createdPerson)
 	}
 }
@@ -2649,7 +2652,7 @@ func (h *Handler) GetPerson(c *fiber.Ctx) error {
 				})
 			}
 
-			h.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
+			h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
 
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusInternalServerError,
@@ -2681,7 +2684,7 @@ func (h *Handler) GetPerson(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2742,7 +2745,7 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get current Person by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get current Person by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2790,7 +2793,7 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to update Person", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to update Person", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2819,7 +2822,7 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + updatedPersonID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusOK).JSON(updatedPerson)
 	}
 }
@@ -2859,7 +2862,7 @@ func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Person by ID before deletion", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Person by ID before deletion", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2884,7 +2887,7 @@ func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to delete Person by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to delete Person by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2940,7 +2943,7 @@ func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to create Organisation", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to create Organisation", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -2968,7 +2971,7 @@ func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + createdOrganisationID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusCreated).JSON(organisation)
 	}
 }
@@ -2993,7 +2996,7 @@ func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 				})
 			}
 
-			h.Logger.ErrorContext(ctx, "Failed to get Organisation by ID", "error", err)
+			h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Organisation by ID", "error", err)
 
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusInternalServerError,
@@ -3025,7 +3028,7 @@ func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Organisation by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Organisation by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3087,7 +3090,7 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get current Organisation by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get current Organisation by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3135,7 +3138,7 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to update Organisation", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to update Organisation", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3164,7 +3167,7 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + updatedOrganisationID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusOK).JSON(updatedOrganisation)
 	}
 }
@@ -3205,7 +3208,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Organisation by ID before deletion", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Organisation by ID before deletion", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3230,7 +3233,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to delete Organisation by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to delete Organisation by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3281,7 +3284,7 @@ func (h *Handler) CreateRole(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(err)
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to create Role", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to create Role", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3309,7 +3312,7 @@ func (h *Handler) CreateRole(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + createdRoleID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusCreated).JSON(role)
 	}
 }
@@ -3334,7 +3337,7 @@ func (h *Handler) GetRole(c *fiber.Ctx) error {
 				})
 			}
 
-			h.Logger.ErrorContext(ctx, "Failed to get Role by ID", "error", err)
+			h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Role by ID", "error", err)
 
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusInternalServerError,
@@ -3366,7 +3369,7 @@ func (h *Handler) GetRole(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Role by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Role by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3426,7 +3429,7 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 				Status:  "not_found",
 			})
 		}
-		h.Logger.ErrorContext(ctx, "Failed to get current Role by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get current Role by ID", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get current Role by ID",
@@ -3469,7 +3472,7 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to update Role", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to update Role", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3498,7 +3501,7 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + updatedRoleID + `"}`)
 	default:
-		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusOK).JSON(updatedRole)
 	}
 }
@@ -3540,7 +3543,7 @@ func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Role by ID before deletion", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Role by ID before deletion", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3565,7 +3568,7 @@ func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to delete Role by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to delete Role by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3603,7 +3606,7 @@ func (h *Handler) GetVersionedParty(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Versioned Party by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Party by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3635,7 +3638,7 @@ func (h *Handler) GetVersionedPartyRevisionHistory(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Versioned Party Revision History by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Party Revision History by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3683,7 +3686,7 @@ func (h *Handler) GetVersionedPartyVersionAtTime(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get Versioned Party Version at Time by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Party Version at Time by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3728,7 +3731,7 @@ func (h *Handler) GetVersionedPartyVersion(c *fiber.Ctx) error {
 				Status:  "not_found",
 			})
 		}
-		h.Logger.ErrorContext(ctx, "Failed to get Versioned Party Version by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Party Version by ID", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Versioned Party Version by ID",
@@ -3874,7 +3877,7 @@ func (h *Handler) ExecuteAdHocAQL(c *fiber.Ctx) error {
 
 	// Execute AQL query
 	if err := h.OpenEHRService.QueryWithStream(ctx, c.Response().BodyWriter(), query, queryParameters); err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to execute Ad Hoc AQL", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to execute Ad Hoc AQL", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -3953,7 +3956,7 @@ func (h *Handler) ExecuteAdHocAQLPost(c *fiber.Ctx) error {
 
 	// Execute AQL query
 	if err := h.OpenEHRService.QueryWithStream(ctx, c.Response().BodyWriter(), aqlRequest.Query, aqlRequest.QueryParameters); err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to execute Ad Hoc AQL Post", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to execute Ad Hoc AQL Post", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4044,7 +4047,7 @@ func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get stored query by name", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get stored query by name", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4055,7 +4058,7 @@ func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
 
 	// Execute AQL query
 	if err := h.OpenEHRService.QueryWithStream(ctx, c.Response().BodyWriter(), storedQuery.Query, nil); err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to execute Stored AQL", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to execute Stored AQL", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to execute Stored AQL",
@@ -4142,7 +4145,7 @@ func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get stored query by name", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get stored query by name", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4153,7 +4156,7 @@ func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
 
 	// Execute AQL query
 	if err := h.OpenEHRService.QueryWithStream(ctx, c.Response().BodyWriter(), storedQuery.Query, aqlRequest.QueryParameters); err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to execute Stored AQL Post", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to execute Stored AQL Post", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4252,7 +4255,7 @@ func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
 				Status:  "not_found",
 			})
 		}
-		h.Logger.ErrorContext(ctx, "Failed to get stored query by name and version", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get stored query by name and version", "error", err)
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get stored query by name and version",
@@ -4262,7 +4265,7 @@ func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
 
 	// Execute AQL query
 	if err := h.OpenEHRService.QueryWithStream(ctx, c.Response().BodyWriter(), storedQuery.Query, queryParameters); err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to execute Stored AQL Version", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to execute Stored AQL Version", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4360,7 +4363,7 @@ func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get stored query by name and version", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get stored query by name and version", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4371,7 +4374,7 @@ func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
 
 	// Execute AQL query
 	if err := h.OpenEHRService.QueryWithStream(ctx, c.Response().BodyWriter(), storedQuery.Query, aqlRequest.QueryParameters); err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to execute Stored AQL Version Post", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to execute Stored AQL Version Post", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4438,7 +4441,7 @@ func (h *Handler) ListStoredQueries(c *fiber.Ctx) error {
 
 	queries, err := h.OpenEHRService.ListStoredQueries(ctx, name)
 	if err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to list stored queries", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to list stored queries", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4501,7 +4504,7 @@ func (h *Handler) StoreQuery(c *fiber.Ctx) error {
 		})
 	}
 	if err != ErrQueryNotFound {
-		h.Logger.ErrorContext(ctx, "Failed to check existing query by name", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to check existing query by name", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4513,7 +4516,7 @@ func (h *Handler) StoreQuery(c *fiber.Ctx) error {
 	// Store the query
 	err = h.OpenEHRService.StoreQuery(ctx, name, "1.0.0", query)
 	if err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to store query", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to store query", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4587,7 +4590,7 @@ func (h *Handler) StoreQueryVersion(c *fiber.Ctx) error {
 	// Store the new version of the query
 	err := h.OpenEHRService.StoreQuery(ctx, name, version, query)
 	if err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to store query version", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to store query version", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4642,7 +4645,7 @@ func (h *Handler) GetStoredQueryAtVersion(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to get stored query by name and version", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get stored query by name and version", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4676,7 +4679,7 @@ func (h *Handler) DeleteEHRByID(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to delete EHR by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to delete EHR by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
@@ -4720,7 +4723,7 @@ func (h *Handler) DeleteMultipleEHRs(c *fiber.Ctx) error {
 
 	err := h.OpenEHRService.DeleteEHRBulk(ctx, ehrIDList)
 	if err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to delete multiple EHRs", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to delete multiple EHRs", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,

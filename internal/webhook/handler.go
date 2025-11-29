@@ -1,11 +1,10 @@
 package webhook
 
 import (
-	"log/slog"
-
 	"github.com/freekieb7/gopenehr/internal/audit"
 	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/oauth"
+	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/freekieb7/gopenehr/pkg/utils"
 	"github.com/freekieb7/gopenehr/pkg/web/middleware"
 	"github.com/gofiber/fiber/v2"
@@ -14,13 +13,13 @@ import (
 
 type Handler struct {
 	Settings       *config.Settings
-	Logger         *slog.Logger
+	Logger         *telemetry.Logger
 	AuditLogger    *audit.Logger
 	OAuthService   *oauth.Service
 	WebhookService *Service
 }
 
-func NewHandler(settings *config.Settings, logger *slog.Logger, auditLogger *audit.Logger, oauthService *oauth.Service, webhookService *Service) Handler {
+func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditLogger *audit.Logger, oauthService *oauth.Service, webhookService *Service) Handler {
 	return Handler{
 		Settings:       settings,
 		Logger:         logger,

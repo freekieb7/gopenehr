@@ -7,12 +7,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
-	"log/slog"
 	"math/rand"
 	"net/http"
 	"time"
 
 	"github.com/freekieb7/gopenehr/internal/database"
+	"github.com/freekieb7/gopenehr/internal/telemetry"
 )
 
 const (
@@ -33,12 +33,12 @@ type DeliveryJob struct {
 }
 
 type Sender struct {
-	Logger *slog.Logger
+	Logger *telemetry.Logger
 	DB     *database.Database
 	Client *http.Client
 }
 
-func NewSender(logger *slog.Logger, db *database.Database, client *http.Client) Sender {
+func NewSender(logger *telemetry.Logger, db *database.Database, client *http.Client) Sender {
 	if client.Timeout == 0 {
 		client.Timeout = 10 * time.Second
 	}

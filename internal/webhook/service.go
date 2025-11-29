@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/freekieb7/gopenehr/internal/database"
+	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/freekieb7/gopenehr/pkg/utils"
 	"github.com/google/uuid"
 )
@@ -17,11 +17,11 @@ var (
 )
 
 type Service struct {
-	Logger *slog.Logger
+	Logger *telemetry.Logger
 	DB     *database.Database
 }
 
-func NewService(logger *slog.Logger, db *database.Database) Service {
+func NewService(logger *telemetry.Logger, db *database.Database) Service {
 	return Service{Logger: logger, DB: db}
 }
 

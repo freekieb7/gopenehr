@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -66,8 +67,18 @@ func runServer(ctx context.Context) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Init logger
-	logger := telemetry.NewLogger(settings.LogLevel)
+	// Init Telemetry
+	tel, err := telemetry.Init(ctx, settings)
+	if err != nil {
+		return fmt.Errorf("failed to initialize telemetry: %w", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tel.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to shutdown telemetry: %v\n", err)
+		}
+	}()
 
 	// Init database
 	db := database.New()
@@ -106,29 +117,29 @@ func runServer(ctx context.Context) error {
 
 	// Audit logger
 	auditLogger := audit.NewLogger(&db)
-	webhookSaver := webhook.NewSaver(logger, &db)
-	webhookSender := webhook.NewSender(logger, &db, &http.Client{
+	webhookSaver := webhook.NewSaver(tel.Logger, &db)
+	webhookSender := webhook.NewSender(tel.Logger, &db, &http.Client{
 		Timeout: 10 * time.Second,
 	})
 
 	// Services
 	healthChecker := health.NewChecker(settings.Version, config.TARGET_MIGRATION_VERSION, &db)
-	auditService := audit.NewService(logger, &db)
-	webhookService := webhook.NewService(logger, &db)
-	oauthService := oauth.NewService(logger, settings.OAuthTrustedIssuers, settings.OAuthAudience)
-	openEHRService := openehr.NewService(logger, &db)
+	auditService := audit.NewService(tel.Logger, &db)
+	webhookService := webhook.NewService(tel.Logger, &db)
+	oauthService := oauth.NewService(tel.Logger, settings.OAuthTrustedIssuers, settings.OAuthAudience)
+	openEHRService := openehr.NewService(tel.Logger, &db)
 
 	// Routes
 	healthHandler := health.NewHandler(&healthChecker)
 	healthHandler.RegisterRoutes(srv)
 
-	auditHandler := audit.NewHandler(&settings, logger, &auditService, &oauthService, &auditLogger)
+	auditHandler := audit.NewHandler(&settings, tel.Logger, &auditService, &oauthService, &auditLogger)
 	auditHandler.RegisterRoutes(srv)
 
-	webhookHandler := webhook.NewHandler(&settings, logger, &auditLogger, &oauthService, &webhookService)
+	webhookHandler := webhook.NewHandler(&settings, tel.Logger, &auditLogger, &oauthService, &webhookService)
 	webhookHandler.RegisterRoutes(srv)
 
-	openEHRHandler := openehr.NewHandler(&settings, logger, &openEHRService, &auditService, &webhookService, &auditLogger, &webhookSaver)
+	openEHRHandler := openehr.NewHandler(&settings, tel, &openEHRService, &auditService, &webhookService, &auditLogger, &webhookSaver)
 	openEHRHandler.RegisterRoutes(srv)
 
 	// Set up signal handling for graceful shutdown
@@ -140,11 +151,11 @@ func runServer(ctx context.Context) error {
 
 	// Warmup cache
 	go func() {
-		logger.InfoContext(ctx, "Warming up cache")
+		tel.Logger.InfoContext(ctx, "Warming up cache")
 		if err := oauthService.WarmupCache(ctx); err != nil {
-			logger.ErrorContext(ctx, "Cache warmup failed", "error", err)
+			tel.Logger.ErrorContext(ctx, "Cache warmup failed", "error", err)
 		} else {
-			logger.InfoContext(ctx, "Cache warmup completed")
+			tel.Logger.InfoContext(ctx, "Cache warmup completed")
 		}
 	}()
 
@@ -155,7 +166,7 @@ func runServer(ctx context.Context) error {
 
 	// Start server
 	go func() {
-		logger.InfoContext(ctx, "Starting server", "port", settings.Port)
+		tel.Logger.InfoContext(ctx, "Starting server", "port", settings.Port)
 		if err := srv.Listen(":" + settings.Port); err != nil {
 			serverErrChan <- err
 		}
@@ -165,29 +176,28 @@ func runServer(ctx context.Context) error {
 
 	// Start webhook delivery worker
 	go func() {
-
-		logger.InfoContext(ctx, "Starting webhook delivery worker")
+		tel.Logger.InfoContext(ctx, "Starting webhook delivery worker")
 		err := webhookSender.Run(ctx)
 		if err != nil {
-			logger.ErrorContext(ctx, "Webhook delivery worker error", "error", err)
+			tel.Logger.ErrorContext(ctx, "Webhook delivery worker error", "error", err)
 		}
 	}()
 
 	// Wait for termination signal or server error
 	select {
 	case sig := <-stopChan:
-		logger.InfoContext(ctx, "Received shutdown signal", "signal", sig.String())
+		tel.Logger.InfoContext(ctx, "Received shutdown signal", "signal", sig.String())
 	case err := <-serverErrChan:
 		if err != nil {
-			logger.ErrorContext(ctx, "Server error occurred", "error", err)
+			tel.Logger.ErrorContext(ctx, "Server error occurred", "error", err)
 			return err
 		}
 	}
 
 	if err := srv.ShutdownWithContext(ctx); err != nil {
-		logger.ErrorContext(ctx, "Failed to shutdown server", "error", err)
+		tel.Logger.ErrorContext(ctx, "Failed to shutdown server", "error", err)
 	} else {
-		logger.InfoContext(ctx, "Server shutdown completed")
+		tel.Logger.InfoContext(ctx, "Server shutdown completed")
 	}
 
 	return nil
@@ -200,9 +210,6 @@ func runMigrate(ctx context.Context, args []string) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	// Init logger
-	logger := telemetry.NewLogger(settings.LogLevel)
-
 	// Init database
 	db := database.New()
 	if err := db.Connect(ctx, settings.DatabaseURL); err != nil {
@@ -212,7 +219,7 @@ func runMigrate(ctx context.Context, args []string) error {
 
 	migrate := cli.Migrator{
 		DB:            &db,
-		Logger:        logger,
+		Logger:        slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})),
 		MigrationsDir: "./migrations",
 	}
 
@@ -226,7 +233,7 @@ func runHealthcheck(ctx context.Context) error {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
-	logger := telemetry.NewLogger(settings.LogLevel)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
 	// Create HTTP client with timeout
 	client := &http.Client{

@@ -183,13 +183,11 @@ func (h *Handler) SystemInfo(c *fiber.Ctx) error {
 
 func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
 	subjectID := c.Query("subject_id")
 	if subjectID == "" {
-		auditCtx.Fail("bad_request", "subject_id query parameters are required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "subject_id query parameters are required",
 			Status:  "bad_request",
@@ -198,8 +196,7 @@ func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 
 	subjectNamespace := c.Query("subject_namespace")
 	if subjectNamespace == "" {
-		auditCtx.Fail("bad_request", "subject_namespace query parameters are required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "subject_namespace query parameters are required",
 			Status:  "bad_request",
@@ -209,8 +206,7 @@ func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 	ehr, err := h.OpenEHRService.GetEHRBySubject(ctx, subjectID, subjectNamespace)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given subject")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given subject",
 				Status:  "not_found",
@@ -219,8 +215,7 @@ func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get EHR by subject", "error", err)
 
-		auditCtx.Fail("error", "Failed to get EHR by subject")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get EHR by subject",
 			Status:  "error",
@@ -228,39 +223,27 @@ func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 	}
 
 	auditCtx.Success()
+
 	return c.Status(fiber.StatusOK).JSON(ehr)
 }
 
 func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-		})
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
 	}
-
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
 	ehrStatus := NewEHRStatus(uuid.New())
 	if len(c.Body()) > 0 {
-		if err := c.BodyParser(&ehrStatus); err != nil {
-			auditCtx.Fail("validation_error", "Invalid request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Validation error",
-			})
+		if err := ParseBody(c, auditCtx, &ehrStatus); err != nil {
+			return err
 		}
 	}
 
@@ -270,15 +253,13 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 	ehr, err := h.OpenEHRService.CreateEHR(ctx, ehrID, ehrStatus)
 	if err != nil {
 		if err == ErrEHRStatusAlreadyExists {
-			auditCtx.Fail("conflict", "EHR status exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "EHR status exists",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Validation error",
 				Status:  "bad_request",
@@ -287,8 +268,7 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create EHR", "error", err)
-		auditCtx.Fail("internal_error", "Failed to create EHR")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to create EHR",
 			Status:  "error",
@@ -297,7 +277,9 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	h.WebhookSaver.Enqueue(webhook.EventTypeEHRCreated, map[string]any{"ehr_id": ehrID})
+	h.WebhookSaver.Enqueue(webhook.EventTypeEHRCreated, map[string]any{
+		"ehr_id": ehrID,
+	})
 
 	c.Set("ETag", `"`+ehrID.String()+`"`)
 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/ehr/"+ehrID.String())
@@ -315,35 +297,18 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 
 func (h *Handler) GetEHR(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id format",
-			Status:  "bad_request",
-		})
+		return err
 	}
-
 	auditCtx.Event.Details["ehr_id"] = ehrID
 
 	ehr, err := h.OpenEHRService.GetEHR(ctx, ehrID)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given ID",
 				Status:  "not_found",
@@ -351,8 +316,7 @@ func (h *Handler) GetEHR(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to get EHR by ID", "error", err)
-		auditCtx.Fail("error", "Failed to get EHR by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -366,95 +330,49 @@ func (h *Handler) GetEHR(c *fiber.Ctx) error {
 
 func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
-	}
-
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id format",
-			Status:  "bad_request",
-		})
+		return err
 	}
 
-	auditCtx.SetEHR(ehrID)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	// response type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
-	// Check for optional EHR_STATUS in the request body
 	ehrStatus := NewEHRStatus(uuid.New())
 	if len(c.Body()) > 0 {
-		if err := c.BodyParser(&ehrStatus); err != nil {
-			if err, ok := err.(util.ValidateError); ok {
-				auditCtx.Fail("validation_error", "Validation error in request body")
-				return SendErrorResponse(c, ErrorResponse{
-					Code:    fiber.StatusBadRequest,
-					Message: "Validation error in request body",
-					Status:  "bad_request",
-					Details: err,
-				})
-			}
-
-			auditCtx.Fail("bad_request", "Invalid request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Invalid request body",
-				Status:  "bad_request",
-			})
+		if err := ParseBody(c, auditCtx, &ehrStatus); err != nil {
+			return err
 		}
 	}
 
-	// Create EHR with specified ID and EHR_STATUS
 	ehr, err := h.OpenEHRService.CreateEHR(ctx, ehrID, ehrStatus)
 	if err != nil {
 		if err == ErrEHRAlreadyExists {
-			auditCtx.Fail("conflict", "EHR with the given ID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "EHR with the given ID already exists",
 				Status:  "conflict",
 			})
 		}
 		if err == ErrEHRStatusAlreadyExists {
-			auditCtx.Fail("conflict", "EHR Status with the given UID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "EHR Status with the given UID already exists",
 				Status:  "conflict",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Validation error in request body",
 				Status:  "bad_request",
@@ -463,8 +381,7 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create EHR", "error", err)
-		auditCtx.Fail("internal_error", "Failed to create EHR")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -473,13 +390,12 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeEHRCreated, map[string]any{"ehr": ehr})
+	h.WebhookSaver.Enqueue(webhook.EventTypeEHRCreated, map[string]any{
+		"ehr_id": ehrID,
+	})
 
-	// Determine response
 	c.Set("ETag", "\""+ehrID.String()+"\"")
 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/ehr/"+ehrID.String())
-
 	switch returnType {
 	case ReturnTypeMinimal:
 		c.Status(fiber.StatusCreated)
@@ -496,35 +412,19 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 
 func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id format",
-			Status:  "bad_request",
-		})
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	auditCtx.SetEHR(ehrID)
-
-	// Optional filter: version_at_time
 	var filterAtTime time.Time
 	if atTimeStr := c.Query("version_at_time"); atTimeStr != "" {
 		parsedTime, err := time.Parse(time.RFC3339, atTimeStr)
 		if err != nil {
-			auditCtx.Fail("bad_request", "Invalid version_at_time format")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Invalid version_at_time format. Use RFC3339 format.",
 				Status:  "bad_request",
@@ -536,8 +436,7 @@ func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
 	ehrStatus, err := h.OpenEHRService.GetEHRStatus(ctx, ehrID, filterAtTime, "")
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR Status not found for the given EHR ID at the specified time")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR Status not found for the given EHR ID at the specified time",
 				Status:  "not_found",
@@ -545,8 +444,7 @@ func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to get EHR Status at time", "error", err)
-		auditCtx.Fail("internal_error", "Failed to get EHR Status at time")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -560,86 +458,39 @@ func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
 
 func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
-	}
-
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id format",
-			Status:  "bad_request",
-		})
+		return err
 	}
 
-	auditCtx.SetEHR(ehrID)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	ifMatch := c.Get("If-Match")
-	if ifMatch == "" {
-		auditCtx.Fail("bad_request", "If-Match header is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "If-Match header is required",
-			Status:  "bad_request",
-		})
+	ifMatch, err := StringFromHeader(c, auditCtx, "If-Match")
+	if err != nil {
+		return err
 	}
 
-	// response type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
-	var requestEhrStatus model.EHR_STATUS
-	if err := c.BodyParser(&requestEhrStatus); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("validation_error", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Validation error in request body",
-				Status:  "bad_request",
-				Details: err,
-			})
-		}
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
+	var ehrStatus model.EHR_STATUS
+	if err := ParseBody(c, auditCtx, &ehrStatus); err != nil {
+		return err
 	}
 
 	// Check collision using If-Match header
 	currentEHRStatus, err := h.OpenEHRService.GetEHRStatus(ctx, ehrID, time.Time{}, "")
 	if err != nil {
 		if err == ErrEHRStatusNotFound {
-			auditCtx.Fail("not_found", "EHR Status not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR Status not found for the given EHR ID",
 				Status:  "not_found",
@@ -647,72 +498,52 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to get current EHR Status", "error", err)
-		auditCtx.Fail("internal_error", "Failed to get current EHR Status")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
 		})
 	}
-
-	currentEHRStatusID, ok := currentEHRStatus.UID.V.Value.(*model.OBJECT_VERSION_ID)
-	if !ok {
-		auditCtx.Fail("internal_error", "Current EHR Status UID is not of type OBJECT_VERSION_ID")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusInternalServerError,
-			Message: "Current EHR Status UID is not of type OBJECT_VERSION_ID",
-			Status:  "error",
-		})
-	}
-
-	// Check collision using If-Match header
-	if currentEHRStatusID.Value != ifMatch {
-		auditCtx.Fail("precondition_failed", "EHR Status has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentEHRStatus.UID.V.ValueAsString() != ifMatch {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "EHR Status has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Proceed to update EHR Status
-	updatedEHRStatus, err := h.OpenEHRService.UpdateEHRStatus(ctx, ehrID, requestEhrStatus)
+	updatedEHRStatus, err := h.OpenEHRService.UpdateEHRStatus(ctx, ehrID, ehrStatus)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR Status not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR Status not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrEHRStatusAlreadyExists {
-			auditCtx.Fail("conflict", "EHR Status with the given UID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "EHR Status with the given UID already exists",
 				Status:  "conflict",
 			})
 		}
 		if err == ErrEHRStatusVersionLowerOrEqualToCurrent {
-			auditCtx.Fail("bad_request", "EHR Status version in request body must be incremented")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "EHR Status version in request body must be incremented",
 				Status:  "bad_request",
 			})
 		}
 		if err == ErrInvalidEHRStatusUIDMismatch {
-			auditCtx.Fail("bad_request", "EHR Status UID HIER_OBJECT_ID in request body does not match current EHR Status UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "EHR Status UID HIER_OBJECT_ID in request body does not match current EHR Status UID",
 				Status:  "bad_request",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Validation error in request body",
 				Status:  "bad_request",
@@ -721,21 +552,22 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to update EHR Status", "error", err)
-		auditCtx.Fail("internal_error", "Failed to update EHR Status")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
 		})
 	}
+	updatedEHRStatusID := updatedEHRStatus.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeEHRStatusUpdated, map[string]any{"ehr_status": updatedEHRStatus})
+	h.WebhookSaver.Enqueue(webhook.EventTypeEHRStatusUpdated, map[string]any{
+		"ehr_id":              ehrID,
+		"prev_ehr_status_uid": currentEHRStatus.UID.V.ValueAsString(),
+		"curr_ehr_status_uid": updatedEHRStatusID,
+	})
 
-	// Determine response
-	updatedEHRStatusID := updatedEHRStatus.UID.V.ValueAsString()
 	c.Set("ETag", "\""+updatedEHRStatusID+"\"")
 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/ehr/"+ehrID.String()+"/ehr_status/"+updatedEHRStatusID)
 
@@ -755,34 +587,17 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 
 func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id format",
-			Status:  "bad_request",
-		})
+		return err
 	}
-
-	auditCtx.SetEHR(ehrID)
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
 	versionUID := c.Params("version_uid")
 	if versionUID == "" {
-		auditCtx.Fail("bad_request", "version_uid parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "version_uid parameter is required",
 			Status:  "bad_request",
@@ -792,8 +607,7 @@ func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 	ehrStatus, err := h.OpenEHRService.GetEHRStatus(ctx, ehrID, time.Time{}, versionUID)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR Status not found for the given EHR ID and version UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR Status not found for the given EHR ID and version UID",
 				Status:  "not_found",
@@ -801,8 +615,7 @@ func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to get EHR Status at time", "error", err)
-		auditCtx.Fail("internal_error", "Failed to get EHR Status at time")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -816,33 +629,18 @@ func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id format",
-			Status:  "bad_request",
-		})
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
 	versionedStatus, err := h.OpenEHRService.GetVersionedEHRStatus(ctx, ehrID)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "Versioned EHR Status not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned EHR Status not found for the given EHR ID",
 				Status:  "not_found",
@@ -850,8 +648,7 @@ func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status", "error", err)
-		auditCtx.Fail("internal_error", "Failed to get Versioned EHR Status")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -865,33 +662,18 @@ func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
 	revisionHistory, err := h.OpenEHRService.GetVersionedEHRStatusRevisionHistory(ctx, ehrID)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "Versioned EHR Status revision history not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned EHR Status revision history not found for the given EHR ID",
 				Status:  "not_found",
@@ -899,8 +681,7 @@ func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status revision history", "error", err)
-		auditCtx.Fail("internal_error", "Failed to get Versioned EHR Status revision history")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -914,37 +695,20 @@ func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedEHRStatusVersion(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
-
-	auditCtx.SetEHR(ehrID)
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
 	var filterAtTime time.Time
 	atTimeStr := c.Query("version_at_time")
 	if atTimeStr != "" {
 		parsedTime, err := time.Parse(time.RFC3339, atTimeStr)
 		if err != nil {
-			auditCtx.Fail("bad_request", "Invalid version_at_time format")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Invalid version_at_time format. Use RFC3339 format.",
 				Status:  "bad_request",
@@ -956,8 +720,7 @@ func (h *Handler) GetVersionedEHRStatusVersion(c *fiber.Ctx) error {
 	ehrStatusVersionJSON, err := h.OpenEHRService.GetVersionedEHRStatusVersionAsJSON(ctx, ehrID, filterAtTime, "")
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "Versioned EHR Status version not found for the given EHR ID at the specified time")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned EHR Status version not found for the given EHR ID at the specified time",
 				Status:  "not_found",
@@ -965,8 +728,7 @@ func (h *Handler) GetVersionedEHRStatusVersion(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status version at time", "error", err)
-		auditCtx.Fail("internal_error", "Failed to get Versioned EHR Status version at time")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -981,34 +743,17 @@ func (h *Handler) GetVersionedEHRStatusVersion(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
-
-	auditCtx.SetEHR(ehrID)
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
 	versionUID := c.Params("version_uid")
 	if versionUID == "" {
-		auditCtx.Fail("bad_request", "version_uid parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "version_uid parameter is required",
 			Status:  "bad_request",
@@ -1018,8 +763,7 @@ func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
 	ehrStatusVersionJSON, err := h.OpenEHRService.GetVersionedEHRStatusVersionAsJSON(ctx, ehrID, time.Time{}, versionUID)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "Versioned EHR Status version not found for the given EHR ID and version UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned EHR Status version not found for the given EHR ID and version UID",
 				Status:  "not_found",
@@ -1028,8 +772,7 @@ func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Versioned EHR Status version by ID", "error", err)
 
-		auditCtx.Fail("internal_error", "Failed to get Versioned EHR Status version by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -1044,113 +787,64 @@ func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
 
 func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
-	}
-
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
 
-	auditCtx.SetEHR(ehrID)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	// response type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
-	// Parse new composition from request body
 	var requestComposition model.COMPOSITION
-	if err := c.BodyParser(&requestComposition); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("validation_error", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Validation error in request body",
-				Status:  "bad_request",
-				Details: err,
-			})
-		}
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
+	if err := ParseBody(c, auditCtx, &requestComposition); err != nil {
+		return err
 	}
 
-	// Check if EHR exists
 	exists, err := h.OpenEHRService.ExistsEHR(ctx, ehrID)
 	if err != nil {
-		auditCtx.Fail("internal_error", "Failed to check if EHR exists")
 		h.Logger.ErrorContext(ctx, "Failed to check if EHR exists", "error", err)
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
 		})
 	}
 	if !exists {
-		auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotFound,
 			Message: "EHR not found for the given EHR ID",
 			Status:  "not_found",
 		})
 	}
 
-	// Create Composition
-	newComposition, err := h.OpenEHRService.CreateComposition(ctx, ehrID, requestComposition)
+	composition, err := h.OpenEHRService.CreateComposition(ctx, ehrID, requestComposition)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrCompositionAlreadyExists {
-			auditCtx.Fail("conflict", "Composition with the given UID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Composition with the given UID already exists",
 				Status:  "conflict",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Validation error in request body",
 				Status:  "bad_request",
@@ -1159,8 +853,7 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create Composition", "error", err)
-		auditCtx.Fail("internal_error", "Failed to create Composition")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -1169,11 +862,12 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeCompositionCreated, map[string]any{"composition": newComposition})
+	h.WebhookSaver.Enqueue(webhook.EventTypeCompositionCreated, map[string]any{
+		"ehr_id":          ehrID,
+		"composition_uid": composition.UID.V.ValueAsString(),
+	})
 
-	// Determine response
-	compositionID := newComposition.UID.V.ValueAsString()
+	compositionID := composition.UID.V.ValueAsString()
 	c.Set("ETag", "\""+compositionID+"\"")
 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/ehr/"+ehrID.String()+"/composition/"+compositionID)
 
@@ -1182,62 +876,41 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 		c.Status(fiber.StatusCreated)
 		return nil
 	case ReturnTypeRepresentation:
-		return c.Status(fiber.StatusCreated).JSON(newComposition)
+		return c.Status(fiber.StatusCreated).JSON(composition)
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + compositionID + `"}`)
 	default:
 		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.Status(fiber.StatusCreated).JSON(newComposition)
+		return c.Status(fiber.StatusCreated).JSON(composition)
 	}
 }
 
 func (h *Handler) GetComposition(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
 
 	composition, err := h.OpenEHRService.GetComposition(ctx, ehrID, uidBasedID)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrCompositionNotFound {
-			auditCtx.Fail("not_found", "Composition not found for the given UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Composition not found for the given UID",
 				Status:  "not_found",
@@ -1245,8 +918,7 @@ func (h *Handler) GetComposition(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to get Composition by ID", "error", err)
-		auditCtx.Fail("internal_error", "Failed to get Composition by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -1260,74 +932,40 @@ func (h *Handler) GetComposition(c *fiber.Ctx) error {
 
 func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
-	}
-
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
+
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["uid_based_id"] = uidBasedID
+
+	ifMatch, err := StringFromHeader(c, auditCtx, "If-Match")
+	if err != nil {
+		return err
 	}
 
-	ifMatch := c.Get("If-Match")
-	if ifMatch == "" {
-		auditCtx.Fail("bad_request", "If-Match header is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "If-Match header is required",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
-	// response type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
-	}
-
-	// Check collision using If-Match header
-	currentComposition, err := h.OpenEHRService.GetComposition(ctx, ehrID, strings.Split(uidBasedID, "::")[0])
+	versionedCompositionID := strings.Split(uidBasedID, "::")[0]
+	currentComposition, err := h.OpenEHRService.GetComposition(ctx, ehrID, versionedCompositionID)
 	if err != nil {
 		if err == ErrCompositionNotFound {
-			auditCtx.Fail("not_found", "Composition not found for the given EHR ID and UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Composition not found for the given EHR ID and UID",
 				Status:  "not_found",
@@ -1335,184 +973,128 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to get current Composition", "error", err)
-		auditCtx.Fail("internal_error", "Failed to get current Composition")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
 		})
 	}
-
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Composition
-	if currentComposition.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != ifMatch {
-		auditCtx.Fail("precondition_failed", "Composition has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentComposition.UID.V.ValueAsString() != ifMatch {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Composition has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Parse updated composition from request body
-	var requestComposition model.COMPOSITION
-	if err := c.BodyParser(&requestComposition); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("validation_error", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Validation error in request body",
-				Status:  "bad_request",
-				Details: err,
-			})
-		}
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
+	var composition model.COMPOSITION
+	if err := ParseBody(c, auditCtx, &composition); err != nil {
+		return err
 	}
 
-	// Proceed to update Composition
-	composition, err := h.OpenEHRService.UpdateComposition(ctx, ehrID, requestComposition)
+	updatedComposition, err := h.OpenEHRService.UpdateComposition(ctx, ehrID, composition)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrCompositionNotFound {
-			auditCtx.Fail("not_found", "Composition not found for the given UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Composition not found for the given UID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrCompositionAlreadyExists {
-			auditCtx.Fail("conflict", "Composition with the given UID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Composition with the given UID already exists",
 				Status:  "conflict",
 			})
 		}
 		if err == ErrCompositionVersionLowerOrEqualToCurrent {
-			auditCtx.Fail("bad_request", "Composition version in request body is lower or equal to the current version")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Composition version in request body is lower or equal to the current version",
 				Status:  "bad_request",
 			})
 		}
 		if err == ErrInvalidCompositionUIDMismatch {
-			auditCtx.Fail("bad_request", "Composition UID HIER_OBJECT_ID in request body does not match current Composition UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Composition UID HIER_OBJECT_ID in request body does not match current Composition UID",
 				Status:  "bad_request",
 			})
 		}
 		if err == ErrCompositionUIDNotProvided {
-			auditCtx.Fail("bad_request", "Composition UID must be provided in the request body for update")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Composition UID must be provided in the request body for update",
 				Status:  "bad_request",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("validation_error", "Validation error in request body")
 			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to update Composition", "error", err)
-		auditCtx.Fail("internal_error", "Failed to update Composition")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
 		})
 	}
+	updatedCompositionID := updatedComposition.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeCompositionUpdated, map[string]any{"composition": composition})
+	h.WebhookSaver.Enqueue(webhook.EventTypeCompositionUpdated, map[string]any{
+		"ehr_id":               ehrID,
+		"prev_composition_uid": currentComposition.UID.V.ValueAsString(),
+		"curr_composition_uid": updatedCompositionID,
+	})
 
-	// Determine response
-	compositionID := composition.UID.V.ValueAsString()
-	c.Set("ETag", "\""+compositionID+"\"")
-	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/ehr/"+ehrID.String()+"/composition/"+compositionID)
+	c.Set("ETag", "\""+updatedCompositionID+"\"")
+	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/ehr/"+ehrID.String()+"/composition/"+updatedCompositionID)
 
 	switch returnType {
 	case ReturnTypeMinimal:
 		c.Status(fiber.StatusNoContent)
 		return nil
 	case ReturnTypeRepresentation:
-		return c.Status(fiber.StatusOK).JSON(composition)
+		return c.Status(fiber.StatusOK).JSON(updatedComposition)
 	case ReturnTypeIdentifier:
-		return c.JSON(`{"uid":"` + compositionID + `"}`)
+		return c.JSON(`{"uid":"` + updatedCompositionID + `"}`)
 	default:
 		h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.Status(fiber.StatusOK).JSON(composition)
+		return c.Status(fiber.StatusOK).JSON(updatedComposition)
 	}
 }
 
 func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["uid_based_id"] = uidBasedID
 
-	if strings.Count(uidBasedID, "::") != 2 {
-		auditCtx.Fail("bad_request", "Cannot delete Composition by versioned object ID. Please provide the object version ID.")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Cannot delete Composition by versioned object ID. Please provide the object version ID.",
-			Status:  "bad_request",
-		})
-	}
-
-	// Check existence before deletion
-	versionedObjectID := strings.Split(uidBasedID, "::")[0]
-	currentComposition, err := h.OpenEHRService.GetComposition(ctx, ehrID, versionedObjectID)
+	versionedCompositionID := strings.Split(uidBasedID, "::")[0]
+	currentComposition, err := h.OpenEHRService.GetComposition(ctx, ehrID, versionedCompositionID)
 	if err != nil {
 		if err == ErrCompositionNotFound {
-			auditCtx.Fail("not_found", "Composition not found for the given UID and EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Composition not found for the given UID and EHR ID",
 				Status:  "not_found",
@@ -1520,38 +1102,30 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to get Composition by ID before deletion", "error", err)
-		auditCtx.Fail("internal_error", "Failed to get Composition by ID before deletion")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
 		})
 	}
-
-	// Check if provided version matches current version
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Composition
-	if currentComposition.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != uidBasedID {
-		auditCtx.Fail("precondition_failed", "Composition has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentComposition.UID.V.ValueAsString() != uidBasedID {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Composition has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Proceed to delete Composition
-	if err := h.OpenEHRService.DeleteComposition(ctx, ehrID, uuid.MustParse(currentComposition.UID.V.ValueAsString())); err != nil {
+	if err := h.OpenEHRService.DeleteComposition(ctx, ehrID, currentComposition.UID.V.UUID()); err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrCompositionNotFound {
-			auditCtx.Fail("not_found", "Composition not found for the given UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Composition not found for the given UID",
 				Status:  "not_found",
@@ -1560,8 +1134,7 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to delete Composition by ID", "error", err)
 
-		auditCtx.Fail("internal_error", "Failed to delete Composition by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -1570,8 +1143,10 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeCompositionDeleted, map[string]any{"composition": currentComposition})
+	h.WebhookSaver.Enqueue(webhook.EventTypeCompositionDeleted, map[string]any{
+		"ehr_id":          ehrID,
+		"composition_uid": currentComposition.UID.V.ValueAsString(),
+	})
 
 	c.Status(fiber.StatusNoContent)
 	return nil
@@ -1579,51 +1154,31 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	versionedObjectID := c.Params("versioned_object_id")
-	if versionedObjectID == "" {
-		auditCtx.Fail("bad_request", "versioned_object_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "versioned_object_id parameter is required",
-			Status:  "bad_request",
-		})
+	versionedCompositionID, err := StringFromPath(c, auditCtx, "versioned_object_id")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["versioned_composition_uid"] = versionedCompositionID
 
-	versionedComposition, err := h.OpenEHRService.GetVersionedComposition(ctx, ehrID, versionedObjectID)
+	versionedComposition, err := h.OpenEHRService.GetVersionedComposition(ctx, ehrID, versionedCompositionID)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrCompositionNotFound {
-			auditCtx.Fail("not_found", "Versioned Composition not found for the given versioned object ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned Composition not found for the given versioned object ID",
 				Status:  "not_found",
@@ -1632,8 +1187,7 @@ func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Versioned Composition by ID", "error", err)
 
-		auditCtx.Fail("internal_error", "Failed to get Versioned Composition by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -1649,48 +1203,29 @@ func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
 
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	versionedObjectID := c.Params("versioned_object_id")
-	if versionedObjectID == "" {
-		auditCtx.Fail("bad_request", "versioned_object_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "versioned_object_id parameter is required",
-			Status:  "bad_request",
-		})
+	versionedCompositionID, err := StringFromPath(c, auditCtx, "versioned_object_id")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["versioned_composition_uid"] = versionedCompositionID
 
-	revisionHistory, err := h.OpenEHRService.GetVersionedCompositionRevisionHistory(ctx, ehrID, versionedObjectID)
+	revisionHistory, err := h.OpenEHRService.GetVersionedCompositionRevisionHistory(ctx, ehrID, versionedCompositionID)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrCompositionNotFound {
-			auditCtx.Fail("not_found", "Versioned Composition revision history not found for the given versioned object ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned Composition revision history not found for the given versioned object ID",
 				Status:  "not_found",
@@ -1699,8 +1234,7 @@ func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Versioned Composition revision history", "error", err)
 
-		auditCtx.Fail("internal_error", "Failed to get Versioned Composition revision history")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -1713,68 +1247,41 @@ func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	auditCtx.SetEHR(ehrID)
-
-	versionedObjectID := c.Params("versioned_object_id")
-	if versionedObjectID == "" {
-		auditCtx.Fail("bad_request", "versioned_object_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "versioned_object_id parameter is required",
-			Status:  "bad_request",
-		})
+	versionedCompositionID, err := StringFromPath(c, auditCtx, "versioned_object_id")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["versioned_composition_uid"] = versionedCompositionID
 
 	var filterAtTime time.Time
-	atTimeStr := c.Query("version_at_time")
-	if atTimeStr != "" {
-		parsedTime, err := time.Parse(time.RFC3339, atTimeStr)
+	if c.Query("version_at_time") != "" {
+		versionAtTime, err := TimeFromQuery(c, auditCtx, "version_at_time")
 		if err != nil {
-			auditCtx.Fail("bad_request", "Invalid version_at_time format. Use RFC3339 format.")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Invalid version_at_time format. Use RFC3339 format.",
-				Status:  "bad_request",
-			})
+			return err
 		}
-		filterAtTime = parsedTime
+		filterAtTime = versionAtTime
+		auditCtx.Event.Details["version_at_time"] = filterAtTime.String()
 	}
 
-	versionJSON, err := h.OpenEHRService.GetVersionedCompositionVersionJSON(ctx, ehrID, versionedObjectID, filterAtTime, "")
+	versionJSON, err := h.OpenEHRService.GetVersionedCompositionVersionJSON(ctx, ehrID, versionedCompositionID, filterAtTime, "")
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrCompositionNotFound {
-			auditCtx.Fail("not_found", "Versioned Composition version not found for the given versioned object ID at the specified time")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned Composition version not found for the given versioned object ID at the specified time",
 				Status:  "not_found",
@@ -1783,8 +1290,7 @@ func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Versioned Composition version at time", "error", err)
 
-		auditCtx.Fail("internal_error", "Failed to get Versioned Composition version at time")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -1792,78 +1298,52 @@ func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 	}
 
 	auditCtx.Success()
+
 	c.Set("Content-Type", "application/json")
 	return c.Status(fiber.StatusOK).Send(versionJSON)
 }
 
 func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	auditCtx.SetEHR(ehrID)
-
-	versionedObjectID := c.Params("versioned_object_id")
-	if versionedObjectID == "" {
-		auditCtx.Fail("bad_request", "versioned_object_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "versioned_object_id parameter is required",
-			Status:  "bad_request",
-		})
+	versionedCompositionID, err := StringFromPath(c, auditCtx, "versioned_object_id")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["versioned_composition_uid"] = versionedCompositionID
 
-	versionUID := c.Params("version_uid")
-	if versionUID == "" {
-		auditCtx.Fail("bad_request", "version_uid parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "version_uid parameter is required",
-			Status:  "bad_request",
-		})
+	versionID, err := StringFromPath(c, auditCtx, "version_uid")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["version_uid"] = versionID
 
-	if versionedObjectID != strings.Split(versionUID, "::")[0] {
-		auditCtx.Fail("bad_request", "version_uid does not match the versioned_object_id")
-		return SendErrorResponse(c, ErrorResponse{
+	if versionedCompositionID != strings.Split(versionID, "::")[0] {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "version_uid does not match the versioned_object_id",
 			Status:  "bad_request",
 		})
 	}
 
-	versionJSON, err := h.OpenEHRService.GetVersionedCompositionVersionJSON(ctx, ehrID, versionedObjectID, time.Time{}, versionUID)
+	versionJSON, err := h.OpenEHRService.GetVersionedCompositionVersionJSON(ctx, ehrID, versionedCompositionID, time.Time{}, versionID)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrCompositionNotFound {
-			auditCtx.Fail("not_found", "Versioned Composition version not found for the given versioned object ID and version UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned Composition version not found for the given versioned object ID and version UID",
 				Status:  "not_found",
@@ -1872,8 +1352,7 @@ func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Versioned Composition version by ID", "error", err)
 
-		auditCtx.Fail("internal_error", "Failed to get Versioned Composition version by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
@@ -1887,100 +1366,47 @@ func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
 
 func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
-	}
-
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
 
-	auditCtx.SetEHR(ehrID)
-
-	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	if len(c.Body()) <= 0 {
-		auditCtx.Fail("bad_request", "Request body is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Request body is required",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
 	var requestDirectory model.FOLDER
-	if err := c.BodyParser(&requestDirectory); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("validation_error", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Validation error in request body",
-				Status:  "bad_request",
-				Details: err,
-			})
-		}
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
+	if err := ParseBody(c, auditCtx, &requestDirectory); err != nil {
+		return err
 	}
 
 	directory, err := h.OpenEHRService.CreateDirectory(ctx, ehrID, requestDirectory)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrDirectoryAlreadyExists {
-			auditCtx.Fail("conflict", "Directory with the given UID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Directory with the given UID already exists",
 				Status:  "conflict",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Validation error in request body",
 				Status:  "bad_request",
@@ -1990,21 +1416,20 @@ func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to create Directory", "error", err)
 
-		auditCtx.Fail("internal_error", "Failed to create Directory")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Internal server error",
 			Status:  "error",
 		})
 	}
+	directoryID := directory.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeDirectoryCreated, map[string]any{"directory": directory})
+	h.WebhookSaver.Enqueue(webhook.EventTypeDirectoryCreated, map[string]any{
+		"directory_id": directoryID,
+	})
 
-	// Determine response
-	directoryID := directory.UID.V.ValueAsString()
 	c.Set("ETag", "\""+directoryID+"\"")
 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/ehr/"+ehrID.String()+"/directory/"+directoryID)
 
@@ -2027,69 +1452,43 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
-	}
-
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
 
-	ifMatch := c.Get("If-Match")
-	if ifMatch == "" {
-		auditCtx.Fail("bad_request", "If-Match header is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "If-Match header is required",
-			Status:  "bad_request",
-		})
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
+
+	ifMatch, err := StringFromHeader(c, auditCtx, "If-Match")
+	if err != nil {
+		return err
 	}
 
-	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
-	// Check collision using If-Match header
+	var directory model.FOLDER
+	if err := ParseBody(c, auditCtx, &directory); err != nil {
+		return err
+	}
+
 	currentDirectory, err := h.OpenEHRService.GetDirectory(ctx, ehrID)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrDirectoryNotFound {
-			auditCtx.Fail("not_found", "Directory not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Directory not found for the given EHR ID",
 				Status:  "not_found",
@@ -2098,101 +1497,71 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get current Directory", "error", err)
 
-		auditCtx.Fail("error", "Failed to get current Directory")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get current Directory",
 			Status:  "error",
 		})
 	}
-
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Directory
-	if currentDirectory.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != ifMatch {
-		auditCtx.Fail("precondition_failed", "Directory has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentDirectory.UID.V.ValueAsString() != ifMatch {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Directory has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Parse updated directory from request body
-	var requestDirectory model.FOLDER
-	if err := c.BodyParser(&requestDirectory); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("validation_error", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Validation error in request body",
-				Status:  "bad_request",
-				Details: err,
-			})
-		}
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
-	}
-
-	directory, err := h.OpenEHRService.UpdateDirectory(ctx, ehrID, requestDirectory)
+	updatedDirectory, err := h.OpenEHRService.UpdateDirectory(ctx, ehrID, directory)
 	if err != nil {
 		if err == ErrDirectoryNotFound {
-			auditCtx.Fail("not_found", "Directory not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Directory not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrDirectoryAlreadyExists {
-			auditCtx.Fail("conflict", "Directory with the given UID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Directory with the given UID already exists",
 				Status:  "conflict",
 			})
 		}
 		if err == ErrDirectoryVersionLowerOrEqualToCurrent {
-			auditCtx.Fail("bad_request", "Directory version in request body is lower or equal to the current version")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Directory version in request body is lower or equal to the current version",
 				Status:  "bad_request",
 			})
 		}
 		if err == ErrInvalidDirectoryUIDMismatch {
-			auditCtx.Fail("bad_request", "Directory UID HIER_OBJECT_ID in request body does not match current Directory UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Directory UID HIER_OBJECT_ID in request body does not match current Directory UID",
 				Status:  "bad_request",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("validation_error", "Validation error in request body")
 			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to update Directory", "error", err)
 
-		auditCtx.Fail("error", "Failed to update Directory")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to update Directory",
 			Status:  "error",
 		})
 	}
+	updatedDirectoryID := updatedDirectory.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeDirectoryUpdated, map[string]any{"directory": directory})
+	h.WebhookSaver.Enqueue(webhook.EventTypeDirectoryUpdated, map[string]any{
+		"prev_directory_id": currentDirectory.UID.V.ValueAsString(),
+		"curr_directory_id": updatedDirectoryID,
+	})
 
-	// Determine response
-	updatedDirectoryID := directory.UID.V.Value.(*model.OBJECT_VERSION_ID).Value
 	c.Set("ETag", "\""+updatedDirectoryID+"\"")
 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/ehr/"+ehrID.String()+"/directory/"+updatedDirectoryID)
 
@@ -2201,63 +1570,41 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 		c.Status(fiber.StatusNoContent)
 		return nil
 	case ReturnTypeRepresentation:
-		return c.Status(fiber.StatusOK).JSON(directory)
+		return c.Status(fiber.StatusOK).JSON(updatedDirectory)
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + updatedDirectoryID + `"}`)
 	default:
 		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.Status(fiber.StatusOK).JSON(directory)
+		return c.Status(fiber.StatusOK).JSON(updatedDirectory)
 	}
 }
 
 func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
+	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
+
+	ifMatch, err := StringFromHeader(c, auditCtx, "If-Match")
+	if err != nil {
+		return err
 	}
 
-	ifMatch := c.Get("If-Match")
-	if ifMatch == "" {
-		auditCtx.Fail("bad_request", "If-Match header is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "If-Match header is required",
-			Status:  "bad_request",
-		})
-	}
-
-	// Check collision using If-Match header
 	currentDirectory, err := h.OpenEHRService.GetDirectory(ctx, ehrID)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrDirectoryNotFound {
-			auditCtx.Fail("not_found", "Directory not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Directory not found for the given EHR ID",
 				Status:  "not_found",
@@ -2266,18 +1613,14 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get current Directory", "error", err)
 
-		auditCtx.Fail("error", "Failed to get current Directory")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get current Directory",
 			Status:  "error",
 		})
 	}
-
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Directory
-	if currentDirectory.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != ifMatch {
-		auditCtx.Fail("precondition_failed", "Directory has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentDirectory.UID.V.ValueAsString() != ifMatch {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Directory has been modified since the provided version",
 			Status:  "precondition_failed",
@@ -2286,16 +1629,14 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 
 	if err := h.OpenEHRService.DeleteDirectory(ctx, ehrID, uuid.MustParse(currentDirectory.UID.V.Value.(*model.OBJECT_VERSION_ID).Value)); err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrDirectoryNotFound {
-			auditCtx.Fail("not_found", "Directory not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Directory not found for the given EHR ID",
 				Status:  "not_found",
@@ -2304,8 +1645,7 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to delete Directory", "error", err)
 
-		auditCtx.Fail("error", "Failed to delete Directory")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to delete Directory",
 			Status:  "error",
@@ -2314,8 +1654,9 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeDirectoryDeleted, map[string]any{"directory": currentDirectory})
+	h.WebhookSaver.Enqueue(webhook.EventTypeDirectoryDeleted, map[string]any{
+		"directory_id": currentDirectory.UID.V.ValueAsString(),
+	})
 
 	c.Status(fiber.StatusNoContent)
 	return nil
@@ -2326,36 +1667,18 @@ func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
 
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
 	var filterAtTime time.Time
 	atTimeStr := c.Query("version_at_time")
 	if atTimeStr != "" {
-		parsedTime, err := time.Parse(time.RFC3339, atTimeStr)
+		parsedTime, err := TimeFromQuery(c, auditCtx, "version_at_time")
 		if err != nil {
-			auditCtx.Fail("bad_request", "Invalid version_at_time format. Use RFC3339 format.")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Invalid version_at_time format. Use RFC3339 format.",
-				Status:  "bad_request",
-			})
+			return err
 		}
 		filterAtTime = parsedTime
 	}
@@ -2371,24 +1694,21 @@ func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
 	folder, err := h.OpenEHRService.GetFolderInDirectoryVersion(ctx, ehrID, filterAtTime, "", pathParts)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "Directory not found for the given EHR ID at the specified time")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Directory not found for the given EHR ID at the specified time",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrDirectoryNotFound {
-			auditCtx.Fail("not_found", "Directory version not found at the specified time for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Directory version not found at the specified time for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrFolderNotFoundInDirectory {
-			auditCtx.Fail("not_found", "Folder not found in Directory version at the specified time for the given path")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Folder not found in Directory version at the specified time for the given path",
 				Status:  "not_found",
@@ -2397,8 +1717,7 @@ func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Folder in Directory version at time", "error", err)
 
-		auditCtx.Fail("internal_error", "Failed to get Folder in Directory version at time")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Folder in Directory version at time",
 			Status:  "error",
@@ -2411,37 +1730,19 @@ func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
 
 func (h *Handler) GetFolderInDirectoryVersion(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	versionUID := c.Params("version_uid")
-	if versionUID == "" {
-		auditCtx.Fail("bad_request", "version_uid parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "version_uid parameter is required",
-			Status:  "bad_request",
-		})
+	versionUID, err := StringFromPath(c, auditCtx, "version_uid")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["version_uid"] = versionUID
 
 	path := c.Query("path")
 	var pathParts []string
@@ -2454,24 +1755,21 @@ func (h *Handler) GetFolderInDirectoryVersion(c *fiber.Ctx) error {
 	folder, err := h.OpenEHRService.GetFolderInDirectoryVersion(ctx, ehrID, time.Time{}, versionUID, pathParts)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "Directory not found for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Directory not found for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrDirectoryNotFound {
-			auditCtx.Fail("not_found", "Directory version not found at the specified time for the given EHR ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Directory version not found at the specified time for the given EHR ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrFolderNotFoundInDirectory {
-			auditCtx.Fail("not_found", "Folder not found in Directory version at the specified time for the given path")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Folder not found in Directory version at the specified time for the given path",
 				Status:  "not_found",
@@ -2480,8 +1778,7 @@ func (h *Handler) GetFolderInDirectoryVersion(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Folder in Directory version", "error", err)
 
-		auditCtx.Fail("internal_error", "Failed to get Folder in Directory version")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Folder in Directory version",
 			Status:  "error",
@@ -2495,114 +1792,33 @@ func (h *Handler) GetFolderInDirectoryVersion(c *fiber.Ctx) error {
 func (h *Handler) CreateContribution(c *fiber.Ctx) error {
 	c.Status(fiber.StatusNotImplemented)
 	return nil
-
-	// ctx := c.Context()
-
-	// c.Accepts("application/json")
-
-	// ehrIDStr := c.Params("ehr_id")
-	// if ehrIDStr == "" {
-	// 	return c.Status(fiber.StatusBadRequest).SendString("ehr_id parameter is required")
-	// }
-	// ehrID, err := uuid.Parse(ehrIDStr)
-	// if err != nil {
-	// 	return c.Status(fiber.StatusBadRequest).SendString("Invalid ehr_id parameter format")
-	// }
-
-	// // return type
-	// returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	// if !returnType.IsValid() {
-	// 	return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
-	// }
-
-	// // Parse new contribution from request body
-	// var newContribution openehr.CONTRIBUTION
-	// if err := c.BodyParser(&newContribution); err != nil {
-	// 	if err, ok := err.(util.ValidateError); ok {
-	// 		return c.Status(fiber.StatusBadRequest).JSON(err)
-	// 	}
-
-	// 	return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
-	// }
-
-	// contribution, err := h.OpenEHRService.CreateContribution(ctx, ehrID, newContribution)
-	// if err != nil {
-	// 	if err == ErrContributionAlreadyExists {
-	// 		return c.Status(fiber.StatusConflict).SendString("Contribution with the given UID already exists")
-	// 	}
-
-	// 	h.Logger.ErrorContext(ctx, "Failed to create Contribution", "error", err)
-	// 	c.Status(http.StatusInternalServerError)
-	// 	return nil
-	// }
-
-	// // Determine response
-	// contributionID := contribution.UID.Value
-	// c.Set("ETag", "\""+contributionID+"\"")
-	// c.Set("Location", c.Protocol()+ "://" + c.Hostname() + "/openehr/v1/ehr/"+ehrID.String()+"/contribution/"+contributionID)
-
-	// c.Status(fiber.StatusCreated)
-	// switch returnType {
-	// case ReturnTypeMinimal:
-	// 	return nil
-	// case ReturnTypeRepresentation:
-	// 	return c.JSON(contribution)
-	// case ReturnTypeIdentifier:
-	// 	return c.JSON(`{"uid":"` + contributionID + `"}`)
-	// default:
-	// 	h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
-	// 	return c.JSON(contribution)
-	// }
 }
 
 func (h *Handler) GetContribution(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
-	}
-
-	ehrIDStr := c.Params("ehr_id")
-	if ehrIDStr == "" {
-		auditCtx.Fail("bad_request", "ehr_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	ehrID, err := uuid.Parse(ehrIDStr)
+	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid ehr_id parameter format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid ehr_id parameter format",
-			Status:  "bad_request",
-		})
+		return err
 	}
 
-	contributionUID := c.Params("contribution_uid")
-	if contributionUID == "" {
-		auditCtx.Fail("bad_request", "contribution_uid parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "contribution_uid parameter is required",
-			Status:  "bad_request",
-		})
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
+
+	contributionUID, err := StringFromPath(c, auditCtx, "contribution_uid")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["contribution_uid"] = contributionUID
 
 	contribution, err := h.OpenEHRService.GetContribution(ctx, contributionUID, utils.Some(ehrID))
 	if err != nil {
 		if err == ErrContributionNotFound {
-			auditCtx.Fail("not_found", "Contribution not found for the given EHR ID and Contribution UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Contribution not found for the given EHR ID and Contribution UID",
 				Status:  "not_found",
@@ -2611,8 +1827,7 @@ func (h *Handler) GetContribution(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Contribution by ID", "error", err)
 
-		auditCtx.Fail("internal_error", "Failed to get Contribution by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Contribution by ID",
 			Status:  "error",
@@ -2657,65 +1872,34 @@ func (h *Handler) DeleteEHRStatusVersionTagByKey(c *fiber.Ctx) error {
 
 func (h *Handler) CreateAgent(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
 	}
 
-	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
-	// Parse new agent from request body
-	var newAgent model.AGENT
-	if err := c.BodyParser(&newAgent); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("validation_error", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Validation error in request body",
-				Status:  "bad_request",
-				Details: err,
-			})
-		}
-
-		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Agent", "error", err)
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
+	var agent model.AGENT
+	if err := ParseBody(c, auditCtx, &agent); err != nil {
+		return err
 	}
 
-	agent, err := h.OpenEHRService.CreateAgent(ctx, newAgent)
+	createdAgent, err := h.OpenEHRService.CreateAgent(ctx, agent)
 	if err != nil {
 		if err == ErrAgentAlreadyExists {
-			auditCtx.Fail("conflict", "Agent with the given UID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Agent with the given UID already exists",
 				Status:  "conflict",
 			})
 		}
 		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Validation error in request body",
 				Status:  "bad_request",
@@ -2725,60 +1909,52 @@ func (h *Handler) CreateAgent(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to create Agent", "error", err)
 
-		auditCtx.Fail("error", "Failed to create Agent")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to create Agent",
 			Status:  "error",
 		})
 	}
+	createdAgentID := createdAgent.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeAgentCreated, map[string]any{"agent": agent})
+	h.WebhookSaver.Enqueue(webhook.EventTypeAgentCreated, map[string]any{
+		"agent_uid": createdAgentID,
+	})
 
-	// Determine response
-	agentID := agent.UID.V.Value.(*model.OBJECT_VERSION_ID).Value
-	c.Set("ETag", "\""+agentID+"\"")
-	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/agent/"+agentID)
+	c.Set("ETag", "\""+createdAgentID+"\"")
+	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/agent/"+createdAgentID)
 
 	switch returnType {
 	case ReturnTypeMinimal:
 		c.Status(fiber.StatusCreated)
 		return nil
 	case ReturnTypeRepresentation:
-		return c.Status(fiber.StatusCreated).JSON(agent)
+		return c.Status(fiber.StatusCreated).JSON(createdAgent)
 	case ReturnTypeIdentifier:
-		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + agentID + `"}`)
+		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + createdAgentID + `"}`)
 	default:
 		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.Status(fiber.StatusCreated).JSON(agent)
+		return c.Status(fiber.StatusCreated).JSON(createdAgent)
 	}
 }
 
 func (h *Handler) GetAgent(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["uid_based_id"] = uidBasedID
 
-	if strings.Count(uidBasedID, "::") == 3 {
-		// Is version id
+	if strings.Count(uidBasedID, "::") == 2 {
 		agent, err := h.OpenEHRService.GetAgentAtVersion(ctx, uidBasedID)
 		if err != nil {
 			if err == ErrAgentNotFound {
-				auditCtx.Fail("not_found", "Agent not found for the given agent ID")
-				return SendErrorResponse(c, ErrorResponse{
+				return SendErrorResponse(c, auditCtx, ErrorResponse{
 					Code:    fiber.StatusNotFound,
 					Message: "Agent not found for the given agent ID",
 					Status:  "not_found",
@@ -2787,8 +1963,7 @@ func (h *Handler) GetAgent(c *fiber.Ctx) error {
 
 			h.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
 
-			auditCtx.Fail("error", "Failed to get Agent by ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusInternalServerError,
 				Message: "Failed to get Agent by ID",
 				Status:  "error",
@@ -2799,11 +1974,9 @@ func (h *Handler) GetAgent(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(agent)
 	}
 
-	// Is versioned party id
 	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
@@ -2813,8 +1986,7 @@ func (h *Handler) GetAgent(c *fiber.Ctx) error {
 	agent, err := h.OpenEHRService.GetCurrentAgentVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrAgentNotFound {
-			auditCtx.Fail("not_found", "Agent not found for the given agent ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Agent not found for the given agent ID",
 				Status:  "not_found",
@@ -2823,8 +1995,7 @@ func (h *Handler) GetAgent(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Agent by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Agent by ID",
 			Status:  "error",
@@ -2837,66 +2008,47 @@ func (h *Handler) GetAgent(c *fiber.Ctx) error {
 
 func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
-	}
-
-	versionID := c.Params("uid_based_id")
-	if versionID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-
-	ifMatch := c.Get("If-Match")
-	if ifMatch == "" {
-		auditCtx.Fail("bad_request", "If-Match header is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "If-Match header is required",
-			Status:  "bad_request",
-		})
-	}
-
-	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
-	}
-
-	// Ensure Agent exists before update
-	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
+	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return err
+	}
+
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["uid_based_id"] = uidBasedID
+
+	ifMatch, err := StringFromHeader(c, auditCtx, "If-Match")
+	if err != nil {
+		return err
+	}
+
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
+	}
+
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
 		})
 	}
 
-	// Check collision using If-Match header
+	var agent model.AGENT
+	if err := ParseBody(c, auditCtx, &agent); err != nil {
+		return err
+	}
+
 	currentAgent, err := h.OpenEHRService.GetCurrentAgentVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrAgentNotFound {
-			auditCtx.Fail("not_found", "Agent not found for the given agent ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Agent not found for the given agent ID",
 				Status:  "not_found",
@@ -2905,77 +2057,45 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get current Agent by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to get current Agent by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get current Agent by ID",
 			Status:  "error",
 		})
 	}
-
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Agent
-	if currentAgent.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != ifMatch {
-		auditCtx.Fail("precondition_failed", "Agent has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentAgent.UID.V.ValueAsString() != ifMatch {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Agent has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Parse updated agent from request body
-	var requestAgent model.AGENT
-	if err := c.BodyParser(&requestAgent); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Validation error in request body",
-				Status:  "bad_request",
-				Details: err,
-			})
-		}
-
-		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Agent", "error", err)
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
-	}
-
-	// Proceed to update Agent
-	updatedAgent, err := h.OpenEHRService.UpdateAgent(ctx, versionedPartyID, requestAgent)
+	updatedAgent, err := h.OpenEHRService.UpdateAgent(ctx, versionedPartyID, agent)
 	if err != nil {
 		if err == ErrAgentNotFound {
-			auditCtx.Fail("not_found", "Agent not found for the given agent ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Agent not found for the given agent ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrAgentVersionLowerOrEqualToCurrent {
-			auditCtx.Fail("bad_request", "Agent version is lower than or equal to the current version")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Agent version is lower than or equal to the current version",
 				Status:  "conflict",
 			})
 		}
 		if err == ErrInvalidAgentUIDMismatch {
-			auditCtx.Fail("bad_request", "Agent UID HIER_OBJECT_ID in request body does not match current Agent UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Agent UID HIER_OBJECT_ID in request body does not match current Agent UID",
 				Status:  "bad_request",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Validation error in request body",
 				Status:  "bad_request",
@@ -2985,21 +2105,21 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to update Agent", "error", err)
 
-		auditCtx.Fail("error", "Failed to update Agent")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to update Agent",
 			Status:  "error",
 		})
 	}
+	updatedAgentID := updatedAgent.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeAgentUpdated, map[string]any{"agent": updatedAgent})
+	h.WebhookSaver.Enqueue(webhook.EventTypeAgentUpdated, map[string]any{
+		"prev_agent_uid": currentAgent.UID.V.ValueAsString(),
+		"curr_agent_uid": updatedAgentID,
+	})
 
-	// Determine response
-	updatedAgentID := updatedAgent.UID.V.Value.(*model.OBJECT_VERSION_ID).Value
 	c.Set("ETag", "\""+updatedAgentID+"\"")
 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/agent/"+updatedAgentID)
 
@@ -3019,33 +2139,25 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 
 func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["uid_based_id"] = uidBasedID
 
 	if strings.Count(uidBasedID, "::") != 2 {
-		auditCtx.Fail("bad_request", "Cannot delete Agent by versioned object ID. Please provide the object version ID.")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Cannot delete Agent by versioned object ID. Please provide the object version ID.",
 			Status:  "bad_request",
 		})
 	}
 
-	// Check existence before deletion
 	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
@@ -3055,8 +2167,7 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 	currentAgent, err := h.OpenEHRService.GetCurrentAgentVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrAgentNotFound {
-			auditCtx.Fail("not_found", "Agent not found for the given agent ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Agent not found for the given agent ID",
 				Status:  "not_found",
@@ -3065,30 +2176,23 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Agent by ID before deletion", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Agent by ID before deletion")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Agent by ID before deletion",
 			Status:  "error",
 		})
 	}
-
-	// Check if provided version matches current version
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Agent
-	if currentAgent.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != uidBasedID {
-		auditCtx.Fail("precondition_failed", "Agent has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentAgent.UID.V.ValueAsString() != uidBasedID {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Agent has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Proceed to delete Agent
 	if err := h.OpenEHRService.DeleteAgent(ctx, uidBasedID); err != nil {
 		if err == ErrAgentNotFound {
-			auditCtx.Fail("not_found", "Agent not found for the given agent ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Agent not found for the given agent ID",
 				Status:  "not_found",
@@ -3097,8 +2201,7 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to delete Agent by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to delete Agent by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to delete Agent by ID",
 			Status:  "error",
@@ -3107,8 +2210,9 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeAgentDeleted, map[string]any{"agent": currentAgent})
+	h.WebhookSaver.Enqueue(webhook.EventTypeAgentDeleted, map[string]any{
+		"versioned_party_id": versionedPartyID,
+	})
 
 	c.Status(fiber.StatusNoContent)
 	return nil
@@ -3116,117 +2220,84 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 
 func (h *Handler) CreateGroup(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
 	}
 
-	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
-	// Parse new group from request body
-	var newGroup model.GROUP
-	if err := c.BodyParser(&newGroup); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Invalid request body")
-			return c.Status(fiber.StatusBadRequest).JSON(err)
-		}
-
-		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Group", "error", err)
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
+	var group model.GROUP
+	if err := ParseBody(c, auditCtx, &group); err != nil {
+		return err
 	}
 
-	group, err := h.OpenEHRService.CreateGroup(ctx, newGroup)
+	createdGroup, err := h.OpenEHRService.CreateGroup(ctx, group)
 	if err != nil {
 		if err == ErrGroupAlreadyExists {
-			auditCtx.Fail("conflict", "Group with the given UID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Group with the given UID already exists",
 				Status:  "conflict",
 			})
 		}
 		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Invalid request body")
 			return c.Status(fiber.StatusBadRequest).JSON(err)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create Group", "error", err)
 
-		auditCtx.Fail("error", "Failed to create Group")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to create Group",
 			Status:  "error",
 		})
 	}
+	createdGroupID := createdGroup.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeGroupCreated, map[string]any{"group": group})
+	h.WebhookSaver.Enqueue(webhook.EventTypeGroupCreated, map[string]any{
+		"group_uid": createdGroupID,
+	})
 
-	// Determine response
-	groupID := group.UID.V.Value.(*model.OBJECT_VERSION_ID).Value
-	c.Set("ETag", "\""+groupID+"\"")
-	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/group/"+groupID)
+	c.Set("ETag", "\""+createdGroupID+"\"")
+	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/group/"+createdGroupID)
 
 	switch returnType {
 	case ReturnTypeMinimal:
 		c.Status(fiber.StatusCreated)
 		return nil
 	case ReturnTypeRepresentation:
-		return c.Status(fiber.StatusCreated).JSON(group)
+		return c.Status(fiber.StatusCreated).JSON(createdGroup)
 	case ReturnTypeIdentifier:
-		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + groupID + `"}`)
+		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + createdGroupID + `"}`)
 	default:
 		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.Status(fiber.StatusCreated).JSON(group)
+		return c.Status(fiber.StatusCreated).JSON(createdGroup)
 	}
 }
 
 func (h *Handler) GetGroup(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["uid_based_id"] = uidBasedID
 
-	if strings.Count(uidBasedID, "::") == 3 {
-		// Is version id
+	if strings.Count(uidBasedID, "::") == 2 {
 		group, err := h.OpenEHRService.GetGroupAtVersion(ctx, uidBasedID)
 		if err != nil {
 			if err == ErrGroupNotFound {
-				auditCtx.Fail("not_found", "Group not found for the given group ID")
-				return SendErrorResponse(c, ErrorResponse{
+				return SendErrorResponse(c, auditCtx, ErrorResponse{
 					Code:    fiber.StatusNotFound,
 					Message: "Group not found for the given group ID",
 					Status:  "not_found",
@@ -3235,8 +2306,7 @@ func (h *Handler) GetGroup(c *fiber.Ctx) error {
 
 			h.Logger.ErrorContext(ctx, "Failed to get Group by ID", "error", err)
 
-			auditCtx.Fail("error", "Failed to get Group by ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusInternalServerError,
 				Message: "Failed to get Group by ID",
 				Status:  "error",
@@ -3245,13 +2315,11 @@ func (h *Handler) GetGroup(c *fiber.Ctx) error {
 
 		auditCtx.Success()
 		return c.Status(fiber.StatusOK).JSON(group)
-
 	}
-	// Is versioned party id
+
 	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
@@ -3261,8 +2329,7 @@ func (h *Handler) GetGroup(c *fiber.Ctx) error {
 	group, err := h.OpenEHRService.GetCurrentGroupVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrGroupNotFound {
-			auditCtx.Fail("not_found", "Group not found for the given group ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Group not found for the given group ID",
 				Status:  "not_found",
@@ -3271,8 +2338,7 @@ func (h *Handler) GetGroup(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Group by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Group by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Group by ID",
 			Status:  "error",
@@ -3285,66 +2351,46 @@ func (h *Handler) GetGroup(c *fiber.Ctx) error {
 
 func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
-	}
-
-	versionID := c.Params("uid_based_id")
-	if versionID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-
-	ifMatch := c.Get("If-Match")
-	if ifMatch == "" {
-		auditCtx.Fail("bad_request", "If-Match header is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "If-Match header is required",
-			Status:  "bad_request",
-		})
-	}
-
-	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
-	}
-
-	// Ensure Agent exists before update
-	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
+	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return err
+	}
+
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
+	}
+
+	ifMatch, err := StringFromHeader(c, auditCtx, "If-Match")
+	if err != nil {
+		return err
+	}
+
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
+	}
+
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
 		})
 	}
 
-	// Check collision using If-Match header
+	var group model.GROUP
+	if err := ParseBody(c, auditCtx, &group); err != nil {
+		return err
+	}
+
 	currentGroup, err := h.OpenEHRService.GetCurrentGroupVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrGroupNotFound {
-			auditCtx.Fail("not_found", "Group not found for the given group ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Group not found for the given group ID",
 				Status:  "not_found",
@@ -3353,77 +2399,45 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get current Group by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to get current Group by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get current Group by ID",
 			Status:  "error",
 		})
 	}
-
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Group
-	if currentGroup.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != ifMatch {
-		auditCtx.Fail("precondition_failed", "Group has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentGroup.UID.V.ValueAsString() != ifMatch {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Group has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Parse updated group from request body
-	var requestGroup model.GROUP
-	if err := c.BodyParser(&requestGroup); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Validation error in request body",
-				Status:  "bad_request",
-				Details: err,
-			})
-		}
-
-		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Group", "error", err)
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
-	}
-
-	// Proceed to update Group
-	updatedGroup, err := h.OpenEHRService.UpdateGroup(ctx, versionedPartyID, requestGroup)
+	updatedGroup, err := h.OpenEHRService.UpdateGroup(ctx, versionedPartyID, group)
 	if err != nil {
 		if err == ErrGroupNotFound {
-			auditCtx.Fail("not_found", "Group not found for the given group ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Group not found for the given group ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrGroupVersionLowerOrEqualToCurrent {
-			auditCtx.Fail("bad_request", "Group version is lower than or equal to the current version")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Group version is lower than or equal to the current version",
 				Status:  "conflict",
 			})
 		}
 		if err == ErrInvalidGroupUIDMismatch {
-			auditCtx.Fail("bad_request", "Group UID HIER_OBJECT_ID in request body does not match current Group UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Group UID HIER_OBJECT_ID in request body does not match current Group UID",
 				Status:  "bad_request",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Validation error in request body",
 				Status:  "bad_request",
@@ -3433,21 +2447,21 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to update Agent", "error", err)
 
-		auditCtx.Fail("error", "Failed to update Agent")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to update Agent",
 			Status:  "error",
 		})
 	}
+	updatedGroupID := updatedGroup.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeGroupUpdated, map[string]any{"group": updatedGroup})
+	h.WebhookSaver.Enqueue(webhook.EventTypeGroupUpdated, map[string]any{
+		"prev_group_uid": currentGroup.UID.V.ValueAsString(),
+		"curr_group_uid": updatedGroupID,
+	})
 
-	// Determine response
-	updatedGroupID := updatedGroup.UID.V.ValueAsString()
 	c.Set("ETag", "\""+updatedGroupID+"\"")
 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/group/"+updatedGroupID)
 
@@ -3467,33 +2481,24 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 
 func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	versionUID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
 
-	if !strings.Contains(uidBasedID, "::") {
-		auditCtx.Fail("bad_request", "Cannot delete Group by versioned object ID. Please provide the object version ID.")
-		return SendErrorResponse(c, ErrorResponse{
+	if strings.Count(versionUID, "::") != 2 {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Cannot delete Group by versioned object ID. Please provide the object version ID.",
 			Status:  "bad_request",
 		})
 	}
 
-	// Check existence before deletion
-	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	versionedPartyID, err := uuid.Parse(strings.Split(versionUID, "::")[0])
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
@@ -3503,8 +2508,7 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 	currentGroup, err := h.OpenEHRService.GetCurrentGroupVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrGroupNotFound {
-			auditCtx.Fail("not_found", "Group not found for the given group ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Group not found for the given group ID",
 				Status:  "not_found",
@@ -3513,30 +2517,23 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Group by ID before deletion", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Group by ID before deletion")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Group by ID before deletion",
 			Status:  "error",
 		})
 	}
-
-	// Check if provided version matches current version
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Group
-	if currentGroup.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != uidBasedID {
-		auditCtx.Fail("precondition_failed", "Group has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentGroup.UID.V.ValueAsString() != versionUID {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Group has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Proceed to delete Group
-	if err := h.OpenEHRService.DeleteGroup(ctx, uidBasedID); err != nil {
+	if err := h.OpenEHRService.DeleteGroup(ctx, versionedPartyID); err != nil {
 		if err == ErrGroupNotFound {
-			auditCtx.Fail("not_found", "Group not found for the given group ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Group not found for the given group ID",
 				Status:  "not_found",
@@ -3545,8 +2542,7 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to delete Group by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to delete Group by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to delete Group by ID",
 			Status:  "error",
@@ -3555,8 +2551,9 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeGroupDeleted, map[string]any{"group": currentGroup})
+	h.WebhookSaver.Enqueue(webhook.EventTypeGroupDeleted, map[string]any{
+		"versioned_party_id": versionedPartyID,
+	})
 
 	c.Status(fiber.StatusNoContent)
 	return nil
@@ -3564,65 +2561,34 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 
 func (h *Handler) CreatePerson(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
 	}
 
-	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
-	// Parse new person from request body
-	var newPerson model.PERSON
-	if err := c.BodyParser(&newPerson); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Validation error in request body",
-				Status:  "bad_request",
-				Details: err,
-			})
-		}
-
-		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Person", "error", err)
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
+	var person model.PERSON
+	if err := ParseBody(c, auditCtx, &person); err != nil {
+		return err
 	}
 
-	person, err := h.OpenEHRService.CreatePerson(ctx, newPerson)
+	createdPerson, err := h.OpenEHRService.CreatePerson(ctx, person)
 	if err != nil {
 		if err == ErrPersonAlreadyExists {
-			auditCtx.Fail("conflict", "Person with the given UID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Person with the given UID already exists",
 				Status:  "conflict",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Validation error in request body",
 				Status:  "bad_request",
@@ -3632,60 +2598,51 @@ func (h *Handler) CreatePerson(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to create Person", "error", err)
 
-		auditCtx.Fail("error", "Failed to create Person")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to create Person",
 			Status:  "error",
 		})
 	}
+	createdPersonID := createdPerson.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypePersonCreated, map[string]any{"person": person})
+	h.WebhookSaver.Enqueue(webhook.EventTypePersonCreated, map[string]any{
+		"person_uid": createdPersonID,
+	})
 
-	// Determine response
-	personID := person.UID.V.Value.(*model.OBJECT_VERSION_ID).Value
-	c.Set("ETag", "\""+personID+"\"")
-	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/person/"+personID)
+	c.Set("ETag", "\""+createdPersonID+"\"")
+	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/person/"+createdPersonID)
 
 	switch returnType {
 	case ReturnTypeMinimal:
 		c.Status(fiber.StatusCreated)
 		return nil
 	case ReturnTypeRepresentation:
-		return c.Status(fiber.StatusCreated).JSON(person)
+		return c.Status(fiber.StatusCreated).JSON(createdPerson)
 	case ReturnTypeIdentifier:
-		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + personID + `"}`)
+		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + createdPersonID + `"}`)
 	default:
 		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.Status(fiber.StatusCreated).JSON(person)
+		return c.Status(fiber.StatusCreated).JSON(createdPerson)
 	}
 }
 
 func (h *Handler) GetPerson(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
 
-	if strings.Count(uidBasedID, "::") == 3 {
-		// Is version id
+	if strings.Count(uidBasedID, "::") == 2 {
 		person, err := h.OpenEHRService.GetPersonAtVersion(ctx, uidBasedID)
 		if err != nil {
 			if err == ErrPersonNotFound {
-				auditCtx.Fail("not_found", "Person not found for the given person ID")
-				return SendErrorResponse(c, ErrorResponse{
+				return SendErrorResponse(c, auditCtx, ErrorResponse{
 					Code:    fiber.StatusNotFound,
 					Message: "Person not found for the given person ID",
 					Status:  "not_found",
@@ -3694,8 +2651,7 @@ func (h *Handler) GetPerson(c *fiber.Ctx) error {
 
 			h.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
 
-			auditCtx.Fail("error", "Failed to get Person")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusInternalServerError,
 				Message: "Failed to get Person",
 				Status:  "error",
@@ -3706,11 +2662,9 @@ func (h *Handler) GetPerson(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(person)
 	}
 
-	// Is versioned party id
 	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
@@ -3720,8 +2674,7 @@ func (h *Handler) GetPerson(c *fiber.Ctx) error {
 	person, err := h.OpenEHRService.GetCurrentPersonVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrPersonNotFound {
-			auditCtx.Fail("not_found", "Person not found for the given person ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Person not found for the given person ID",
 				Status:  "not_found",
@@ -3730,8 +2683,7 @@ func (h *Handler) GetPerson(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Person")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Person",
 			Status:  "error",
@@ -3744,66 +2696,46 @@ func (h *Handler) GetPerson(c *fiber.Ctx) error {
 
 func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
-	}
-
-	versionID := c.Params("uid_based_id")
-	if versionID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-
-	ifMatch := c.Get("If-Match")
-	if ifMatch == "" {
-		auditCtx.Fail("bad_request", "If-Match header is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "If-Match header is required",
-			Status:  "bad_request",
-		})
-	}
-
-	// Parse return type from Prefer header
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
-	}
-
-	// Ensure Person exists before update
-	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
+	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return err
+	}
+
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
+	}
+
+	ifMatch, err := StringFromHeader(c, auditCtx, "If-Match")
+	if err != nil {
+		return err
+	}
+
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
+	}
+
+	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
 		})
 	}
 
-	// Check collision using If-Match header
+	var person model.PERSON
+	if err := ParseBody(c, auditCtx, &person); err != nil {
+		return err
+	}
+
 	currentPerson, err := h.OpenEHRService.GetCurrentPersonVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrPersonNotFound {
-			auditCtx.Fail("not_found", "Person not found for the given person ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Person not found for the given person ID",
 				Status:  "not_found",
@@ -3812,77 +2744,45 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get current Person by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to get current Person")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get current Person",
 			Status:  "error",
 		})
 	}
-
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Person
-	if currentPerson.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != ifMatch {
-		auditCtx.Fail("precondition_failed", "Person has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentPerson.UID.V.ValueAsString() != ifMatch {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Person has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Parse updated person from request body
-	var requestPerson model.PERSON
-	if err := c.BodyParser(&requestPerson); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Validation error in request body",
-				Status:  "bad_request",
-				Details: err,
-			})
-		}
-
-		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Person", "error", err)
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
-	}
-
-	// Proceed to update Person
-	updatePerson, err := h.OpenEHRService.UpdatePerson(ctx, versionedPartyID, requestPerson)
+	updatedPerson, err := h.OpenEHRService.UpdatePerson(ctx, versionedPartyID, person)
 	if err != nil {
 		if err == ErrPersonNotFound {
-			auditCtx.Fail("not_found", "Person not found for the given person ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Person not found for the given person ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrPersonVersionLowerOrEqualToCurrent {
-			auditCtx.Fail("bad_request", "Person version is lower than or equal to the current version")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Person version is lower than or equal to the current version",
 				Status:  "conflict",
 			})
 		}
 		if err == ErrInvalidPersonUIDMismatch {
-			auditCtx.Fail("bad_request", "Person UID HIER_OBJECT_ID in request body does not match current Person UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Person UID HIER_OBJECT_ID in request body does not match current Person UID",
 				Status:  "bad_request",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Validation error in request body",
 				Status:  "bad_request",
@@ -3892,21 +2792,21 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to update Person", "error", err)
 
-		auditCtx.Fail("error", "Failed to update Person")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to update Person",
 			Status:  "error",
 		})
 	}
+	updatedPersonID := updatedPerson.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypePersonUpdated, map[string]any{"person": updatePerson})
+	h.WebhookSaver.Enqueue(webhook.EventTypePersonUpdated, map[string]any{
+		"prev_person_uid": currentPerson.UID.V.ValueAsString(),
+		"curr_person_uid": updatedPersonID,
+	})
 
-	// Determine response
-	updatedPersonID := updatePerson.UID.V.Value.(*model.OBJECT_VERSION_ID).Value
 	c.Set("ETag", "\""+updatedPersonID+"\"")
 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/person/"+updatedPersonID)
 
@@ -3915,55 +2815,44 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 		c.Status(fiber.StatusNoContent)
 		return nil
 	case ReturnTypeRepresentation:
-		return c.Status(fiber.StatusOK).JSON(updatePerson)
+		return c.Status(fiber.StatusOK).JSON(updatedPerson)
 	case ReturnTypeIdentifier:
 		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + updatedPersonID + `"}`)
 	default:
 		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.Status(fiber.StatusOK).JSON(updatePerson)
+		return c.Status(fiber.StatusOK).JSON(updatedPerson)
 	}
 }
 
 func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	versionID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
 
-	if strings.Count(uidBasedID, "::") != 3 {
-		auditCtx.Fail("bad_request", "Cannot delete Person by versioned object ID. Please provide the object version ID.")
-		return SendErrorResponse(c, ErrorResponse{
+	if strings.Count(versionID, "::") != 2 {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Cannot delete Person by versioned object ID. Please provide the object version ID.",
 			Status:  "bad_request",
 		})
 	}
 
-	// Check existence before deletion
-	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
 		})
 	}
-
 	currentPerson, err := h.OpenEHRService.GetCurrentPersonVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrPersonNotFound {
-			auditCtx.Fail("not_found", "Person not found for the given person ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Person not found for the given person ID",
 				Status:  "not_found",
@@ -3972,30 +2861,23 @@ func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Person by ID before deletion", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Person by ID before deletion")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Person by ID before deletion",
 			Status:  "error",
 		})
 	}
-
-	// Check if provided version matches current version
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Person
-	if currentPerson.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != uidBasedID {
-		auditCtx.Fail("precondition_failed", "Person has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentPerson.UID.V.ValueAsString() != versionID {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Person has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Proceed to delete Person
-	if err := h.OpenEHRService.DeletePerson(ctx, uidBasedID); err != nil {
+	if err := h.OpenEHRService.DeletePerson(ctx, versionedPartyID); err != nil {
 		if err == ErrPersonNotFound {
-			auditCtx.Fail("not_found", "Person not found for the given person ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Person not found for the given person ID",
 				Status:  "not_found",
@@ -4004,8 +2886,7 @@ func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to delete Person by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to delete Person by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to delete Person by ID",
 			Status:  "error",
@@ -4014,8 +2895,9 @@ func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypePersonDeleted, map[string]any{"person": currentPerson})
+	h.WebhookSaver.Enqueue(webhook.EventTypePersonDeleted, map[string]any{
+		"versioned_party_id": versionedPartyID,
+	})
 
 	c.Status(fiber.StatusNoContent)
 	return nil
@@ -4023,65 +2905,34 @@ func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 
 func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Client must accept application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Client must accept application/json",
-			Status:  "not_acceptable",
-		})
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
 	}
 
-	// return type
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
-	// Parse new organisation from request body
-	var newOrganisation model.ORGANISATION
-	if err := c.BodyParser(&newOrganisation); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Validation error in request body",
-				Status:  "bad_request",
-				Details: err,
-			})
-		}
-
-		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Organisation", "error", err)
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
+	var organisation model.ORGANISATION
+	if err := ParseBody(c, auditCtx, &organisation); err != nil {
+		return err
 	}
 
-	organisation, err := h.OpenEHRService.CreateOrganisation(ctx, newOrganisation)
+	createdOrganisation, err := h.OpenEHRService.CreateOrganisation(ctx, organisation)
 	if err != nil {
 		if err == ErrOrganisationAlreadyExists {
-			auditCtx.Fail("conflict", "Organisation with the given UID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Organisation with the given UID already exists",
 				Status:  "conflict",
 			})
 		}
 		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Validation error in request body",
 				Status:  "bad_request",
@@ -4091,23 +2942,22 @@ func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to create Organisation", "error", err)
 
-		auditCtx.Fail("error", "Failed to create Organisation")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to create Organisation",
 			Status:  "error",
 		})
 	}
+	createdOrganisationID := createdOrganisation.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeOrganisationCreated, map[string]any{"organisation": organisation})
+	h.WebhookSaver.Enqueue(webhook.EventTypeOrganisationCreated, map[string]any{
+		"organisation_uid": createdOrganisationID,
+	})
 
-	// Determine response
-	organisationID := organisation.UID.V.Value.(*model.OBJECT_VERSION_ID).Value
-	c.Set("ETag", "\""+organisationID+"\"")
-	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/organisation/"+organisationID)
+	c.Set("ETag", "\""+createdOrganisationID+"\"")
+	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/organisation/"+createdOrganisationID)
 
 	switch returnType {
 	case ReturnTypeMinimal:
@@ -4116,7 +2966,7 @@ func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 	case ReturnTypeRepresentation:
 		return c.Status(fiber.StatusCreated).JSON(organisation)
 	case ReturnTypeIdentifier:
-		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + organisationID + `"}`)
+		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + createdOrganisationID + `"}`)
 	default:
 		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusCreated).JSON(organisation)
@@ -4125,26 +2975,18 @@ func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 
 func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
 
-	if strings.Count(uidBasedID, "::") == 3 {
-		// Is version id
+	if strings.Count(uidBasedID, "::") == 2 {
 		organisation, err := h.OpenEHRService.GetOrganisationAtVersion(ctx, uidBasedID)
 		if err != nil {
 			if err == ErrOrganisationNotFound {
-				auditCtx.Fail("not_found", "Organisation not found for the given organisation ID")
-				return SendErrorResponse(c, ErrorResponse{
+				return SendErrorResponse(c, auditCtx, ErrorResponse{
 					Code:    fiber.StatusNotFound,
 					Message: "Organisation not found for the given organisation ID",
 					Status:  "not_found",
@@ -4153,8 +2995,7 @@ func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 
 			h.Logger.ErrorContext(ctx, "Failed to get Organisation by ID", "error", err)
 
-			auditCtx.Fail("error", "Failed to get Organisation by ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusInternalServerError,
 				Message: "Failed to get Organisation by ID",
 				Status:  "error",
@@ -4165,11 +3006,9 @@ func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(organisation)
 	}
 
-	// Is versioned party id
 	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
@@ -4179,8 +3018,7 @@ func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 	organisation, err := h.OpenEHRService.GetCurrentOrganisationVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrOrganisationNotFound {
-			auditCtx.Fail("not_found", "Organisation not found for the given organisation ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Organisation not found for the given organisation ID",
 				Status:  "not_found",
@@ -4189,8 +3027,7 @@ func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Organisation by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Organisation by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Organisation by ID",
 			Status:  "error",
@@ -4198,71 +3035,52 @@ func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 	}
 
 	auditCtx.Success()
+
 	return c.Status(fiber.StatusOK).JSON(organisation)
 }
 
 func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
 	}
 
-	versionID := c.Params("uid_based_id")
-	if versionID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	versionID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
 
-	ifMatch := c.Get("If-Match")
-	if ifMatch == "" {
-		auditCtx.Fail("bad_request", "If-Match header is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "If-Match header is required",
-			Status:  "bad_request",
-		})
+	ifMatch, err := StringFromHeader(c, auditCtx, "If-Match")
+	if err != nil {
+		return err
 	}
 
-	// Parse return type from Prefer header
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
-	// Ensure Organisation exists before update
 	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
 		})
 	}
 
-	// Check collision using If-Match header
+	var organisation model.ORGANISATION
+	if err := ParseBody(c, auditCtx, &organisation); err != nil {
+		return err
+	}
+
 	currentOrganisation, err := h.OpenEHRService.GetCurrentOrganisationVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrOrganisationNotFound {
-			auditCtx.Fail("not_found", "Organisation not found for the given organisation ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Organisation not found for the given organisation ID",
 				Status:  "not_found",
@@ -4271,72 +3089,45 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get current Organisation by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to get current Organisation by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get current Organisation by ID",
 			Status:  "error",
 		})
 	}
-
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Organisation
-	if currentOrganisation.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != ifMatch {
-		auditCtx.Fail("precondition_failed", "Organisation has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentOrganisation.UID.V.ValueAsString() != ifMatch {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Organisation has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Parse updated organisation from request body
-	var requestOrganisation model.ORGANISATION
-	if err := c.BodyParser(&requestOrganisation); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return c.Status(fiber.StatusBadRequest).JSON(err)
-		}
-
-		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Organisation", "error", err)
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
-	}
-
-	// Proceed to update Organisation
-	organisation, err := h.OpenEHRService.UpdateOrganisation(ctx, versionedPartyID, requestOrganisation)
+	updatedOrganisation, err := h.OpenEHRService.UpdateOrganisation(ctx, versionedPartyID, organisation)
 	if err != nil {
 		if err == ErrOrganisationNotFound {
-			auditCtx.Fail("not_found", "Organisation not found for the given organisation ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Organisation not found for the given organisation ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrOrganisationVersionLowerOrEqualToCurrent {
-			auditCtx.Fail("bad_request", "Organisation version is lower than or equal to the current version")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Organisation version is lower than or equal to the current version",
 				Status:  "conflict",
 			})
 		}
 		if err == ErrInvalidOrganisationUIDMismatch {
-			auditCtx.Fail("bad_request", "Organisation with the given UID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Organisation with the given UID already exists",
 				Status:  "conflict",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Validation error in request body",
 				Status:  "bad_request",
@@ -4346,67 +3137,58 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to update Organisation", "error", err)
 
-		auditCtx.Fail("error", "Failed to update Organisation")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to update Organisation",
 			Status:  "error",
 		})
 	}
+	updatedOrganisationID := updatedOrganisation.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeOrganisationUpdated, map[string]any{"organisation": organisation})
+	h.WebhookSaver.Enqueue(webhook.EventTypeOrganisationUpdated, map[string]any{
+		"prev_organisation_uid": currentOrganisation.UID.V.ValueAsString(),
+		"curr_organisation_uid": updatedOrganisationID,
+	})
 
-	// Determine response
-	organisationID := organisation.UID.V.Value.(*model.OBJECT_VERSION_ID).Value
-	c.Set("ETag", "\""+organisationID+"\"")
-	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/organisation/"+organisationID)
+	c.Set("ETag", "\""+updatedOrganisationID+"\"")
+	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/organisation/"+updatedOrganisationID)
 
 	switch returnType {
 	case ReturnTypeMinimal:
 		c.Status(fiber.StatusNoContent)
 		return nil
 	case ReturnTypeRepresentation:
-		return c.Status(fiber.StatusOK).JSON(organisation)
+		return c.Status(fiber.StatusOK).JSON(updatedOrganisation)
 	case ReturnTypeIdentifier:
-		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + organisationID + `"}`)
+		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + updatedOrganisationID + `"}`)
 	default:
 		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.Status(fiber.StatusOK).JSON(organisation)
+		return c.Status(fiber.StatusOK).JSON(updatedOrganisation)
 	}
 }
 
 func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
 
 	if strings.Count(uidBasedID, "::") != 2 {
-		auditCtx.Fail("bad_request", "Cannot delete Organisation by versioned object ID. Please provide the object version ID.")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Cannot delete Organisation by versioned object ID. Please provide the object version ID.",
 			Status:  "bad_request",
 		})
 	}
 
-	// Check existence before deletion
 	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
@@ -4416,8 +3198,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 	currentOrganisation, err := h.OpenEHRService.GetCurrentOrganisationVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrOrganisationNotFound {
-			auditCtx.Fail("not_found", "Organisation not found for the given organisation ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Organisation not found for the given organisation ID",
 				Status:  "not_found",
@@ -4426,30 +3207,23 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Organisation by ID before deletion", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Organisation by ID before deletion")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Organisation by ID before deletion",
 			Status:  "error",
 		})
 	}
-
-	// Check if provided version matches current version
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Organisation
-	if currentOrganisation.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != uidBasedID {
-		auditCtx.Fail("precondition_failed", "Organisation has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentOrganisation.UID.V.ValueAsString() != uidBasedID {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Organisation has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Proceed to delete Organisation
-	if err := h.OpenEHRService.DeleteOrganisation(ctx, uidBasedID); err != nil {
+	if err := h.OpenEHRService.DeleteOrganisation(ctx, versionedPartyID); err != nil {
 		if err == ErrOrganisationNotFound {
-			auditCtx.Fail("not_found", "Organisation not found for the given organisation ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Organisation not found for the given organisation ID",
 				Status:  "not_found",
@@ -4458,8 +3232,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to delete Organisation by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to delete Organisation by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to delete Organisation by ID",
 			Status:  "error",
@@ -4468,8 +3241,9 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeOrganisationDeleted, map[string]any{"organisation": currentOrganisation})
+	h.WebhookSaver.Enqueue(webhook.EventTypeOrganisationDeleted, map[string]any{
+		"versioned_party_id": versionedPartyID,
+	})
 
 	c.Status(fiber.StatusNoContent)
 	return nil
@@ -4477,82 +3251,54 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 
 func (h *Handler) CreateRole(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
 	}
 
-	// Parse return type from Prefer header
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
-	// Parse new role from request body
-	var newRole model.ROLE
-	if err := c.BodyParser(&newRole); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
-			return c.Status(fiber.StatusBadRequest).JSON(err)
-		}
-
-		h.Logger.ErrorContext(ctx, "Failed to parse request body for new Role", "error", err)
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
+	var role model.ROLE
+	if err := ParseBody(c, auditCtx, &role); err != nil {
+		return err
 	}
 
-	// Proceed to create Role
-	role, err := h.OpenEHRService.CreateRole(ctx, newRole)
+	createdRole, err := h.OpenEHRService.CreateRole(ctx, role)
 	if err != nil {
 		if err == ErrRoleAlreadyExists {
-			auditCtx.Fail("conflict", "Role with the given UID already exists")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Role with the given UID already exists",
 				Status:  "conflict",
 			})
 		}
 		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("bad_request", "Validation error in request body")
 			return c.Status(fiber.StatusBadRequest).JSON(err)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to create Role", "error", err)
 
-		auditCtx.Fail("error", "Failed to create Role")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to create Role",
 			Status:  "error",
 		})
 	}
+	createdRoleID := createdRole.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeRoleCreated, map[string]any{"role": role})
+	h.WebhookSaver.Enqueue(webhook.EventTypeRoleCreated, map[string]any{
+		"role_uid": createdRoleID,
+	})
 
-	// Determine response
-	roleID := role.UID.V.ValueAsString()
-	c.Set("ETag", "\""+roleID+"\"")
-	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/role/"+roleID)
+	c.Set("ETag", "\""+createdRoleID+"\"")
+	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/role/"+createdRoleID)
 
 	switch returnType {
 	case ReturnTypeMinimal:
@@ -4561,7 +3307,7 @@ func (h *Handler) CreateRole(c *fiber.Ctx) error {
 	case ReturnTypeRepresentation:
 		return c.Status(fiber.StatusCreated).JSON(role)
 	case ReturnTypeIdentifier:
-		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + roleID + `"}`)
+		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + createdRoleID + `"}`)
 	default:
 		h.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
 		return c.Status(fiber.StatusCreated).JSON(role)
@@ -4570,26 +3316,18 @@ func (h *Handler) CreateRole(c *fiber.Ctx) error {
 
 func (h *Handler) GetRole(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
 
-	if strings.Count(uidBasedID, "::") == 3 {
-		// Is version id
+	if strings.Count(uidBasedID, "::") == 2 {
 		role, err := h.OpenEHRService.GetRoleAtVersion(ctx, uidBasedID)
 		if err != nil {
 			if err == ErrRoleNotFound {
-				auditCtx.Fail("not_found", "Role not found for the given role ID")
-				return SendErrorResponse(c, ErrorResponse{
+				return SendErrorResponse(c, auditCtx, ErrorResponse{
 					Code:    fiber.StatusNotFound,
 					Message: "Role not found for the given role ID",
 					Status:  "not_found",
@@ -4598,8 +3336,7 @@ func (h *Handler) GetRole(c *fiber.Ctx) error {
 
 			h.Logger.ErrorContext(ctx, "Failed to get Role by ID", "error", err)
 
-			auditCtx.Fail("error", "Failed to get Role by ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusInternalServerError,
 				Message: "Failed to get Role by ID",
 				Status:  "error",
@@ -4610,11 +3347,9 @@ func (h *Handler) GetRole(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusOK).JSON(role)
 	}
 
-	// Is versioned party id
 	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
@@ -4624,8 +3359,7 @@ func (h *Handler) GetRole(c *fiber.Ctx) error {
 	role, err := h.OpenEHRService.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrRoleNotFound {
-			auditCtx.Fail("not_found", "Role not found for the given role ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Role not found for the given role ID",
 				Status:  "not_found",
@@ -4634,8 +3368,7 @@ func (h *Handler) GetRole(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Role by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Role by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Role by ID",
 			Status:  "error",
@@ -4648,157 +3381,111 @@ func (h *Handler) GetRole(c *fiber.Ctx) error {
 
 func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
 	}
 
-	versionID := c.Params("uid_based_id")
-	if versionID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	versionID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
 
-	ifMatch := c.Get("If-Match")
-	if ifMatch == "" {
-		auditCtx.Fail("bad_request", "If-Match header is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "If-Match header is required",
-			Status:  "bad_request",
-		})
+	ifMatch, err := StringFromHeader(c, auditCtx, "If-Match")
+	if err != nil {
+		return err
 	}
 
-	// Parse return type from Prefer header
-	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	if !returnType.IsValid() {
-		auditCtx.Fail("bad_request", "Invalid Prefer header value")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid Prefer header value",
-			Status:  "bad_request",
-		})
+	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+	if err != nil {
+		return err
 	}
 
-	// Ensure Role exists before update
 	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
 		})
 	}
 
-	// Check collision using If-Match header
+	var role model.ROLE
+	if err := ParseBody(c, auditCtx, &role); err != nil {
+		return err
+	}
+
 	currentRole, err := h.OpenEHRService.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrRoleNotFound {
-			auditCtx.Fail("not_found", "Role not found for the given role ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Role not found for the given role ID",
 				Status:  "not_found",
 			})
 		}
 		h.Logger.ErrorContext(ctx, "Failed to get current Role by ID", "error", err)
-		auditCtx.Fail("error", "Failed to get current Role by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get current Role by ID",
 			Status:  "error",
 		})
 	}
 
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Role
-	if currentRole.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != ifMatch {
-		auditCtx.Fail("precondition_failed", "Role has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentRole.UID.V.ValueAsString() != ifMatch {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Role has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Parse updated role from request body
-	var requestRole model.ROLE
-	if err := c.BodyParser(&requestRole); err != nil {
-		if err, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("validation_error", "Validation error in request body")
-			return c.Status(fiber.StatusBadRequest).JSON(err)
-		}
-
-		h.Logger.ErrorContext(ctx, "Failed to parse request body for updated Role", "error", err)
-
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
-	}
-
-	// Proceed to update Role
-	updatedRole, err := h.OpenEHRService.UpdateRole(ctx, versionedPartyID, requestRole)
+	updatedRole, err := h.OpenEHRService.UpdateRole(ctx, versionedPartyID, role)
 	if err != nil {
 		if err == ErrRoleNotFound {
-			auditCtx.Fail("not_found", "Role not found for the given role ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Role not found for the given role ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrRoleVersionLowerOrEqualToCurrent {
-			auditCtx.Fail("bad_request", "Role version is lower than or equal to the current version")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
 				Message: "Role version is lower than or equal to the current version",
 				Status:  "conflict",
 			})
 		}
 		if err == ErrInvalidRoleUIDMismatch {
-			auditCtx.Fail("bad_request", "Role UID HIER_OBJECT_ID in request body does not match current Role UID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Role UID HIER_OBJECT_ID in request body does not match current Role UID",
 				Status:  "bad_request",
 			})
 		}
 		if validationErrs, ok := err.(util.ValidateError); ok {
-			auditCtx.Fail("validation_error", "Validation error in request body")
 			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
 		}
 
 		h.Logger.ErrorContext(ctx, "Failed to update Role", "error", err)
 
-		auditCtx.Fail("error", "Failed to update Role")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to update Role",
 			Status:  "error",
 		})
 	}
+	updatedRoleID := updatedRole.UID.V.ValueAsString()
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeRoleUpdated, map[string]any{"role": updatedRole})
+	h.WebhookSaver.Enqueue(webhook.EventTypeRoleUpdated, map[string]any{
+		"prev_role_uid": currentRole.UID.V.ValueAsString(),
+		"curr_role_uid": updatedRoleID,
+	})
 
-	// Determine response
-	updatedRoleID := updatedRole.UID.V.Value.(*model.OBJECT_VERSION_ID).Value
 	c.Set("ETag", "\""+updatedRoleID+"\"")
 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/role/"+updatedRoleID)
 
@@ -4821,30 +3508,22 @@ func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 
 	auditCtx := audit.From(c)
 
-	uidBasedID := c.Params("uid_based_id")
-	if uidBasedID == "" {
-		auditCtx.Fail("bad_request", "uid_based_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "uid_based_id parameter is required",
-			Status:  "bad_request",
-		})
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
 	}
 
 	if !strings.Contains(uidBasedID, "::") {
-		auditCtx.Fail("bad_request", "Cannot delete Role by versioned object ID. Please provide the object version ID.")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Cannot delete Role by versioned object ID. Please provide the object version ID.",
 			Status:  "bad_request",
 		})
 	}
 
-	// Check existence before deletion
 	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid uid_based_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid uid_based_id format",
 			Status:  "bad_request",
@@ -4854,8 +3533,7 @@ func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 	currentRole, err := h.OpenEHRService.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrRoleNotFound {
-			auditCtx.Fail("not_found", "Role not found for the given role ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Role not found for the given role ID",
 				Status:  "not_found",
@@ -4864,30 +3542,23 @@ func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Role by ID before deletion", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Role by ID before deletion")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Role by ID before deletion",
 			Status:  "error",
 		})
 	}
-
-	// Check if provided version matches current version
-	// Safe to assume that UID and OBJECT_VERSION_ID are always set for existing Role
-	if currentRole.UID.V.Value.(*model.OBJECT_VERSION_ID).Value != uidBasedID {
-		auditCtx.Fail("precondition_failed", "Role has been modified since the provided version")
-		return SendErrorResponse(c, ErrorResponse{
+	if currentRole.UID.V.ValueAsString() != uidBasedID {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Role has been modified since the provided version",
 			Status:  "precondition_failed",
 		})
 	}
 
-	// Proceed to delete Role
-	if err := h.OpenEHRService.DeleteRole(ctx, uidBasedID); err != nil {
+	if err := h.OpenEHRService.DeleteRole(ctx, versionedPartyID); err != nil {
 		if err == ErrRoleNotFound {
-			auditCtx.Fail("not_found", "Role not found for the given role ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Role not found for the given role ID",
 				Status:  "not_found",
@@ -4896,8 +3567,7 @@ func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to delete Role by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to delete Role by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to delete Role by ID",
 			Status:  "error",
@@ -4906,8 +3576,9 @@ func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	// Register event
-	h.WebhookSaver.Enqueue(webhook.EventTypeRoleDeleted, map[string]any{"role": currentRole})
+	h.WebhookSaver.Enqueue(webhook.EventTypeRoleDeleted, map[string]any{
+		"versioned_party_id": versionedPartyID,
+	})
 
 	c.Status(fiber.StatusNoContent)
 	return nil
@@ -4915,33 +3586,17 @@ func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedParty(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	versionedObjectIDStr := c.Params("versioned_object_id")
-	if versionedObjectIDStr == "" {
-		auditCtx.Fail("bad_request", "versioned_object_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "versioned_object_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	versionedObjectID, err := uuid.Parse(versionedObjectIDStr)
+	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid versioned_object_id format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid versioned_object_id format",
-			Status:  "bad_request",
-		})
+		return err
 	}
 
 	party, err := h.OpenEHRService.GetVersionedParty(ctx, versionedObjectID)
 	if err != nil {
 		if err == ErrVersionedPartyNotFound {
-			auditCtx.Fail("not_found", "Versioned Party not found for the given ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned Party not found for the given ID",
 				Status:  "not_found",
@@ -4950,8 +3605,7 @@ func (h *Handler) GetVersionedParty(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Versioned Party by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Versioned Party by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Versioned Party by ID",
 			Status:  "error",
@@ -4964,33 +3618,17 @@ func (h *Handler) GetVersionedParty(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedPartyRevisionHistory(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	versionedObjectIDStr := c.Params("versioned_object_id")
-	if versionedObjectIDStr == "" {
-		auditCtx.Fail("bad_request", "versioned_object_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "versioned_object_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	versionedObjectID, err := uuid.Parse(versionedObjectIDStr)
+	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid versioned_object_id format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid versioned_object_id format",
-			Status:  "bad_request",
-		})
+		return err
 	}
 
 	revisionHistory, err := h.OpenEHRService.GetVersionedPartyRevisionHistory(ctx, versionedObjectID)
 	if err != nil {
 		if err == ErrRevisionHistoryNotFound {
-			auditCtx.Fail("not_found", "Versioned Party not found for the given ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned Party not found for the given ID",
 				Status:  "not_found",
@@ -4999,8 +3637,7 @@ func (h *Handler) GetVersionedPartyRevisionHistory(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Versioned Party Revision History by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Versioned Party Revision History by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Versioned Party Revision History by ID",
 			Status:  "error",
@@ -5013,57 +3650,33 @@ func (h *Handler) GetVersionedPartyRevisionHistory(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedPartyVersionAtTime(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	versionedObjectIDStr := c.Params("versioned_object_id")
-	if versionedObjectIDStr == "" {
-		auditCtx.Fail("bad_request", "versioned_object_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "versioned_object_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	versionedObjectID, err := uuid.Parse(versionedObjectIDStr)
+	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid versioned_object_id format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid versioned_object_id format",
-			Status:  "bad_request",
-		})
+		return err
 	}
 
-	// Parse version_at_time query parameter
 	var filterAtTime time.Time
-	atTimeStr := c.Query("version_at_time")
-	if atTimeStr != "" {
-		parsedTime, err := time.Parse(time.RFC3339, atTimeStr)
+	if c.Query("version_at_time") != "" {
+		versionAtTime, err := TimeFromQuery(c, auditCtx, "version_at_time")
 		if err != nil {
-			auditCtx.Fail("bad_request", "Invalid version_at_time format. Use RFC3339 format.")
-			return SendErrorResponse(c, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Invalid version_at_time format. Use RFC3339 format.",
-				Status:  "bad_request",
-			})
+			return err
 		}
-		filterAtTime = parsedTime
+		filterAtTime = versionAtTime
 	}
 
 	partyVersionJSON, err := h.OpenEHRService.GetVersionedPartyVersionJSON(ctx, versionedObjectID, filterAtTime, "")
 	if err != nil {
 		if err == ErrVersionedPartyNotFound {
-			auditCtx.Fail("not_found", "Versioned Party not found for the given ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned Party not found for the given ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrVersionedPartyVersionNotFound {
-			auditCtx.Fail("not_found", "Versioned Party version not found for the given time")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned Party version not found for the given time",
 				Status:  "not_found",
@@ -5072,8 +3685,7 @@ func (h *Handler) GetVersionedPartyVersionAtTime(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get Versioned Party Version at Time by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to get Versioned Party Version at Time by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Versioned Party Version at Time by ID",
 			Status:  "error",
@@ -5081,65 +3693,43 @@ func (h *Handler) GetVersionedPartyVersionAtTime(c *fiber.Ctx) error {
 	}
 
 	auditCtx.Success()
+
 	c.Set("Content-Type", "application/json")
 	return c.Status(fiber.StatusOK).Send(partyVersionJSON)
 }
 
 func (h *Handler) GetVersionedPartyVersion(c *fiber.Ctx) error {
 	ctx := c.Context()
-
 	auditCtx := audit.From(c)
 
-	versionedObjectIDStr := c.Params("versioned_object_id")
-	if versionedObjectIDStr == "" {
-		auditCtx.Fail("bad_request", "versioned_object_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "versioned_object_id parameter is required",
-			Status:  "bad_request",
-		})
-	}
-	versionedObjectID, err := uuid.Parse(versionedObjectIDStr)
+	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid versioned_object_id format")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid versioned_object_id format",
-			Status:  "bad_request",
-		})
+		return err
 	}
 
-	versionID := c.Params("version_id")
-	if versionID == "" {
-		auditCtx.Fail("bad_request", "version_id parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "version_id parameter is required",
-			Status:  "bad_request",
-		})
+	versionID, err := StringFromPath(c, auditCtx, "version_id")
+	if err != nil {
+		return err
 	}
 
 	partyVersionJSON, err := h.OpenEHRService.GetVersionedPartyVersionJSON(ctx, versionedObjectID, time.Time{}, versionID)
 	if err != nil {
 		if err == ErrVersionedPartyNotFound {
-			auditCtx.Fail("not_found", "Versioned Party not found for the given ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned Party not found for the given ID",
 				Status:  "not_found",
 			})
 		}
 		if err == ErrVersionedPartyVersionNotFound {
-			auditCtx.Fail("not_found", "Versioned Party version not found for the given version ID")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Versioned Party version not found for the given version ID",
 				Status:  "not_found",
 			})
 		}
 		h.Logger.ErrorContext(ctx, "Failed to get Versioned Party Version by ID", "error", err)
-		auditCtx.Fail("error", "Failed to get Versioned Party Version by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get Versioned Party Version by ID",
 			Status:  "error",
@@ -5147,59 +3737,13 @@ func (h *Handler) GetVersionedPartyVersion(c *fiber.Ctx) error {
 	}
 
 	auditCtx.Success()
+
 	c.Set("Content-Type", "application/json")
 	return c.Status(fiber.StatusOK).Send(partyVersionJSON)
 }
 
 func (h *Handler) CreateDemographicContribution(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusNotImplemented).SendString("Create Demographic Contribution not implemented yet")
-
-	// ctx := c.Context()
-
-	// c.Accepts("application/json")
-
-	// // Parse return type from Prefer header
-	// returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
-	// if !returnType.IsValid() {
-	// 	return c.Status(fiber.StatusBadRequest).SendString("Invalid Prefer header value")
-	// }
-
-	// // Parse new contribution from request body
-	// var newContribution openehr.CONTRIBUTION
-	// if err := c.BodyParser(&newContribution); err != nil {
-	// 	h.Logger.ErrorContext(ctx, "Failed to parse request body for new Demographic Contribution", "error", err)
-	// 	return c.Status(fiber.StatusBadRequest).SendString("Invalid request body")
-	// }
-
-	// validateErr := newContribution.Validate("$")
-	// if len(validateErr.Errs) > 0 {
-	// 	return c.Status(fiber.StatusBadRequest).JSON(validateErr)
-	// }
-
-	// contribution, err := h.OpenEHRService.CreateContribution(ctx, newContribution)
-	// if err != nil {
-	// 	h.Logger.ErrorContext(ctx, "Failed to create Demographic Contribution", "error", err)
-	// 	c.Status(http.StatusInternalServerError)
-	// 	return nil
-	// }
-
-	// // Determine response
-	// contributionID := contribution.UID.Value
-	// c.Set("ETag", "\""+contributionID+"\"")
-	// c.Set("Location", c.Protocol()+ "://" + c.Hostname() + "/openehr/v1/demographic/contribution/"+contributionID)
-
-	// c.Status(fiber.StatusCreated)
-	// switch returnType {
-	// case ReturnTypeMinimal:
-	// 	return nil
-	// case ReturnTypeRepresentation:
-	// 	return c.JSON(contribution)
-	// case ReturnTypeIdentifier:
-	// 	return c.JSON(`{"uid":"` + contributionID + `"}`)
-	// default:
-	// 	h.Logger.ErrorContext(ctx, "Unhandled Prefer header value", "value", returnType)
-	// 	return c.JSON(contribution)
-	// }
 }
 
 func (h *Handler) GetDemographicContribution(c *fiber.Ctx) error {
@@ -5277,8 +3821,7 @@ func (h *Handler) ExecuteAdHocAQL(c *fiber.Ctx) error {
 
 	query := c.Query("q")
 	if query == "" {
-		auditCtx.Fail("bad_request", "q query parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "q query parameter is required",
 			Status:  "bad_request",
@@ -5287,8 +3830,7 @@ func (h *Handler) ExecuteAdHocAQL(c *fiber.Ctx) error {
 
 	ehrID := c.Query("ehr_id")
 	if ehrID != "" {
-		auditCtx.Fail("not_implemented", "Execute Ad Hoc AQL with ehr_id not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Ad Hoc AQL with ehr_id not implemented yet",
 			Status:  "not_implemented",
@@ -5297,8 +3839,7 @@ func (h *Handler) ExecuteAdHocAQL(c *fiber.Ctx) error {
 
 	fetch := c.Query("fetch")
 	if fetch != "" {
-		auditCtx.Fail("not_implemented", "Execute Ad Hoc AQL with fetch not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Ad Hoc AQL with fetch not implemented yet",
 			Status:  "not_implemented",
@@ -5307,8 +3848,7 @@ func (h *Handler) ExecuteAdHocAQL(c *fiber.Ctx) error {
 
 	offset := c.Query("offset")
 	if offset != "" {
-		auditCtx.Fail("not_implemented", "Execute Ad Hoc AQL with offset not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Ad Hoc AQL with offset not implemented yet",
 			Status:  "not_implemented",
@@ -5318,8 +3858,7 @@ func (h *Handler) ExecuteAdHocAQL(c *fiber.Ctx) error {
 	queryParametersStr := c.Query("query_parameters")
 	queryParametersURLValues, err := url.ParseQuery(queryParametersStr)
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid query_parameters format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid query_parameters format",
 			Status:  "bad_request",
@@ -5337,8 +3876,7 @@ func (h *Handler) ExecuteAdHocAQL(c *fiber.Ctx) error {
 	if err := h.OpenEHRService.QueryWithStream(ctx, c.Response().BodyWriter(), query, queryParameters); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to execute Ad Hoc AQL", "error", err)
 
-		auditCtx.Fail("error", "Failed to execute Ad Hoc AQL")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to execute Ad Hoc AQL",
 			Status:  "error",
@@ -5371,28 +3909,18 @@ func (h *Handler) ExecuteAdHocAQLPost(c *fiber.Ctx) error {
 
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
 	}
 
 	var aqlRequest AdHocAQLRequest
-	if err := c.BodyParser(&aqlRequest); err != nil {
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
+	if err := ParseBody(c, auditCtx, &aqlRequest); err != nil {
+		return err
 	}
 
 	if aqlRequest.Query == "" {
-		auditCtx.Fail("bad_request", "query field is required in the request body")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "query field is required in the request body",
 			Status:  "bad_request",
@@ -5400,8 +3928,7 @@ func (h *Handler) ExecuteAdHocAQLPost(c *fiber.Ctx) error {
 	}
 
 	if aqlRequest.EHRID != "" {
-		auditCtx.Fail("not_implemented", "Execute Ad Hoc AQL Post with ehr_id not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Ad Hoc AQL Post with ehr_id not implemented yet",
 			Status:  "not_implemented",
@@ -5409,8 +3936,7 @@ func (h *Handler) ExecuteAdHocAQLPost(c *fiber.Ctx) error {
 	}
 
 	if aqlRequest.Fetch != "" {
-		auditCtx.Fail("not_implemented", "Execute Ad Hoc AQL Post with fetch not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Ad Hoc AQL Post with fetch not implemented yet",
 			Status:  "not_implemented",
@@ -5418,8 +3944,7 @@ func (h *Handler) ExecuteAdHocAQLPost(c *fiber.Ctx) error {
 	}
 
 	if aqlRequest.Offset != 0 {
-		auditCtx.Fail("not_implemented", "Execute Ad Hoc AQL Post with offset not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Ad Hoc AQL Post with offset not implemented yet",
 			Status:  "not_implemented",
@@ -5430,8 +3955,7 @@ func (h *Handler) ExecuteAdHocAQLPost(c *fiber.Ctx) error {
 	if err := h.OpenEHRService.QueryWithStream(ctx, c.Response().BodyWriter(), aqlRequest.Query, aqlRequest.QueryParameters); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to execute Ad Hoc AQL Post", "error", err)
 
-		auditCtx.Fail("error", "Failed to execute Ad Hoc AQL Post")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to execute Ad Hoc AQL Post",
 			Status:  "error",
@@ -5458,8 +3982,7 @@ func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
 
 	name := c.Params("qualified_query_name")
 	if name == "" {
-		auditCtx.Fail("bad_request", "qualified_query_name path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "qualified_query_name path parameter is required",
 			Status:  "bad_request",
@@ -5468,8 +3991,7 @@ func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
 
 	ehrID := c.Query("ehr_id")
 	if ehrID != "" {
-		auditCtx.Fail("not_implemented", "Execute Stored AQL with ehr_id not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Stored AQL with ehr_id not implemented yet",
 			Status:  "not_implemented",
@@ -5478,8 +4000,7 @@ func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
 
 	fetch := c.Query("fetch")
 	if fetch != "" {
-		auditCtx.Fail("not_implemented", "Execute Stored AQL with fetch not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Stored AQL with fetch not implemented yet",
 			Status:  "not_implemented",
@@ -5488,8 +4009,7 @@ func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
 
 	offset := c.Query("offset")
 	if offset != "" {
-		auditCtx.Fail("not_implemented", "Execute Stored AQL with offset not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Stored AQL with offset not implemented yet",
 			Status:  "not_implemented",
@@ -5499,8 +4019,7 @@ func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
 	queryParametersStr := c.Query("query_parameters")
 	queryParametersURLValues, err := url.ParseQuery(queryParametersStr)
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid query_parameters format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid query_parameters format",
 			Status:  "bad_request",
@@ -5518,8 +4037,7 @@ func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
 	storedQuery, err := h.OpenEHRService.GetQueryByName(ctx, name, "")
 	if err != nil {
 		if err == ErrQueryNotFound {
-			auditCtx.Fail("not_found", "Stored query not found for the given name")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Stored query not found for the given name",
 				Status:  "not_found",
@@ -5528,8 +4046,7 @@ func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get stored query by name", "error", err)
 
-		auditCtx.Fail("error", "Failed to get stored query by name")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get stored query by name",
 			Status:  "error",
@@ -5539,8 +4056,7 @@ func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
 	// Execute AQL query
 	if err := h.OpenEHRService.QueryWithStream(ctx, c.Response().BodyWriter(), storedQuery.Query, nil); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to execute Stored AQL", "error", err)
-		auditCtx.Fail("error", "Failed to execute Stored AQL")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to execute Stored AQL",
 			Status:  "error",
@@ -5572,19 +4088,14 @@ func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
 
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
 	}
 
 	name := c.Params("qualified_query_name")
 	if name == "" {
-		auditCtx.Fail("bad_request", "qualified_query_name path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "qualified_query_name path parameter is required",
 			Status:  "bad_request",
@@ -5592,18 +4103,12 @@ func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
 	}
 
 	var aqlRequest StoredAQLRequest
-	if err := c.BodyParser(&aqlRequest); err != nil {
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
+	if err := ParseBody(c, auditCtx, &aqlRequest); err != nil {
+		return err
 	}
 
 	if aqlRequest.EHRID != "" {
-		auditCtx.Fail("not_implemented", "Execute Stored AQL Post with ehr_id not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Stored AQL Post with ehr_id not implemented yet",
 			Status:  "not_implemented",
@@ -5611,8 +4116,7 @@ func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
 	}
 
 	if aqlRequest.Fetch != "" {
-		auditCtx.Fail("not_implemented", "Execute Stored AQL Post with fetch not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Stored AQL Post with fetch not implemented yet",
 			Status:  "not_implemented",
@@ -5620,8 +4124,7 @@ func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
 	}
 
 	if aqlRequest.Offset != 0 {
-		auditCtx.Fail("not_implemented", "Execute Stored AQL Post with offset not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Stored AQL Post with offset not implemented yet",
 			Status:  "not_implemented",
@@ -5632,8 +4135,7 @@ func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
 	storedQuery, err := h.OpenEHRService.GetQueryByName(ctx, name, "")
 	if err != nil {
 		if err == ErrQueryNotFound {
-			auditCtx.Fail("not_found", "Stored query not found for the given name")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Stored query not found for the given name",
 				Status:  "not_found",
@@ -5642,8 +4144,7 @@ func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get stored query by name", "error", err)
 
-		auditCtx.Fail("error", "Failed to get stored query by name")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get stored query by name",
 			Status:  "error",
@@ -5654,8 +4155,7 @@ func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
 	if err := h.OpenEHRService.QueryWithStream(ctx, c.Response().BodyWriter(), storedQuery.Query, aqlRequest.QueryParameters); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to execute Stored AQL Post", "error", err)
 
-		auditCtx.Fail("error", "Failed to execute Stored AQL Post")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to execute Stored AQL Post",
 			Status:  "error",
@@ -5682,8 +4182,7 @@ func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
 
 	name := c.Params("qualified_query_name")
 	if name == "" {
-		auditCtx.Fail("bad_request", "qualified_query_name path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "qualified_query_name path parameter is required",
 			Status:  "bad_request",
@@ -5692,8 +4191,7 @@ func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
 
 	version := c.Params("version")
 	if version == "" {
-		auditCtx.Fail("bad_request", "version path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "version path parameter is required",
 			Status:  "bad_request",
@@ -5702,8 +4200,7 @@ func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
 
 	ehrID := c.Query("ehr_id")
 	if ehrID != "" {
-		auditCtx.Fail("not_implemented", "Execute Stored AQL Version with ehr_id not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Stored AQL Version with ehr_id not implemented yet",
 			Status:  "not_implemented",
@@ -5712,8 +4209,7 @@ func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
 
 	fetch := c.Query("fetch")
 	if fetch != "" {
-		auditCtx.Fail("not_implemented", "Execute Stored AQL Version with fetch not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Stored AQL Version with fetch not implemented yet",
 			Status:  "not_implemented",
@@ -5722,8 +4218,7 @@ func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
 
 	offset := c.Query("offset")
 	if offset != "" {
-		auditCtx.Fail("not_implemented", "Execute Stored AQL Version with offset not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Stored AQL Version with offset not implemented yet",
 			Status:  "not_implemented",
@@ -5733,8 +4228,7 @@ func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
 	queryParametersStr := c.Query("query_parameters")
 	queryParametersURLValues, err := url.ParseQuery(queryParametersStr)
 	if err != nil {
-		auditCtx.Fail("bad_request", "Invalid query_parameters format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid query_parameters format",
 			Status:  "bad_request",
@@ -5752,16 +4246,14 @@ func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
 	storedQuery, err := h.OpenEHRService.GetQueryByName(ctx, name, version)
 	if err != nil {
 		if err == ErrQueryNotFound {
-			auditCtx.Fail("not_found", "Stored query not found for the given name and version")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Stored query not found for the given name and version",
 				Status:  "not_found",
 			})
 		}
 		h.Logger.ErrorContext(ctx, "Failed to get stored query by name and version", "error", err)
-		auditCtx.Fail("error", "Failed to get stored query by name and version")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get stored query by name and version",
 			Status:  "error",
@@ -5772,8 +4264,7 @@ func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
 	if err := h.OpenEHRService.QueryWithStream(ctx, c.Response().BodyWriter(), storedQuery.Query, queryParameters); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to execute Stored AQL Version", "error", err)
 
-		auditCtx.Fail("error", "Failed to execute Stored AQL Version")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to execute Stored AQL Version",
 			Status:  "error",
@@ -5806,19 +4297,14 @@ func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
 
 	auditCtx := audit.From(c)
 
-	if c.Accepts("application/json") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include application/json")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusNotAcceptable,
-			Message: "Accept header must include application/json",
-			Status:  "not_acceptable",
-		})
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
 	}
 
 	name := c.Params("qualified_query_name")
 	if name == "" {
-		auditCtx.Fail("bad_request", "qualified_query_name path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "qualified_query_name path parameter is required",
 			Status:  "bad_request",
@@ -5827,8 +4313,7 @@ func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
 
 	version := c.Params("version")
 	if version == "" {
-		auditCtx.Fail("bad_request", "version path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "version path parameter is required",
 			Status:  "bad_request",
@@ -5836,18 +4321,12 @@ func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
 	}
 
 	var aqlRequest StoredAQLVersionRequest
-	if err := c.BodyParser(&aqlRequest); err != nil {
-		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid request body",
-			Status:  "bad_request",
-		})
+	if err := ParseBody(c, auditCtx, &aqlRequest); err != nil {
+		return err
 	}
 
 	if aqlRequest.EHRID != "" {
-		auditCtx.Fail("not_implemented", "Execute Stored AQL Version Post with ehr_id not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Stored AQL Version Post with ehr_id not implemented yet",
 			Status:  "not_implemented",
@@ -5855,8 +4334,7 @@ func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
 	}
 
 	if aqlRequest.Fetch != "" {
-		auditCtx.Fail("not_implemented", "Execute Stored AQL Version Post with fetch not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Stored AQL Version Post with fetch not implemented yet",
 			Status:  "not_implemented",
@@ -5864,8 +4342,7 @@ func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
 	}
 
 	if aqlRequest.Offset != 0 {
-		auditCtx.Fail("not_implemented", "Execute Stored AQL Version Post with offset not implemented yet")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotImplemented,
 			Message: "Execute Stored AQL Version Post with offset not implemented yet",
 			Status:  "not_implemented",
@@ -5876,8 +4353,7 @@ func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
 	storedQuery, err := h.OpenEHRService.GetQueryByName(ctx, name, version)
 	if err != nil {
 		if err == ErrQueryNotFound {
-			auditCtx.Fail("not_found", "Stored query not found for the given name and version")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Stored query not found for the given name and version",
 				Status:  "not_found",
@@ -5886,8 +4362,7 @@ func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get stored query by name and version", "error", err)
 
-		auditCtx.Fail("error", "Failed to get stored query by name and version")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get stored query by name and version",
 			Status:  "error",
@@ -5898,8 +4373,7 @@ func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
 	if err := h.OpenEHRService.QueryWithStream(ctx, c.Response().BodyWriter(), storedQuery.Query, aqlRequest.QueryParameters); err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to execute Stored AQL Version Post", "error", err)
 
-		auditCtx.Fail("error", "Failed to execute Stored AQL Version Post")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to execute Stored AQL Version Post",
 			Status:  "error",
@@ -5955,8 +4429,7 @@ func (h *Handler) ListStoredQueries(c *fiber.Ctx) error {
 
 	name := c.Params("qualified_query_name")
 	if name == "" {
-		auditCtx.Fail("bad_request", "qualified_query_name path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "qualified_query_name path parameter is required",
 			Status:  "bad_request",
@@ -5967,8 +4440,7 @@ func (h *Handler) ListStoredQueries(c *fiber.Ctx) error {
 	if err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to list stored queries", "error", err)
 
-		auditCtx.Fail("error", "Failed to list stored queries")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to list stored queries",
 			Status:  "error",
@@ -5985,8 +4457,7 @@ func (h *Handler) StoreQuery(c *fiber.Ctx) error {
 	auditCtx := audit.From(c)
 
 	if c.Accepts("text/plain") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include text/plain")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotAcceptable,
 			Message: "Accept header must include text/plain",
 			Status:  "not_acceptable",
@@ -5995,8 +4466,7 @@ func (h *Handler) StoreQuery(c *fiber.Ctx) error {
 
 	name := c.Params("qualified_query_name")
 	if name == "" {
-		auditCtx.Fail("bad_request", "qualified_query_name path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "qualified_query_name path parameter is required",
 			Status:  "bad_request",
@@ -6005,8 +4475,7 @@ func (h *Handler) StoreQuery(c *fiber.Ctx) error {
 
 	queryType := c.Query("query_type")
 	if queryType != "" && queryType != "AQL" {
-		auditCtx.Fail("bad_request", "Unsupported query_type. Only 'AQL' is supported.")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Unsupported query_type. Only 'AQL' is supported.",
 			Status:  "bad_request",
@@ -6015,8 +4484,7 @@ func (h *Handler) StoreQuery(c *fiber.Ctx) error {
 
 	query := string(c.Body())
 	if query == "" {
-		auditCtx.Fail("bad_request", "Query in request body is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Query in request body is required",
 			Status:  "bad_request",
@@ -6026,8 +4494,7 @@ func (h *Handler) StoreQuery(c *fiber.Ctx) error {
 	// Check if query with the same name already exists
 	_, err := h.OpenEHRService.GetQueryByName(ctx, name, "")
 	if err == nil {
-		auditCtx.Fail("conflict", "Query with the given name already exists, system cannot update without knowing the target version, please use Store Query Version endpoint instead")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusConflict,
 			Message: "Query with the given name already exists, system cannot update without knowing the target version, please use Store Query Version endpoint instead",
 			Status:  "conflict",
@@ -6036,8 +4503,7 @@ func (h *Handler) StoreQuery(c *fiber.Ctx) error {
 	if err != ErrQueryNotFound {
 		h.Logger.ErrorContext(ctx, "Failed to check existing query by name", "error", err)
 
-		auditCtx.Fail("error", "Failed to check existing query by name")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to store query",
 			Status:  "error",
@@ -6049,8 +4515,7 @@ func (h *Handler) StoreQuery(c *fiber.Ctx) error {
 	if err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to store query", "error", err)
 
-		auditCtx.Fail("error", "Failed to store query")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to store query",
 			Status:  "error",
@@ -6076,8 +4541,7 @@ func (h *Handler) StoreQueryVersion(c *fiber.Ctx) error {
 	auditCtx := audit.From(c)
 
 	if c.Accepts("text/plain") == "" {
-		auditCtx.Fail("not_acceptable", "Accept header must include text/plain")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotAcceptable,
 			Message: "Accept header must include text/plain",
 			Status:  "not_acceptable",
@@ -6086,8 +4550,7 @@ func (h *Handler) StoreQueryVersion(c *fiber.Ctx) error {
 
 	name := c.Params("qualified_query_name")
 	if name == "" {
-		auditCtx.Fail("bad_request", "qualified_query_name path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "qualified_query_name path parameter is required",
 			Status:  "bad_request",
@@ -6096,8 +4559,7 @@ func (h *Handler) StoreQueryVersion(c *fiber.Ctx) error {
 
 	version := c.Params("version")
 	if version == "" {
-		auditCtx.Fail("bad_request", "version path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "version path parameter is required",
 			Status:  "bad_request",
@@ -6106,8 +4568,7 @@ func (h *Handler) StoreQueryVersion(c *fiber.Ctx) error {
 
 	queryType := c.Query("query_type")
 	if queryType != "" && queryType != "AQL" {
-		auditCtx.Fail("bad_request", "Unsupported query_type. Only 'AQL' is supported.")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Unsupported query_type. Only 'AQL' is supported.",
 			Status:  "bad_request",
@@ -6116,8 +4577,7 @@ func (h *Handler) StoreQueryVersion(c *fiber.Ctx) error {
 
 	query := string(c.Body())
 	if query == "" {
-		auditCtx.Fail("bad_request", "Query in request body is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Query in request body is required",
 			Status:  "bad_request",
@@ -6129,8 +4589,7 @@ func (h *Handler) StoreQueryVersion(c *fiber.Ctx) error {
 	if err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to store query version", "error", err)
 
-		auditCtx.Fail("error", "Failed to store query version")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to store query version",
 			Status:  "error",
@@ -6157,8 +4616,7 @@ func (h *Handler) GetStoredQueryAtVersion(c *fiber.Ctx) error {
 
 	name := c.Params("qualified_query_name")
 	if name == "" {
-		auditCtx.Fail("bad_request", "qualified_query_name path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "qualified_query_name path parameter is required",
 			Status:  "bad_request",
@@ -6167,8 +4625,7 @@ func (h *Handler) GetStoredQueryAtVersion(c *fiber.Ctx) error {
 
 	version := c.Params("version")
 	if version == "" {
-		auditCtx.Fail("bad_request", "version path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "version path parameter is required",
 			Status:  "bad_request",
@@ -6178,8 +4635,7 @@ func (h *Handler) GetStoredQueryAtVersion(c *fiber.Ctx) error {
 	storedQuery, err := h.OpenEHRService.GetQueryByName(ctx, name, version)
 	if err != nil {
 		if err == ErrQueryNotFound {
-			auditCtx.Fail("error", "Stored query not found for the given name and version")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "Stored query not found for the given name and version",
 				Status:  "error",
@@ -6188,8 +4644,7 @@ func (h *Handler) GetStoredQueryAtVersion(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to get stored query by name and version", "error", err)
 
-		auditCtx.Fail("error", "Failed to get stored query by name and version")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to get stored query by name and version",
 			Status:  "error",
@@ -6205,21 +4660,16 @@ func (h *Handler) DeleteEHRByID(c *fiber.Ctx) error {
 
 	auditCtx := audit.From(c)
 
-	ehrID := c.Params("ehr_id")
-	if ehrID == "" {
-		auditCtx.Fail("bad_request", "ehr_id path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "ehr_id parameter is required",
-			Status:  "bad_request",
-		})
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
+	if err != nil {
+		return err
 	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	err := h.OpenEHRService.DeleteEHR(ctx, ehrID)
+	err = h.OpenEHRService.DeleteEHR(ctx, ehrID)
 	if err != nil {
 		if err == ErrEHRNotFound {
-			auditCtx.Fail("not_found", "EHR with the given ID not found")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
 				Message: "EHR with the given ID not found",
 				Status:  "error",
@@ -6228,8 +4678,7 @@ func (h *Handler) DeleteEHRByID(c *fiber.Ctx) error {
 
 		h.Logger.ErrorContext(ctx, "Failed to delete EHR by ID", "error", err)
 
-		auditCtx.Fail("error", "Failed to delete EHR by ID")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to delete EHR by ID",
 			Status:  "error",
@@ -6262,8 +4711,7 @@ func (h *Handler) DeleteMultipleEHRs(c *fiber.Ctx) error {
 	}
 
 	if len(ehrIDList) == 0 {
-		auditCtx.Fail("bad_request", "At least one ehr_id query parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "At least one ehr_id query parameter is required",
 			Status:  "bad_request",
@@ -6274,8 +4722,7 @@ func (h *Handler) DeleteMultipleEHRs(c *fiber.Ctx) error {
 	if err != nil {
 		h.Logger.ErrorContext(ctx, "Failed to delete multiple EHRs", "error", err)
 
-		auditCtx.Fail("error", "Failed to delete multiple EHRs")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to delete multiple EHRs",
 			Status:  "error",
@@ -6290,6 +4737,122 @@ func (h *Handler) DeleteMultipleEHRs(c *fiber.Ctx) error {
 	})
 
 	c.Status(fiber.StatusNoContent)
+	return nil
+}
+
+func Accepts(c *fiber.Ctx, auditCtx *audit.Context, contentType string) error {
+	if c.Accepts(contentType) == "" {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusNotAcceptable,
+			Message: "Accept header must include " + contentType,
+			Status:  "not_acceptable",
+		})
+	}
+
+	return nil
+}
+
+func StringFromHeader(c *fiber.Ctx, auditCtx *audit.Context, name string) (string, error) {
+	value := c.Get(name)
+	if value == "" {
+		return "", SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusBadRequest,
+			Message: name + " header is required",
+			Status:  "bad_request",
+		})
+	}
+	return value, nil
+}
+
+func ReturnTypeFromHeader(c *fiber.Ctx, auditCtx *audit.Context) (ReturnType, error) {
+	returnType := ReturnType(c.Get("Prefer", string(ReturnTypeMinimal)))
+	if !returnType.IsValid() {
+		return "", SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusBadRequest,
+			Message: "Invalid Prefer header",
+		})
+	}
+	return returnType, nil
+}
+
+func UUIDFromPath(c *fiber.Ctx, auditCtx *audit.Context, paramName string) (uuid.UUID, error) {
+	valueStr := c.Params(paramName)
+	if valueStr == "" {
+		return uuid.Nil, SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusBadRequest,
+			Message: paramName + " path parameter is required",
+			Status:  "bad_request",
+		})
+	}
+	value, err := uuid.Parse(valueStr)
+	if err != nil {
+		return uuid.Nil, SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusBadRequest,
+			Message: "Invalid " + paramName + " format",
+			Status:  "bad_request",
+		})
+	}
+	return value, nil
+}
+
+func StringFromPath(c *fiber.Ctx, auditCtx *audit.Context, value string) (string, error) {
+	pathParam := c.Params(value)
+	if pathParam == "" {
+		return "", SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusBadRequest,
+			Message: value + " parameter is required",
+			Status:  "bad_request",
+		})
+	}
+	return pathParam, nil
+}
+
+func TimeFromQuery(c *fiber.Ctx, auditCtx *audit.Context, paramName string) (time.Time, error) {
+	valueStr := c.Query(paramName)
+	if valueStr == "" {
+		return time.Time{}, SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusBadRequest,
+			Message: paramName + " query parameter is required",
+			Status:  "bad_request",
+		})
+	}
+	value, err := time.Parse(time.RFC3339, valueStr)
+	if err != nil {
+		return time.Time{}, SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusBadRequest,
+			Message: "Invalid " + paramName + " format, must be RFC3339",
+			Status:  "bad_request",
+		})
+	}
+	return value, nil
+}
+
+func ParseBody(c *fiber.Ctx, auditCtx *audit.Context, out any) error {
+	if len(c.Body()) == 0 {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusBadRequest,
+			Message: "Request body is required",
+			Status:  "bad_request",
+		})
+	}
+
+	if err := c.BodyParser(&out); err != nil {
+		verr, ok := err.(util.ValidateError)
+		if ok {
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
+				Code:    fiber.StatusBadRequest,
+				Message: "Validation error in request body",
+				Status:  "bad_request",
+				Details: verr,
+			})
+		}
+
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusBadRequest,
+			Message: "Invalid request body",
+			Status:  "bad_request",
+		})
+	}
 	return nil
 }
 
@@ -6317,7 +4880,8 @@ type ErrorResponse struct {
 	Details any    `json:"details,omitempty"`
 }
 
-func SendErrorResponse(c *fiber.Ctx, errorRes ErrorResponse) error {
+func SendErrorResponse(c *fiber.Ctx, auditCtx *audit.Context, errorRes ErrorResponse) error {
+	auditCtx.Fail(errorRes.Status, errorRes.Message)
 	return c.Status(errorRes.Code).JSON(map[string]ErrorResponse{
 		"error": errorRes,
 	})

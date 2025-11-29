@@ -6,7 +6,6 @@ import (
 
 	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 )
 
 type KeyType string
@@ -35,14 +34,6 @@ func (l *Logger) NewContext(c *fiber.Ctx, resource Resource, action Action) *Con
 			CreatedAt: time.Now(),
 		},
 	}
-}
-
-func (c *Context) SetEHR(id uuid.UUID) {
-	c.Event.Details["ehr_id"] = id.String()
-}
-
-func (c *Context) SetValidationError(err error) {
-	c.Event.Details["validation_error"] = err
 }
 
 func (c *Context) Fail(code string, msg string) {

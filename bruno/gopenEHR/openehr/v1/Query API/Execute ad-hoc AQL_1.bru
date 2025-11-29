@@ -12,7 +12,7 @@ post {
 
 body:json {
   {
-      "q": "SELECT e/ehr_id/value, c/uid/value FROM EHR e CONTAINS FOLDER CONTAINS VERSIONED_COMPOSITION CONTAINS COMPOSITION c WHERE e/ehr_id/value = '56d4c34d-7c9e-42f6-82ed-264e1234d547'",
+      "q": "SELECT * FROM EHR CONTAINS VERSIONED_PARTY",
       "query_parameters": {}
   }
 }

@@ -225,7 +225,7 @@ func (s *Service) GetEHRBySubject(ctx context.Context, subjectID, subjectNamespa
 	return s.GetEHR(ctx, ehrID)
 }
 
-func (s *Service) DeleteEHR(ctx context.Context, id string) error {
+func (s *Service) DeleteEHR(ctx context.Context, id uuid.UUID) error {
 	query := `DELETE FROM openehr.tbl_ehr WHERE id = $1 RETURNING 1`
 	args := []any{id}
 
@@ -1580,16 +1580,16 @@ func (s *Service) UpdatePerson(ctx context.Context, versionedPartyID uuid.UUID, 
 	return person, nil
 }
 
-func (s *Service) DeletePerson(ctx context.Context, versionedObjectID string) error {
+func (s *Service) DeletePerson(ctx context.Context, versionedObjectID uuid.UUID) error {
 	contribution := NewContribution("Person deleted", terminology.AUDIT_CHANGE_TYPE_CODE_DELETED,
 		[]model.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
 				Type:      model.PERSON_MODEL_NAME,
 				ID: model.X_OBJECT_ID{
-					Value: &model.OBJECT_VERSION_ID{
-						Type_: utils.Some(model.OBJECT_VERSION_ID_MODEL_NAME),
-						Value: versionedObjectID,
+					Value: &model.HIER_OBJECT_ID{
+						Type_: utils.Some(model.HIER_OBJECT_ID_MODEL_NAME),
+						Value: versionedObjectID.String(),
 					},
 				},
 			},
@@ -1610,7 +1610,7 @@ func (s *Service) DeletePerson(ctx context.Context, versionedObjectID string) er
 	if err != nil {
 		return fmt.Errorf("failed to save contribution: %w", err)
 	}
-	err = s.DeleteVersionedObjectWithTx(ctx, tx, uuid.MustParse(strings.Split(versionedObjectID, "::")[0]))
+	err = s.DeleteVersionedObjectWithTx(ctx, tx, versionedObjectID)
 	if err != nil {
 		return fmt.Errorf("failed to delete person: %w", err)
 	}
@@ -1800,16 +1800,16 @@ func (s *Service) UpdateGroup(ctx context.Context, versionedPartyID uuid.UUID, g
 	return group, nil
 }
 
-func (s *Service) DeleteGroup(ctx context.Context, versionedObjectID string) error {
+func (s *Service) DeleteGroup(ctx context.Context, versionedObjectID uuid.UUID) error {
 	contribution := NewContribution("Group deleted", terminology.AUDIT_CHANGE_TYPE_CODE_DELETED,
 		[]model.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
 				Type:      model.GROUP_MODEL_NAME,
 				ID: model.X_OBJECT_ID{
-					Value: &model.OBJECT_VERSION_ID{
+					Value: &model.HIER_OBJECT_ID{
 						Type_: utils.Some(model.OBJECT_VERSION_ID_MODEL_NAME),
-						Value: versionedObjectID,
+						Value: versionedObjectID.String(),
 					},
 				},
 			},
@@ -1830,7 +1830,7 @@ func (s *Service) DeleteGroup(ctx context.Context, versionedObjectID string) err
 	if err != nil {
 		return fmt.Errorf("failed to save contribution: %w", err)
 	}
-	err = s.DeleteVersionedObjectWithTx(ctx, tx, uuid.MustParse(strings.Split(versionedObjectID, "::")[0]))
+	err = s.DeleteVersionedObjectWithTx(ctx, tx, versionedObjectID)
 	if err != nil {
 		return fmt.Errorf("failed to delete group: %w", err)
 	}
@@ -2020,16 +2020,16 @@ func (s *Service) UpdateOrganisation(ctx context.Context, versionedPartyID uuid.
 	return organisation, nil
 }
 
-func (s *Service) DeleteOrganisation(ctx context.Context, versionedObjectID string) error {
+func (s *Service) DeleteOrganisation(ctx context.Context, versionedObjectID uuid.UUID) error {
 	contribution := NewContribution("Organisation deleted", terminology.AUDIT_CHANGE_TYPE_CODE_DELETED,
 		[]model.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
 				Type:      model.ORGANISATION_MODEL_NAME,
 				ID: model.X_OBJECT_ID{
-					Value: &model.OBJECT_VERSION_ID{
-						Type_: utils.Some(model.OBJECT_VERSION_ID_MODEL_NAME),
-						Value: versionedObjectID,
+					Value: &model.HIER_OBJECT_ID{
+						Type_: utils.Some(model.HIER_OBJECT_ID_MODEL_NAME),
+						Value: versionedObjectID.String(),
 					},
 				},
 			},
@@ -2050,7 +2050,7 @@ func (s *Service) DeleteOrganisation(ctx context.Context, versionedObjectID stri
 	if err != nil {
 		return fmt.Errorf("failed to save contribution: %w", err)
 	}
-	err = s.DeleteVersionedObjectWithTx(ctx, tx, uuid.MustParse(strings.Split(versionedObjectID, "::")[0]))
+	err = s.DeleteVersionedObjectWithTx(ctx, tx, versionedObjectID)
 	if err != nil {
 		return fmt.Errorf("failed to delete organisation: %w", err)
 	}
@@ -2240,16 +2240,16 @@ func (s *Service) UpdateRole(ctx context.Context, versionedPartyID uuid.UUID, ro
 	return role, nil
 }
 
-func (s *Service) DeleteRole(ctx context.Context, versionedObjectID string) error {
+func (s *Service) DeleteRole(ctx context.Context, versionedObjectID uuid.UUID) error {
 	contribution := NewContribution("Role deleted", terminology.AUDIT_CHANGE_TYPE_CODE_DELETED,
 		[]model.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
 				Type:      model.ROLE_MODEL_NAME,
 				ID: model.X_OBJECT_ID{
-					Value: &model.OBJECT_VERSION_ID{
-						Type_: utils.Some(model.OBJECT_VERSION_ID_MODEL_NAME),
-						Value: versionedObjectID,
+					Value: &model.HIER_OBJECT_ID{
+						Type_: utils.Some(model.HIER_OBJECT_ID_MODEL_NAME),
+						Value: versionedObjectID.String(),
 					},
 				},
 			},
@@ -2270,7 +2270,7 @@ func (s *Service) DeleteRole(ctx context.Context, versionedObjectID string) erro
 	if err != nil {
 		return fmt.Errorf("failed to save contribution: %w", err)
 	}
-	err = s.DeleteVersionedObjectWithTx(ctx, tx, uuid.MustParse(strings.Split(versionedObjectID, "::")[0]))
+	err = s.DeleteVersionedObjectWithTx(ctx, tx, versionedObjectID)
 	if err != nil {
 		return fmt.Errorf("failed to delete role: %w", err)
 	}

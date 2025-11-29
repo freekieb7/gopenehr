@@ -3,9 +3,11 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 	"github.com/freekieb7/gopenehr/pkg/utils"
+	"github.com/google/uuid"
 )
 
 const UID_BASED_ID_MODEL_NAME string = "UID_BASED_ID"
@@ -113,5 +115,16 @@ func (a *X_UID_BASED_ID) ValueAsString() string {
 		return v.Value
 	default:
 		return ""
+	}
+}
+
+func (a *X_UID_BASED_ID) UUID() uuid.UUID {
+	switch v := a.Value.(type) {
+	case *HIER_OBJECT_ID:
+		return uuid.MustParse(v.Value)
+	case *OBJECT_VERSION_ID:
+		return uuid.MustParse(strings.Split(v.Value, "::")[0])
+	default:
+		return uuid.Nil
 	}
 }

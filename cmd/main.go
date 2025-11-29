@@ -116,8 +116,8 @@ func runServer(ctx context.Context) error {
 	}))
 
 	// Audit logger
-	auditLogger := audit.NewLogger(&db)
-	webhookSaver := webhook.NewSaver(tel.Logger, &db)
+	auditSink := audit.NewSink(tel, &db)
+	webhookSink := webhook.NewSink(tel, &db)
 	webhookSender := webhook.NewSender(tel.Logger, &db, &http.Client{
 		Timeout: 10 * time.Second,
 	})
@@ -133,13 +133,13 @@ func runServer(ctx context.Context) error {
 	healthHandler := health.NewHandler(&healthChecker)
 	healthHandler.RegisterRoutes(srv)
 
-	auditHandler := audit.NewHandler(&settings, tel.Logger, &auditService, &oauthService, &auditLogger)
+	auditHandler := audit.NewHandler(&settings, tel.Logger, &auditService, &oauthService, auditSink)
 	auditHandler.RegisterRoutes(srv)
 
-	webhookHandler := webhook.NewHandler(&settings, tel.Logger, &auditLogger, &oauthService, &webhookService)
+	webhookHandler := webhook.NewHandler(&settings, tel.Logger, auditSink, &oauthService, &webhookService)
 	webhookHandler.RegisterRoutes(srv)
 
-	openEHRHandler := openehr.NewHandler(&settings, tel, &openEHRService, &auditService, &webhookService, &auditLogger, &webhookSaver)
+	openEHRHandler := openehr.NewHandler(&settings, tel, &openEHRService, &auditService, &webhookService, auditSink, webhookSink)
 	openEHRHandler.RegisterRoutes(srv)
 
 	// Set up signal handling for graceful shutdown
@@ -150,19 +150,17 @@ func runServer(ctx context.Context) error {
 	serverErrChan := make(chan error, 1)
 
 	// Warmup cache
-	go func() {
-		tel.Logger.InfoContext(ctx, "Warming up cache")
-		if err := oauthService.WarmupCache(ctx); err != nil {
-			tel.Logger.ErrorContext(ctx, "Cache warmup failed", "error", err)
-		} else {
-			tel.Logger.InfoContext(ctx, "Cache warmup completed")
-		}
-	}()
+	if err := oauthService.WarmupCache(ctx); err != nil {
+		tel.Logger.ErrorContext(ctx, "Cache warmup failed", "error", err)
+	} else {
+		tel.Logger.InfoContext(ctx, "Cache warmup completed")
+	}
 
-	// Start audit logger
-	go func() {
-		auditLogger.Start(ctx)
-	}()
+	// Start audit sink
+	auditSink.Start(ctx)
+
+	// Start webhook sink
+	webhookSink.Start(ctx)
 
 	// Start server
 	go func() {
@@ -171,8 +169,6 @@ func runServer(ctx context.Context) error {
 			serverErrChan <- err
 		}
 	}()
-
-	webhookSaver.Start(ctx)
 
 	// Start webhook delivery worker
 	go func() {

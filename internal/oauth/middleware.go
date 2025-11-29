@@ -1,13 +1,12 @@
-package middleware
+package oauth
 
 import (
 	"strings"
 
-	"github.com/freekieb7/gopenehr/internal/oauth"
 	"github.com/gofiber/fiber/v2"
 )
 
-func JWTProtected(oauthService *oauth.Service, scopes []oauth.Scope) func(c *fiber.Ctx) error {
+func JWTProtectedMiddleware(oauthService *Service, scopes []Scope) func(c *fiber.Ctx) error {
 	enabled := len(oauthService.TrustedIssuers) > 0
 
 	if !enabled {

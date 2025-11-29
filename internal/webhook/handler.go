@@ -14,16 +14,16 @@ import (
 type Handler struct {
 	Settings       *config.Settings
 	Logger         *telemetry.Logger
-	AuditLogger    *audit.Logger
+	AuditSink      *audit.Sink
 	OAuthService   *oauth.Service
 	WebhookService *Service
 }
 
-func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditLogger *audit.Logger, oauthService *oauth.Service, webhookService *Service) Handler {
+func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditSink *audit.Sink, oauthService *oauth.Service, webhookService *Service) Handler {
 	return Handler{
 		Settings:       settings,
 		Logger:         logger,
-		AuditLogger:    auditLogger,
+		AuditSink:      auditSink,
 		OAuthService:   oauthService,
 		WebhookService: webhookService,
 	}
@@ -32,12 +32,12 @@ func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditLogger
 func (h *Handler) RegisterRoutes(a *fiber.App) {
 	v1 := a.Group("/webhooks/v1")
 	v1.Use(middleware.APIKeyProtected(h.Settings.APIKey))
-	v1.Use(middleware.JWTProtected(h.OAuthService, []oauth.Scope{oauth.ScopeWebhookManage}))
+	v1.Use(oauth.JWTProtectedMiddleware(h.OAuthService, []oauth.Scope{oauth.ScopeWebhookManage}))
 
-	v1.Get("", audit.Middleware(h.AuditLogger, audit.ResourceWebhook, audit.ActionRead), h.HandleListSubscriptions)
-	v1.Post("", audit.Middleware(h.AuditLogger, audit.ResourceWebhook, audit.ActionCreate), h.HandleSubscribe)
-	v1.Patch("/:subscription_id", audit.Middleware(h.AuditLogger, audit.ResourceWebhook, audit.ActionUpdate), h.HandleUpdateSubscription)
-	v1.Delete("/:subscription_id", audit.Middleware(h.AuditLogger, audit.ResourceWebhook, audit.ActionDelete), h.HandleUnsubscribe)
+	v1.Get("", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceWebhook, audit.ActionRead), h.HandleListSubscriptions)
+	v1.Post("", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceWebhook, audit.ActionCreate), h.HandleSubscribe)
+	v1.Patch("/:subscription_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceWebhook, audit.ActionUpdate), h.HandleUpdateSubscription)
+	v1.Delete("/:subscription_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceWebhook, audit.ActionDelete), h.HandleUnsubscribe)
 }
 
 type SubscribeRequest struct {

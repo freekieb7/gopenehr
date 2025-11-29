@@ -13,16 +13,16 @@ type KeyType string
 const ContextKey KeyType = "audit_context"
 
 type Context struct {
-	Logger *Logger
+	Sink   *Sink
 	Event  Event
 	Failed bool
 }
 
-func (l *Logger) NewContext(c *fiber.Ctx, resource Resource, action Action) *Context {
+func (s *Sink) NewContext(c *fiber.Ctx, resource Resource, action Action) *Context {
 	ip := net.ParseIP(c.IP())
 
 	return &Context{
-		Logger: l,
+		Sink: s,
 		Event: Event{
 			ActorID:   config.SystemUserID,
 			ActorType: "system",
@@ -55,7 +55,7 @@ func (c *Context) Commit() {
 			c.Event.Details["outcome"] = "failure"
 		}
 	}
-	c.Logger.Log(c.Event)
+	c.Sink.Enqueue(c.Event)
 }
 
 func From(c *fiber.Ctx) *Context {

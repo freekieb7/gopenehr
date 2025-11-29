@@ -15,16 +15,16 @@ type Handler struct {
 	Logger       *telemetry.Logger
 	AuditService *Service
 	OAuthService *oauth.Service
-	AuditLogger  *Logger
+	AuditSink    *Sink
 }
 
-func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditService *Service, oauthService *oauth.Service, auditLogger *Logger) Handler {
+func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditService *Service, oauthService *oauth.Service, auditSink *Sink) Handler {
 	return Handler{
 		Settings:     settings,
 		Logger:       logger,
 		AuditService: auditService,
 		OAuthService: oauthService,
-		AuditLogger:  auditLogger,
+		AuditSink:    auditSink,
 	}
 }
 
@@ -33,8 +33,8 @@ func (h *Handler) RegisterRoutes(c *fiber.App) {
 	v1.Use(middleware.APIKeyProtected(h.Settings.APIKey))
 
 	v1.Get("/logs",
-		middleware.JWTProtected(h.OAuthService, []oauth.Scope{oauth.ScopeAuditRead}), // Example use
-		Middleware(h.AuditLogger, ResourceEHR, ActionCreate),
+		oauth.JWTProtectedMiddleware(h.OAuthService, []oauth.Scope{oauth.ScopeAuditRead}), // Example use
+		AuditLoggedMiddleware(h.AuditSink, ResourceEHR, ActionCreate),
 		h.ListLogEntries,
 	)
 }

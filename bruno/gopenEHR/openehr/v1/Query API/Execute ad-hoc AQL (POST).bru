@@ -1,0 +1,23 @@
+meta {
+  name: Execute ad-hoc AQL (POST)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/openehr/v1/query/aql
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+      "q": "SELECT * FROM EHR CONTAINS VERSIONED_PARTY",
+      "query_parameters": {}
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

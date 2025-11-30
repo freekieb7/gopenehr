@@ -1,0 +1,26 @@
+meta {
+  name: Execute stored AQL (POST)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/openehr/v1/query/:qualified_query_name
+  body: json
+  auth: inherit
+}
+
+params:path {
+  qualified_query_name: 
+}
+
+body:json {
+  {
+      "query_parameters": {}
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

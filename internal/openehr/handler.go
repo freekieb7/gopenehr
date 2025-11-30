@@ -7,7 +7,7 @@ import (
 
 	"github.com/freekieb7/gopenehr/internal/audit"
 	"github.com/freekieb7/gopenehr/internal/config"
-	"github.com/freekieb7/gopenehr/internal/openehr/model"
+	"github.com/freekieb7/gopenehr/internal/openehr/rm"
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/freekieb7/gopenehr/internal/webhook"
@@ -486,7 +486,7 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 		return err
 	}
 
-	var ehrStatus model.EHR_STATUS
+	var ehrStatus rm.EHR_STATUS
 	if err := ParseBody(c, auditCtx, &ehrStatus); err != nil {
 		return err
 	}
@@ -810,7 +810,7 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 		return err
 	}
 
-	var requestComposition model.COMPOSITION
+	var requestComposition rm.COMPOSITION
 	if err := ParseBody(c, auditCtx, &requestComposition); err != nil {
 		return err
 	}
@@ -992,7 +992,7 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 		})
 	}
 
-	var composition model.COMPOSITION
+	var composition rm.COMPOSITION
 	if err := ParseBody(c, auditCtx, &composition); err != nil {
 		return err
 	}
@@ -1389,7 +1389,7 @@ func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 		return err
 	}
 
-	var requestDirectory model.FOLDER
+	var requestDirectory rm.FOLDER
 	if err := ParseBody(c, auditCtx, &requestDirectory); err != nil {
 		return err
 	}
@@ -1478,7 +1478,7 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 		return err
 	}
 
-	var directory model.FOLDER
+	var directory rm.FOLDER
 	if err := ParseBody(c, auditCtx, &directory); err != nil {
 		return err
 	}
@@ -1632,7 +1632,7 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.OpenEHRService.DeleteDirectory(ctx, ehrID, uuid.MustParse(currentDirectory.UID.V.Value.(*model.OBJECT_VERSION_ID).Value)); err != nil {
+	if err := h.OpenEHRService.DeleteDirectory(ctx, ehrID, uuid.MustParse(currentDirectory.UID.V.Value.(*rm.OBJECT_VERSION_ID).Value)); err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
@@ -1889,7 +1889,7 @@ func (h *Handler) CreateAgent(c *fiber.Ctx) error {
 		return err
 	}
 
-	var agent model.AGENT
+	var agent rm.AGENT
 	if err := ParseBody(c, auditCtx, &agent); err != nil {
 		return err
 	}
@@ -2045,7 +2045,7 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 		})
 	}
 
-	var agent model.AGENT
+	var agent rm.AGENT
 	if err := ParseBody(c, auditCtx, &agent); err != nil {
 		return err
 	}
@@ -2237,7 +2237,7 @@ func (h *Handler) CreateGroup(c *fiber.Ctx) error {
 		return err
 	}
 
-	var group model.GROUP
+	var group rm.GROUP
 	if err := ParseBody(c, auditCtx, &group); err != nil {
 		return err
 	}
@@ -2387,7 +2387,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 		})
 	}
 
-	var group model.GROUP
+	var group rm.GROUP
 	if err := ParseBody(c, auditCtx, &group); err != nil {
 		return err
 	}
@@ -2578,7 +2578,7 @@ func (h *Handler) CreatePerson(c *fiber.Ctx) error {
 		return err
 	}
 
-	var person model.PERSON
+	var person rm.PERSON
 	if err := ParseBody(c, auditCtx, &person); err != nil {
 		return err
 	}
@@ -2732,7 +2732,7 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 		})
 	}
 
-	var person model.PERSON
+	var person rm.PERSON
 	if err := ParseBody(c, auditCtx, &person); err != nil {
 		return err
 	}
@@ -2922,7 +2922,7 @@ func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 		return err
 	}
 
-	var organisation model.ORGANISATION
+	var organisation rm.ORGANISATION
 	if err := ParseBody(c, auditCtx, &organisation); err != nil {
 		return err
 	}
@@ -3077,7 +3077,7 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 		})
 	}
 
-	var organisation model.ORGANISATION
+	var organisation rm.ORGANISATION
 	if err := ParseBody(c, auditCtx, &organisation); err != nil {
 		return err
 	}
@@ -3268,7 +3268,7 @@ func (h *Handler) CreateRole(c *fiber.Ctx) error {
 		return err
 	}
 
-	var role model.ROLE
+	var role rm.ROLE
 	if err := ParseBody(c, auditCtx, &role); err != nil {
 		return err
 	}
@@ -3417,7 +3417,7 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 		})
 	}
 
-	var role model.ROLE
+	var role rm.ROLE
 	if err := ParseBody(c, auditCtx, &role); err != nil {
 		return err
 	}

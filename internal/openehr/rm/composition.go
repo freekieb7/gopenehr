@@ -8,28 +8,26 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const COMPOSITION_MODEL_NAME string = "COMPOSITION"
+const COMPOSITION_TYPE string = "COMPOSITION"
 
 type COMPOSITION struct {
-	Type_            utils.Optional[string]           `json:"_type,omitzero"`
-	Name             X_DV_TEXT                        `json:"name"`
-	ArchetypeNodeID  string                           `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID]   `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]           `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]       `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]     `json:"feeder_audit,omitzero"`
-	Language         CODE_PHRASE                      `json:"language"`
-	Territory        CODE_PHRASE                      `json:"territory"`
-	Category         DV_CODED_TEXT                    `json:"category"`
-	Context          utils.Optional[EVENT_CONTEXT]    `json:"context,omitzero"`
-	Composer         X_PARTY_PROXY                    `json:"composer"`
-	Content          utils.Optional[[]X_CONTENT_ITEM] `json:"content,omitzero"`
+	Type_            utils.Optional[string]             `json:"_type,omitzero"`
+	Name             DvTextUnion                        `json:"name"`
+	ArchetypeNodeID  string                             `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion]    `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]             `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]         `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]       `json:"feeder_audit,omitzero"`
+	Language         CODE_PHRASE                        `json:"language"`
+	Territory        CODE_PHRASE                        `json:"territory"`
+	Category         DV_CODED_TEXT                      `json:"category"`
+	Context          utils.Optional[EVENT_CONTEXT]      `json:"context,omitzero"`
+	Composer         PartyProxyUnion                    `json:"composer"`
+	Content          utils.Optional[[]ContentItemUnion] `json:"content,omitzero"`
 }
 
-func (c *COMPOSITION) isVersionModel() {}
-
 func (c *COMPOSITION) SetModelName() {
-	c.Type_ = utils.Some(COMPOSITION_MODEL_NAME)
+	c.Type_ = utils.Some(COMPOSITION_TYPE)
 	c.Name.SetModelName()
 	if c.UID.E {
 		c.UID.V.SetModelName()
@@ -64,13 +62,13 @@ func (c *COMPOSITION) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if c.Type_.E && c.Type_.V != COMPOSITION_MODEL_NAME {
+	if c.Type_.E && c.Type_.V != COMPOSITION_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          COMPOSITION_MODEL_NAME,
+			Model:          COMPOSITION_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + COMPOSITION_MODEL_NAME,
-			Recommendation: "Set _type to " + COMPOSITION_MODEL_NAME,
+			Message:        "_type must be " + COMPOSITION_TYPE,
+			Recommendation: "Set _type to " + COMPOSITION_TYPE,
 		})
 	}
 
@@ -109,7 +107,7 @@ func (c *COMPOSITION) Validate(path string) util.ValidateError {
 	if !terminology.IsValidLanguageTerminologyID(c.Language.TerminologyID.Value) {
 		attrPath = path + ".terminology_id.value"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_TEXT_MODEL_NAME,
+			Model:          DV_TEXT_TYPE,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid language terminology ID: %s", c.Language.TerminologyID.Value),
 			Recommendation: "Ensure language field is a known ISO 639-1 or ISO 639-2 language code",
@@ -119,7 +117,7 @@ func (c *COMPOSITION) Validate(path string) util.ValidateError {
 	if !terminology.IsValidLanguageCode(c.Language.CodeString) {
 		attrPath = path + ".code_string"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_TEXT_MODEL_NAME,
+			Model:          DV_TEXT_TYPE,
 			Path:           attrPath,
 			Message:        fmt.Sprintf("invalid language code: %s", c.Language.CodeString),
 			Recommendation: "Ensure language field is a known ISO 639-1 or ISO 639-2 language code",
@@ -153,13 +151,4 @@ func (c *COMPOSITION) Validate(path string) util.ValidateError {
 	}
 
 	return validateErr
-}
-
-func (c *COMPOSITION) ObjectVersionID() OBJECT_VERSION_ID {
-	if c.UID.E {
-		if objVerID, ok := c.UID.V.Value.(*OBJECT_VERSION_ID); ok {
-			return *objVerID
-		}
-	}
-	return OBJECT_VERSION_ID{}
 }

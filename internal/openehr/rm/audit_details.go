@@ -6,7 +6,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const AUDIT_DETAILS_MODEL_NAME = "AUDIT_DETAILS"
+const AUDIT_DETAILS_TYPE = "AUDIT_DETAILS"
 
 type AUDIT_DETAILS struct {
 	Type_         utils.Optional[string]  `json:"_type,omitzero"`
@@ -14,11 +14,11 @@ type AUDIT_DETAILS struct {
 	TimeCommitted DV_DATE_TIME            `json:"time_committed"`
 	ChangeType    DV_CODED_TEXT           `json:"change_type"`
 	Description   utils.Optional[DV_TEXT] `json:"description,omitzero"`
-	Committer     X_PARTY_PROXY           `json:"committer"`
+	Committer     PartyProxyUnion         `json:"committer"`
 }
 
 func (a *AUDIT_DETAILS) SetModelName() {
-	a.Type_ = utils.Some(AUDIT_DETAILS_MODEL_NAME)
+	a.Type_ = utils.Some(AUDIT_DETAILS_TYPE)
 	a.TimeCommitted.SetModelName()
 	a.ChangeType.SetModelName()
 	if a.Description.E {
@@ -32,13 +32,13 @@ func (a *AUDIT_DETAILS) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if a.Type_.E && a.Type_.V != AUDIT_DETAILS_MODEL_NAME {
+	if a.Type_.E && a.Type_.V != AUDIT_DETAILS_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          AUDIT_DETAILS_MODEL_NAME,
+			Model:          AUDIT_DETAILS_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + AUDIT_DETAILS_MODEL_NAME,
-			Recommendation: "Set _type to " + AUDIT_DETAILS_MODEL_NAME,
+			Message:        "_type must be " + AUDIT_DETAILS_TYPE,
+			Recommendation: "Set _type to " + AUDIT_DETAILS_TYPE,
 		})
 	}
 
@@ -46,7 +46,7 @@ func (a *AUDIT_DETAILS) Validate(path string) util.ValidateError {
 	attrPath = path + ".system_id"
 	if a.SystemID == "" {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          AUDIT_DETAILS_MODEL_NAME,
+			Model:          AUDIT_DETAILS_TYPE,
 			Path:           attrPath,
 			Message:        "system_id cannot be empty",
 			Recommendation: "Provide a valid system_id",
@@ -61,7 +61,7 @@ func (a *AUDIT_DETAILS) Validate(path string) util.ValidateError {
 	attrPath = path + ".change_type"
 	if !terminology.IsValidAuditChangeTypeCode(terminology.AuditChangeType(a.ChangeType.DefiningCode.CodeString)) {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          AUDIT_DETAILS_MODEL_NAME,
+			Model:          AUDIT_DETAILS_TYPE,
 			Path:           attrPath,
 			Message:        "Invalid change_type code",
 			Recommendation: "Provide a valid change_type code",
@@ -69,7 +69,7 @@ func (a *AUDIT_DETAILS) Validate(path string) util.ValidateError {
 	}
 	if terminology.GetAuditChangeTypeName(terminology.AuditChangeType(a.ChangeType.DefiningCode.CodeString)) != a.ChangeType.Value {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          AUDIT_DETAILS_MODEL_NAME,
+			Model:          AUDIT_DETAILS_TYPE,
 			Path:           attrPath,
 			Message:        "change_type value does not match code",
 			Recommendation: "Provide a matching change_type value for the given code",

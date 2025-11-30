@@ -7,13 +7,13 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const ACTION_MODEL_NAME string = "ACTION"
+const ACTION_TYPE string = "ACTION"
 
 type ACTION struct {
 	Type_               utils.Optional[string]              `json:"_type,omitzero"`
-	Name                X_DV_TEXT                           `json:"name"`
+	Name                DvTextUnion                         `json:"name"`
 	ArchetypeNodeID     string                              `json:"archetype_node_id"`
-	UID                 utils.Optional[X_UID_BASED_ID]      `json:"uid,omitzero"`
+	UID                 utils.Optional[UIDBasedIDUnion]     `json:"uid,omitzero"`
 	Links               utils.Optional[[]LINK]              `json:"links,omitzero"`
 	ArchetypeDetails    utils.Optional[ARCHETYPED]          `json:"archetype_details,omitzero"`
 	FeederAudit         utils.Optional[FEEDER_AUDIT]        `json:"feeder_audit,omitzero"`
@@ -21,24 +21,18 @@ type ACTION struct {
 	Encoding            CODE_PHRASE                         `json:"encoding"`
 	OtherParticipations utils.Optional[[]PARTICIPATION]     `json:"other_participations,omitzero"`
 	WorkflowID          utils.Optional[OBJECT_REF]          `json:"workflow_id,omitzero"`
-	Subject             X_PARTY_PROXY                       `json:"subject"`
-	Provider            utils.Optional[X_PARTY_PROXY]       `json:"provider,omitzero"`
-	Protocol            utils.Optional[X_ITEM_STRUCTURE]    `json:"protocol,omitzero"`
+	Subject             PartyProxyUnion                     `json:"subject"`
+	Provider            utils.Optional[PartyProxyUnion]     `json:"provider,omitzero"`
+	Protocol            utils.Optional[ItemStructureUnion]  `json:"protocol,omitzero"`
 	GuidelineID         utils.Optional[OBJECT_REF]          `json:"guideline_id,omitzero"`
 	Time                DV_DATE_TIME                        `json:"time"`
 	IsmTransition       ISM_TRANSITION                      `json:"ism_transition"`
 	InstructionDetails  utils.Optional[INSTRUCTION_DETAILS] `json:"instruction_details,omitzero"`
-	Description         X_ITEM_STRUCTURE                    `json:"description"`
-}
-
-func (a *ACTION) isContentItemModel() {}
-
-func (a *ACTION) HasModelName() bool {
-	return a.Type_.E
+	Description         ItemStructureUnion                  `json:"description"`
 }
 
 func (a *ACTION) SetModelName() {
-	a.Type_ = utils.Some(ACTION_MODEL_NAME)
+	a.Type_ = utils.Some(ACTION_TYPE)
 	a.Name.SetModelName()
 	if a.UID.E {
 		a.UID.V.SetModelName()
@@ -86,13 +80,13 @@ func (a *ACTION) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if a.Type_.E && a.Type_.V != ACTION_MODEL_NAME {
+	if a.Type_.E && a.Type_.V != ACTION_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ACTION_MODEL_NAME,
+			Model:          ACTION_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + ACTION_MODEL_NAME,
-			Recommendation: "Set _type to " + ACTION_MODEL_NAME,
+			Message:        "_type must be " + ACTION_TYPE,
+			Recommendation: "Set _type to " + ACTION_TYPE,
 		})
 	}
 

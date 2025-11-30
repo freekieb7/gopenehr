@@ -8,7 +8,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const DV_DURATION_MODEL_NAME string = "DV_DURATION"
+const DV_DURATION_TYPE string = "DV_DURATION"
 
 type DV_DURATION struct {
 	Type_                utils.Optional[string]            `json:"_type,omitzero"`
@@ -21,14 +21,8 @@ type DV_DURATION struct {
 	Value                string                            `json:"value"`
 }
 
-func (d *DV_DURATION) isDataValueModel() {}
-
-func (d *DV_DURATION) HasModelName() bool {
-	return d.Type_.E
-}
-
 func (d *DV_DURATION) SetModelName() {
-	d.Type_ = utils.Some(DV_DURATION_MODEL_NAME)
+	d.Type_ = utils.Some(DV_DURATION_TYPE)
 	if d.NormalStatus.E {
 		d.NormalStatus.V.SetModelName()
 	}
@@ -47,13 +41,13 @@ func (d *DV_DURATION) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.E && d.Type_.V != DV_DURATION_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_DURATION_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_DURATION_MODEL_NAME,
+			Model:          DV_DURATION_TYPE,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_DURATION_MODEL_NAME, d.Type_.V),
-			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", DV_DURATION_MODEL_NAME),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_DURATION_TYPE, d.Type_.V),
+			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", DV_DURATION_TYPE),
 		})
 	}
 
@@ -84,9 +78,9 @@ func (d *DV_DURATION) Validate(path string) util.ValidateError {
 		isValid := slices.Contains(validValues, d.MagnitudeStatus.V)
 		if !isValid {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          DV_DURATION_MODEL_NAME,
+				Model:          DV_DURATION_TYPE,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid %s magnitude_status field: %s", DV_DURATION_MODEL_NAME, d.MagnitudeStatus.V),
+				Message:        fmt.Sprintf("invalid %s magnitude_status field: %s", DV_DURATION_TYPE, d.MagnitudeStatus.V),
 				Recommendation: "Ensure magnitude_status field is one of '<', '>', '<=', '>=', '=', '~'",
 			})
 		}
@@ -98,9 +92,9 @@ func (d *DV_DURATION) Validate(path string) util.ValidateError {
 		value := d.Accuracy.V
 		if value < 0 {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          DV_DURATION_MODEL_NAME,
+				Model:          DV_DURATION_TYPE,
 				Path:           attrPath,
-				Message:        fmt.Sprintf("invalid %s accuracy field: %f", DV_DURATION_MODEL_NAME, value),
+				Message:        fmt.Sprintf("invalid %s accuracy field: %f", DV_DURATION_TYPE, value),
 				Recommendation: "Ensure accuracy field is a non-negative number",
 			})
 		}

@@ -5,7 +5,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const ARCHETYPED_MODEL_NAME string = "ARCHETYPED"
+const ARCHETYPED_TYPE string = "ARCHETYPED"
 
 type ARCHETYPED struct {
 	Type_       utils.Optional[string]      `json:"_type,omitzero"`
@@ -15,7 +15,7 @@ type ARCHETYPED struct {
 }
 
 func (a *ARCHETYPED) SetModelName() {
-	a.Type_ = utils.Some(ARCHETYPED_MODEL_NAME)
+	a.Type_ = utils.Some(ARCHETYPED_TYPE)
 	a.ArchetypeID.SetModelName()
 	if a.TemplateID.E {
 		a.TemplateID.V.SetModelName()
@@ -27,10 +27,10 @@ func (a *ARCHETYPED) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if a.Type_.E && a.Type_.V != ARCHETYPED_MODEL_NAME {
+	if a.Type_.E && a.Type_.V != ARCHETYPED_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ARCHETYPED_MODEL_NAME,
+			Model:          ARCHETYPED_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
 			Recommendation: "Ensure _type field is set to ARCHETYPED",
@@ -51,7 +51,7 @@ func (a *ARCHETYPED) Validate(path string) util.ValidateError {
 	if a.RMVersion == "" {
 		attrPath = path + ".rm_version"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ARCHETYPED_MODEL_NAME,
+			Model:          ARCHETYPED_TYPE,
 			Path:           attrPath,
 			Message:        "rm_version field cannot be empty",
 			Recommendation: "Ensure rm_version field is not empty",

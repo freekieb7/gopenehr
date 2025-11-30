@@ -5,18 +5,18 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const PARTICIPATION_MODEL_NAME string = "PARTICIPATION"
+const PARTICIPATION_TYPE string = "PARTICIPATION"
 
 type PARTICIPATION struct {
 	Type_     utils.Optional[string]        `json:"_type,omitzero"`
-	Function  X_DV_TEXT                     `json:"function"`
+	Function  DvTextUnion                   `json:"function"`
 	Mode      utils.Optional[DV_CODED_TEXT] `json:"mode,omitzero"`
-	Performer X_PARTY_PROXY                 `json:"performer"`
+	Performer PartyProxyUnion               `json:"performer"`
 	Time      utils.Optional[DV_INTERVAL]   `json:"time,omitzero"`
 }
 
 func (p *PARTICIPATION) SetModelName() {
-	p.Type_ = utils.Some(PARTICIPATION_MODEL_NAME)
+	p.Type_ = utils.Some(PARTICIPATION_TYPE)
 	p.Function.SetModelName()
 	if p.Mode.E {
 		p.Mode.V.SetModelName()
@@ -32,13 +32,13 @@ func (p *PARTICIPATION) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if p.Type_.E && p.Type_.V != PARTICIPATION_MODEL_NAME {
+	if p.Type_.E && p.Type_.V != PARTICIPATION_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          PARTICIPATION_MODEL_NAME,
+			Model:          PARTICIPATION_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + PARTICIPATION_MODEL_NAME,
-			Recommendation: "Set _type to " + PARTICIPATION_MODEL_NAME,
+			Message:        "_type must be " + PARTICIPATION_TYPE,
+			Recommendation: "Set _type to " + PARTICIPATION_TYPE,
 		})
 	}
 

@@ -7,21 +7,21 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const ADDRESS_MODEL_NAME string = "ADDRESS"
+const ADDRESS_TYPE string = "ADDRESS"
 
 type ADDRESS struct {
-	Type_            utils.Optional[string]         `json:"_type,omitzero"`
-	Name             X_DV_TEXT                      `json:"name"`
-	ArchetypeNodeID  string                         `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID] `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]         `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]     `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]   `json:"feeder_audit,omitzero"`
-	Details          X_ITEM_STRUCTURE               `json:"details"`
+	Type_            utils.Optional[string]          `json:"_type,omitzero"`
+	Name             DvTextUnion                     `json:"name"`
+	ArchetypeNodeID  string                          `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion] `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]          `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]      `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]    `json:"feeder_audit,omitzero"`
+	Details          ItemStructureUnion              `json:"details"`
 }
 
 func (a *ADDRESS) SetModelName() {
-	a.Type_ = utils.Some(ADDRESS_MODEL_NAME)
+	a.Type_ = utils.Some(ADDRESS_TYPE)
 	a.Name.SetModelName()
 	if a.UID.E {
 		a.UID.V.SetModelName()
@@ -45,13 +45,13 @@ func (a *ADDRESS) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if a.Type_.E && a.Type_.V != ADDRESS_MODEL_NAME {
+	if a.Type_.E && a.Type_.V != ADDRESS_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ADDRESS_MODEL_NAME,
+			Model:          ADDRESS_TYPE,
 			Path:           attrPath,
-			Message:        "invalid " + ADDRESS_MODEL_NAME + " _type field: " + a.Type_.V,
-			Recommendation: "Ensure _type field is set to '" + ADDRESS_MODEL_NAME + "'",
+			Message:        "invalid " + ADDRESS_TYPE + " _type field: " + a.Type_.V,
+			Recommendation: "Ensure _type field is set to '" + ADDRESS_TYPE + "'",
 		})
 	}
 

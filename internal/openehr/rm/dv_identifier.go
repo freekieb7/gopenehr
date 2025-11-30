@@ -5,7 +5,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const DV_IDENTIFIER_MODEL_NAME string = "DV_IDENTIFIER"
+const DV_IDENTIFIER_TYPE string = "DV_IDENTIFIER"
 
 type DV_IDENTIFIER struct {
 	Type_    utils.Optional[string] `json:"_type,omitzero"`
@@ -15,14 +15,8 @@ type DV_IDENTIFIER struct {
 	Type     utils.Optional[string] `json:"type,omitzero"`
 }
 
-func (d *DV_IDENTIFIER) isDataValueModel() {}
-
-func (d *DV_IDENTIFIER) HasModelName() bool {
-	return d.Type_.E
-}
-
 func (d *DV_IDENTIFIER) SetModelName() {
-	d.Type_ = utils.Some(DV_IDENTIFIER_MODEL_NAME)
+	d.Type_ = utils.Some(DV_IDENTIFIER_TYPE)
 }
 
 func (d *DV_IDENTIFIER) Validate(path string) util.ValidateError {
@@ -30,10 +24,10 @@ func (d *DV_IDENTIFIER) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.E && d.Type_.V != DV_IDENTIFIER_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_IDENTIFIER_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_IDENTIFIER_MODEL_NAME,
+			Model:          DV_IDENTIFIER_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
 			Recommendation: "Ensure _type field is set to DV_IDENTIFIER",
@@ -44,7 +38,7 @@ func (d *DV_IDENTIFIER) Validate(path string) util.ValidateError {
 	attrPath = path + ".id"
 	if d.ID == "" {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_IDENTIFIER_MODEL_NAME,
+			Model:          DV_IDENTIFIER_TYPE,
 			Path:           attrPath,
 			Message:        "id field cannot be empty",
 			Recommendation: "Ensure id field is not empty",

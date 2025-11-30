@@ -7,27 +7,21 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const ITEM_TREE_MODEL_NAME string = "ITEM_TREE"
+const ITEM_TREE_TYPE string = "ITEM_TREE"
 
 type ITEM_TREE struct {
-	Type_            utils.Optional[string]         `json:"_type,omitzero"`
-	Name             X_DV_TEXT                      `json:"name"`
-	ArchetypeNodeID  string                         `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID] `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]         `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]     `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]   `json:"feeder_audit,omitzero"`
-	Items            utils.Optional[[]X_ITEM]       `json:"items,omitzero"`
-}
-
-func (i *ITEM_TREE) isItemStructureModel() {}
-
-func (i *ITEM_TREE) HasModelName() bool {
-	return i.Type_.E
+	Type_            utils.Optional[string]          `json:"_type,omitzero"`
+	Name             DvTextUnion                     `json:"name"`
+	ArchetypeNodeID  string                          `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion] `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]          `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]      `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]    `json:"feeder_audit,omitzero"`
+	Items            utils.Optional[[]ItemUnion]     `json:"items,omitzero"`
 }
 
 func (i *ITEM_TREE) SetModelName() {
-	i.Type_ = utils.Some(ITEM_TREE_MODEL_NAME)
+	i.Type_ = utils.Some(ITEM_TREE_TYPE)
 	i.Name.SetModelName()
 	if i.UID.E {
 		i.UID.V.SetModelName()
@@ -55,13 +49,13 @@ func (i *ITEM_TREE) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if i.Type_.E && i.Type_.V != ITEM_TREE_MODEL_NAME {
+	if i.Type_.E && i.Type_.V != ITEM_TREE_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ITEM_TREE_MODEL_NAME,
+			Model:          ITEM_TREE_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
-			Recommendation: "Ensure _type field is set to " + ITEM_TREE_MODEL_NAME,
+			Recommendation: "Ensure _type field is set to " + ITEM_TREE_TYPE,
 		})
 	}
 

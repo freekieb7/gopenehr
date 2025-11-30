@@ -5,22 +5,18 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const ISM_TRANSITION_MODEL_NAME string = "ISM_TRANSITION"
+const ISM_TRANSITION_TYPE string = "ISM_TRANSITION"
 
 type ISM_TRANSITION struct {
 	Type_        utils.Optional[string]        `json:"_type,omitzero"`
 	CurrentState DV_CODED_TEXT                 `json:"current_state"`
 	Transition   utils.Optional[DV_CODED_TEXT] `json:"transition,omitzero"`
 	CareflowStep utils.Optional[DV_CODED_TEXT] `json:"careflow_step,omitzero"`
-	Reason       utils.Optional[X_DV_TEXT]     `json:"reason,omitzero"`
-}
-
-func (i *ISM_TRANSITION) HasModelName() bool {
-	return i.Type_.E
+	Reason       utils.Optional[DvTextUnion]   `json:"reason,omitzero"`
 }
 
 func (i *ISM_TRANSITION) SetModelName() {
-	i.Type_ = utils.Some(ISM_TRANSITION_MODEL_NAME)
+	i.Type_ = utils.Some(ISM_TRANSITION_TYPE)
 	i.CurrentState.SetModelName()
 	if i.Transition.E {
 		i.Transition.V.SetModelName()
@@ -38,13 +34,13 @@ func (i *ISM_TRANSITION) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if i.Type_.E && i.Type_.V != ISM_TRANSITION_MODEL_NAME {
+	if i.Type_.E && i.Type_.V != ISM_TRANSITION_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ISM_TRANSITION_MODEL_NAME,
+			Model:          ISM_TRANSITION_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + ISM_TRANSITION_MODEL_NAME,
-			Recommendation: "Set _type to " + ISM_TRANSITION_MODEL_NAME,
+			Message:        "_type must be " + ISM_TRANSITION_TYPE,
+			Recommendation: "Set _type to " + ISM_TRANSITION_TYPE,
 		})
 	}
 

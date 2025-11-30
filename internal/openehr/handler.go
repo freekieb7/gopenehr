@@ -509,7 +509,7 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentEHRStatus.UID.V.ValueAsString() != ifMatch {
+	if currentEHRStatus.UID.V.ObjectVersionID().Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "EHR Status has been modified since the provided version",
@@ -563,13 +563,13 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	updatedEHRStatusID := updatedEHRStatus.UID.V.ValueAsString()
+	updatedEHRStatusID := updatedEHRStatus.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeEHRStatusUpdated, map[string]any{
 		"ehr_id":              ehrID,
-		"prev_ehr_status_uid": currentEHRStatus.UID.V.ValueAsString(),
+		"prev_ehr_status_uid": currentEHRStatus.UID.V.ObjectVersionID().Value,
 		"curr_ehr_status_uid": updatedEHRStatusID,
 	})
 
@@ -869,10 +869,10 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 
 	h.WebhookSink.Enqueue(webhook.EventTypeCompositionCreated, map[string]any{
 		"ehr_id":          ehrID,
-		"composition_uid": composition.UID.V.ValueAsString(),
+		"composition_uid": composition.UID.V.ObjectVersionID().Value,
 	})
 
-	compositionID := composition.UID.V.ValueAsString()
+	compositionID := composition.UID.V.ObjectVersionID().Value
 	c.Set("ETag", "\""+compositionID+"\"")
 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/ehr/"+ehrID.String()+"/composition/"+compositionID)
 
@@ -966,8 +966,16 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 		return err
 	}
 
-	versionedCompositionID := strings.Split(uidBasedID, "::")[0]
-	currentComposition, err := h.OpenEHRService.GetComposition(ctx, ehrID, versionedCompositionID)
+	versionedCompositionID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusBadRequest,
+			Message: "Invalid UID format",
+			Status:  "bad_request",
+		})
+	}
+
+	currentComposition, err := h.OpenEHRService.GetCurrentCompositionByVersionedCompositionID(ctx, ehrID, versionedCompositionID)
 	if err != nil {
 		if err == ErrCompositionNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -984,7 +992,7 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentComposition.UID.V.ValueAsString() != ifMatch {
+	if currentComposition.UID.V.ObjectVersionID().Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Composition has been modified since the provided version",
@@ -997,7 +1005,13 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 		return err
 	}
 
-	updatedComposition, err := h.OpenEHRService.UpdateComposition(ctx, ehrID, composition)
+	if !composition.UID.E {
+		composition.UID = utils.Some(rm.UIDBasedIDFromHierObjectID(&rm.HIER_OBJECT_ID{
+			Value: versionedCompositionID.String(),
+		}))
+	}
+
+	updatedComposition, err := h.OpenEHRService.UpdateComposition(ctx, ehrID, versionedCompositionID, composition)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1052,13 +1066,13 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	updatedCompositionID := updatedComposition.UID.V.ValueAsString()
+	updatedCompositionID := updatedComposition.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeCompositionUpdated, map[string]any{
 		"ehr_id":               ehrID,
-		"prev_composition_uid": currentComposition.UID.V.ValueAsString(),
+		"prev_composition_uid": currentComposition.UID.V.ObjectVersionID().Value,
 		"curr_composition_uid": updatedCompositionID,
 	})
 
@@ -1095,8 +1109,17 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["uid_based_id"] = uidBasedID
 
-	versionedCompositionID := strings.Split(uidBasedID, "::")[0]
-	currentComposition, err := h.OpenEHRService.GetComposition(ctx, ehrID, versionedCompositionID)
+	versionedCompositionID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+	if err != nil {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusBadRequest,
+			Message: "Invalid UID format",
+			Status:  "bad_request",
+		})
+	}
+
+	// Check matching latest composition version
+	currentComposition, err := h.OpenEHRService.GetCurrentCompositionByVersionedCompositionID(ctx, ehrID, versionedCompositionID)
 	if err != nil {
 		if err == ErrCompositionNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1113,7 +1136,7 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentComposition.UID.V.ValueAsString() != uidBasedID {
+	if currentComposition.UID.V.ObjectVersionID().Value != uidBasedID {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Composition has been modified since the provided version",
@@ -1121,7 +1144,7 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.OpenEHRService.DeleteComposition(ctx, ehrID, currentComposition.UID.V.UUID()); err != nil {
+	if err := h.OpenEHRService.DeleteComposition(ctx, ehrID, versionedCompositionID); err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
@@ -1150,7 +1173,7 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 
 	h.WebhookSink.Enqueue(webhook.EventTypeCompositionDeleted, map[string]any{
 		"ehr_id":          ehrID,
-		"composition_uid": currentComposition.UID.V.ValueAsString(),
+		"composition_uid": currentComposition.UID.V.ObjectVersionID().Value,
 	})
 
 	c.Status(fiber.StatusNoContent)
@@ -1427,7 +1450,7 @@ func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	directoryID := directory.UID.V.ValueAsString()
+	directoryID := directory.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
@@ -1508,7 +1531,7 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentDirectory.UID.V.ValueAsString() != ifMatch {
+	if currentDirectory.UID.V.ObjectVersionID().Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Directory has been modified since the provided version",
@@ -1558,12 +1581,12 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	updatedDirectoryID := updatedDirectory.UID.V.ValueAsString()
+	updatedDirectoryID := updatedDirectory.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeDirectoryUpdated, map[string]any{
-		"prev_directory_id": currentDirectory.UID.V.ValueAsString(),
+		"prev_directory_id": currentDirectory.UID.V.ObjectVersionID().Value,
 		"curr_directory_id": updatedDirectoryID,
 	})
 
@@ -1624,7 +1647,7 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentDirectory.UID.V.ValueAsString() != ifMatch {
+	if currentDirectory.UID.V.ObjectVersionID().Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Directory has been modified since the provided version",
@@ -1660,7 +1683,7 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeDirectoryDeleted, map[string]any{
-		"directory_id": currentDirectory.UID.V.ValueAsString(),
+		"directory_id": currentDirectory.UID.V.ObjectVersionID().Value,
 	})
 
 	c.Status(fiber.StatusNoContent)
@@ -1920,7 +1943,7 @@ func (h *Handler) CreateAgent(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	createdAgentID := createdAgent.UID.V.ValueAsString()
+	createdAgentID := createdAgent.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
@@ -2068,7 +2091,7 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentAgent.UID.V.ValueAsString() != ifMatch {
+	if currentAgent.UID.V.ObjectVersionID().Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Agent has been modified since the provided version",
@@ -2116,12 +2139,12 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	updatedAgentID := updatedAgent.UID.V.ValueAsString()
+	updatedAgentID := updatedAgent.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeAgentUpdated, map[string]any{
-		"prev_agent_uid": currentAgent.UID.V.ValueAsString(),
+		"prev_agent_uid": currentAgent.UID.V.ObjectVersionID().Value,
 		"curr_agent_uid": updatedAgentID,
 	})
 
@@ -2187,7 +2210,7 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentAgent.UID.V.ValueAsString() != uidBasedID {
+	if currentAgent.UID.V.ObjectVersionID().Value != uidBasedID {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Agent has been modified since the provided version",
@@ -2263,7 +2286,7 @@ func (h *Handler) CreateGroup(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	createdGroupID := createdGroup.UID.V.ValueAsString()
+	createdGroupID := createdGroup.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
@@ -2410,7 +2433,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentGroup.UID.V.ValueAsString() != ifMatch {
+	if currentGroup.UID.V.ObjectVersionID().Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Group has been modified since the provided version",
@@ -2458,12 +2481,12 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	updatedGroupID := updatedGroup.UID.V.ValueAsString()
+	updatedGroupID := updatedGroup.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeGroupUpdated, map[string]any{
-		"prev_group_uid": currentGroup.UID.V.ValueAsString(),
+		"prev_group_uid": currentGroup.UID.V.ObjectVersionID().Value,
 		"curr_group_uid": updatedGroupID,
 	})
 
@@ -2528,7 +2551,7 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentGroup.UID.V.ValueAsString() != versionUID {
+	if currentGroup.UID.V.ObjectVersionID().Value != versionUID {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Group has been modified since the provided version",
@@ -2609,7 +2632,7 @@ func (h *Handler) CreatePerson(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	createdPersonID := createdPerson.UID.V.ValueAsString()
+	createdPersonID := createdPerson.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
@@ -2755,7 +2778,7 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentPerson.UID.V.ValueAsString() != ifMatch {
+	if currentPerson.UID.V.ObjectVersionID().Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Person has been modified since the provided version",
@@ -2803,12 +2826,12 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	updatedPersonID := updatedPerson.UID.V.ValueAsString()
+	updatedPersonID := updatedPerson.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypePersonUpdated, map[string]any{
-		"prev_person_uid": currentPerson.UID.V.ValueAsString(),
+		"prev_person_uid": currentPerson.UID.V.ObjectVersionID().Value,
 		"curr_person_uid": updatedPersonID,
 	})
 
@@ -2872,7 +2895,7 @@ func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentPerson.UID.V.ValueAsString() != versionID {
+	if currentPerson.UID.V.ObjectVersionID().Value != versionID {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Person has been modified since the provided version",
@@ -2953,7 +2976,7 @@ func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	createdOrganisationID := createdOrganisation.UID.V.ValueAsString()
+	createdOrganisationID := createdOrganisation.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
@@ -3100,7 +3123,7 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentOrganisation.UID.V.ValueAsString() != ifMatch {
+	if currentOrganisation.UID.V.ObjectVersionID().Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Organisation has been modified since the provided version",
@@ -3148,12 +3171,12 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	updatedOrganisationID := updatedOrganisation.UID.V.ValueAsString()
+	updatedOrganisationID := updatedOrganisation.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeOrganisationUpdated, map[string]any{
-		"prev_organisation_uid": currentOrganisation.UID.V.ValueAsString(),
+		"prev_organisation_uid": currentOrganisation.UID.V.ObjectVersionID().Value,
 		"curr_organisation_uid": updatedOrganisationID,
 	})
 
@@ -3218,7 +3241,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentOrganisation.UID.V.ValueAsString() != uidBasedID {
+	if currentOrganisation.UID.V.ObjectVersionID().Value != uidBasedID {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Organisation has been modified since the provided version",
@@ -3294,7 +3317,7 @@ func (h *Handler) CreateRole(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	createdRoleID := createdRole.UID.V.ValueAsString()
+	createdRoleID := createdRole.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
@@ -3439,7 +3462,7 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 		})
 	}
 
-	if currentRole.UID.V.ValueAsString() != ifMatch {
+	if currentRole.UID.V.ObjectVersionID().Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Role has been modified since the provided version",
@@ -3482,12 +3505,12 @@ func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	updatedRoleID := updatedRole.UID.V.ValueAsString()
+	updatedRoleID := updatedRole.UID.V.ObjectVersionID().Value
 
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeRoleUpdated, map[string]any{
-		"prev_role_uid": currentRole.UID.V.ValueAsString(),
+		"prev_role_uid": currentRole.UID.V.ObjectVersionID().Value,
 		"curr_role_uid": updatedRoleID,
 	})
 
@@ -3553,7 +3576,7 @@ func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentRole.UID.V.ValueAsString() != uidBasedID {
+	if currentRole.UID.V.ObjectVersionID().Value != uidBasedID {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Role has been modified since the provided version",

@@ -2,56 +2,55 @@ package rm
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
-	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const ITEM_STRUCTURE_MODEL_NAME string = "ITEM_STRUCTURE"
+const ITEM_STRUCTURE_TYPE string = "ITEM_STRUCTURE"
 
-// Abstract
-type ITEM_STRUCTURE struct {
-	Type_            utils.Optional[string]         `json:"_type,omitzero"`
-	Name             X_DV_TEXT                      `json:"name"`
-	ArchetypeNodeID  string                         `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID] `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]         `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]     `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[*FEEDER_AUDIT]  `json:"feeder_audit,omitzero"`
+type ItemStructureKind int
+
+const (
+	ItemStructureKind_Unknown ItemStructureKind = iota
+	ItemStructureKind_ITEM_SINGLE
+	ItemStructureKind_ITEM_LIST
+	ItemStructureKind_ITEM_TABLE
+	ItemStructureKind_ITEM_TREE
+)
+
+type ItemStructureUnion struct {
+	Kind  ItemStructureKind
+	Value any
 }
 
-func (i ITEM_STRUCTURE) MarshalJSON() ([]byte, error) {
-	return nil, fmt.Errorf("cannot marshal abstract ITEM_STRUCTURE type")
+func (i *ItemStructureUnion) SetModelName() {
+	switch i.Kind {
+	case ItemStructureKind_ITEM_SINGLE:
+		i.Value.(*ITEM_SINGLE).SetModelName()
+	case ItemStructureKind_ITEM_LIST:
+		i.Value.(*ITEM_LIST).SetModelName()
+	case ItemStructureKind_ITEM_TABLE:
+		i.Value.(*ITEM_TABLE).SetModelName()
+	case ItemStructureKind_ITEM_TREE:
+		i.Value.(*ITEM_TREE).SetModelName()
+	}
 }
 
-func (i *ITEM_STRUCTURE) UnmarshalJSON(data []byte) error {
-	return fmt.Errorf("cannot unmarshal abstract ITEM_STRUCTURE type")
-}
-
-// ======== Union of ITEM_STRUCTURE subtypes ========
-
-type ItemStructureModel interface {
-	isItemStructureModel()
-	HasModelName() bool
-	SetModelName()
-	Validate(path string) util.ValidateError
-}
-
-type X_ITEM_STRUCTURE struct {
-	Value ItemStructureModel
-}
-
-func (x *X_ITEM_STRUCTURE) SetModelName() {
-	x.Value.SetModelName()
-}
-
-func (x *X_ITEM_STRUCTURE) Validate(path string) util.ValidateError {
-	if x.Value == nil {
+func (x *ItemStructureUnion) Validate(path string) util.ValidateError {
+	switch x.Kind {
+	case ItemStructureKind_ITEM_SINGLE:
+		return x.Value.(*ITEM_SINGLE).Validate(path)
+	case ItemStructureKind_ITEM_LIST:
+		return x.Value.(*ITEM_LIST).Validate(path)
+	case ItemStructureKind_ITEM_TABLE:
+		return x.Value.(*ITEM_TABLE).Validate(path)
+	case ItemStructureKind_ITEM_TREE:
+		return x.Value.(*ITEM_TREE).Validate(path)
+	default:
 		return util.ValidateError{
 			Errs: []util.ValidationError{
 				{
-					Model:          ITEM_STRUCTURE_MODEL_NAME,
+					Model:          ITEM_STRUCTURE_TYPE,
 					Path:           path,
 					Message:        "value is not known ITEM_STRUCTURE subtype",
 					Recommendation: "Ensure value is properly set",
@@ -59,58 +58,31 @@ func (x *X_ITEM_STRUCTURE) Validate(path string) util.ValidateError {
 			},
 		}
 	}
-
-	var validateErr util.ValidateError
-	var attrPath string
-
-	// Abstract model requires _type to be defined
-	if !x.Value.HasModelName() {
-		attrPath = path + "._type"
-		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ITEM_STRUCTURE_MODEL_NAME,
-			Path:           attrPath,
-			Message:        "empty _type field",
-			Recommendation: "Ensure _type field is defined",
-		})
-	}
-
-	validateErr.Errs = append(validateErr.Errs, x.Value.Validate(path).Errs...)
-
-	return validateErr
 }
 
-func (x X_ITEM_STRUCTURE) MarshalJSON() ([]byte, error) {
-	return json.Marshal(x.Value)
+func (i ItemStructureUnion) MarshalJSON() ([]byte, error) {
+	return json.Marshal(i.Value)
 }
 
-func (x *X_ITEM_STRUCTURE) UnmarshalJSON(data []byte) error {
-	var extractor util.TypeExtractor
-	if err := json.Unmarshal(data, &extractor); err != nil {
-		return err
-	}
-
-	t := extractor.Type_
+func (i *ItemStructureUnion) UnmarshalJSON(data []byte) error {
+	t := util.UnsafeTypeFieldExtraction(data)
 	switch t {
-	case ITEM_SINGLE_MODEL_NAME:
-		x.Value = new(ITEM_SINGLE)
-	case ITEM_LIST_MODEL_NAME:
-		x.Value = new(ITEM_LIST)
-	case ITEM_TABLE_MODEL_NAME:
-		x.Value = new(ITEM_TABLE)
-	case ITEM_TREE_MODEL_NAME:
-		x.Value = new(ITEM_TREE)
+	case ITEM_SINGLE_TYPE:
+		i.Kind = ItemStructureKind_ITEM_SINGLE
+		i.Value = &ITEM_SINGLE{}
+	case ITEM_LIST_TYPE:
+		i.Kind = ItemStructureKind_ITEM_LIST
+		i.Value = &ITEM_LIST{}
+	case ITEM_TABLE_TYPE:
+		i.Kind = ItemStructureKind_ITEM_TABLE
+		i.Value = &ITEM_TABLE{}
+	case ITEM_TREE_TYPE:
+		i.Kind = ItemStructureKind_ITEM_TREE
+		i.Value = &ITEM_TREE{}
 	default:
-		return util.ValidateError{
-			Errs: []util.ValidationError{
-				{
-					Model:          ITEM_STRUCTURE_MODEL_NAME,
-					Path:           "$.**._type",
-					Message:        fmt.Sprintf("unexpected ITEM_STRUCTURE _type %s", t),
-					Recommendation: "Ensure _type field is one of the known ITEM_STRUCTURE subtypes",
-				},
-			},
-		}
+		i.Kind = ItemStructureKind_Unknown
+		return nil
 	}
 
-	return json.Unmarshal(data, x.Value)
+	return json.Unmarshal(data, i.Value)
 }

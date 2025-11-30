@@ -7,31 +7,25 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const HISTORY_MODEL_NAME string = "HISTORY"
-
-type HistoryEventModel interface {
-	isHistoryEventModel()
-	SetModelName()
-	Validate(path string) util.ValidateError
-}
+const HISTORY_TYPE string = "HISTORY"
 
 type HISTORY struct {
-	Type_            utils.Optional[string]           `json:"_type,omitzero"`
-	Name             X_DV_TEXT                        `json:"name"`
-	ArchetypeNodeID  string                           `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID]   `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]           `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]       `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]     `json:"feeder_audit,omitzero"`
-	Origin           DV_DATE_TIME                     `json:"origin"`
-	Period           utils.Optional[DV_DURATION]      `json:"period,omitzero"`
-	Duration         utils.Optional[DV_DURATION]      `json:"duration,omitzero"`
-	Summary          utils.Optional[X_ITEM_STRUCTURE] `json:"summary,omitzero"`
-	Events           utils.Optional[[]X_EVENT]        `json:"events,omitzero"`
+	Type_            utils.Optional[string]             `json:"_type,omitzero"`
+	Name             DvTextUnion                        `json:"name"`
+	ArchetypeNodeID  string                             `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion]    `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]             `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]         `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]       `json:"feeder_audit,omitzero"`
+	Origin           DV_DATE_TIME                       `json:"origin"`
+	Period           utils.Optional[DV_DURATION]        `json:"period,omitzero"`
+	Duration         utils.Optional[DV_DURATION]        `json:"duration,omitzero"`
+	Summary          utils.Optional[ItemStructureUnion] `json:"summary,omitzero"`
+	Events           utils.Optional[[]EventUnion]       `json:"events,omitzero"`
 }
 
 func (h *HISTORY) SetModelName() {
-	h.Type_ = utils.Some(HISTORY_MODEL_NAME)
+	h.Type_ = utils.Some(HISTORY_TYPE)
 	h.Name.SetModelName()
 	if h.UID.E {
 		h.UID.V.SetModelName()
@@ -69,13 +63,13 @@ func (h *HISTORY) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if h.Type_.E && h.Type_.V != HISTORY_MODEL_NAME {
+	if h.Type_.E && h.Type_.V != HISTORY_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          HISTORY_MODEL_NAME,
+			Model:          HISTORY_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + HISTORY_MODEL_NAME,
-			Recommendation: "Set _type to " + HISTORY_MODEL_NAME,
+			Message:        "_type must be " + HISTORY_TYPE,
+			Recommendation: "Set _type to " + HISTORY_TYPE,
 		})
 	}
 

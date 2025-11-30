@@ -7,26 +7,24 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const EHR_STATUS_MODEL_NAME string = "EHR_STATUS"
+const EHR_STATUS_TYPE string = "EHR_STATUS"
 
 type EHR_STATUS struct {
-	Type_            utils.Optional[string]           `json:"_type,omitzero"`
-	Name             X_DV_TEXT                        `json:"name"`
-	ArchetypeNodeID  string                           `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID]   `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]           `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]       `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]     `json:"feeder_audit,omitzero"`
-	Subject          PARTY_SELF                       `json:"subject"`
-	IsQueryable      bool                             `json:"is_queryable"`
-	IsModifiable     bool                             `json:"is_modifiable"`
-	OtherDetails     utils.Optional[X_ITEM_STRUCTURE] `json:"other_details,omitzero"`
+	Type_            utils.Optional[string]             `json:"_type,omitzero"`
+	Name             DvTextUnion                        `json:"name"`
+	ArchetypeNodeID  string                             `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion]    `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]             `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]         `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]       `json:"feeder_audit,omitzero"`
+	Subject          PARTY_SELF                         `json:"subject"`
+	IsQueryable      bool                               `json:"is_queryable"`
+	IsModifiable     bool                               `json:"is_modifiable"`
+	OtherDetails     utils.Optional[ItemStructureUnion] `json:"other_details,omitzero"`
 }
 
-func (e *EHR_STATUS) isVersionModel() {}
-
 func (e *EHR_STATUS) SetModelName() {
-	e.Type_ = utils.Some(EHR_STATUS_MODEL_NAME)
+	e.Type_ = utils.Some(EHR_STATUS_TYPE)
 	e.Name.SetModelName()
 	if e.UID.E {
 		e.UID.V.SetModelName()

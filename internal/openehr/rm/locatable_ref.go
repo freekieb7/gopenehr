@@ -5,22 +5,18 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const LOCATABLE_REF_MODEL_NAME string = "LOCATABLE_REF"
+const LOCATABLE_REF_TYPE string = "LOCATABLE_REF"
 
 type LOCATABLE_REF struct {
 	Type_     utils.Optional[string] `json:"_type,omitzero"`
 	Namespace string                 `json:"namespace"`
 	Type      string                 `json:"type"`
 	Path      utils.Optional[string] `json:"path,omitzero"`
-	ID        X_UID_BASED_ID         `json:"id"`
-}
-
-func (l *LOCATABLE_REF) HasModelName() bool {
-	return l.Type_.E
+	ID        UIDBasedIDUnion        `json:"id"`
 }
 
 func (l *LOCATABLE_REF) SetModelName() {
-	l.Type_ = utils.Some(LOCATABLE_REF_MODEL_NAME)
+	l.Type_ = utils.Some(LOCATABLE_REF_TYPE)
 	l.ID.SetModelName()
 }
 
@@ -29,13 +25,13 @@ func (l *LOCATABLE_REF) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if l.Type_.E && l.Type_.V != LOCATABLE_REF_MODEL_NAME {
+	if l.Type_.E && l.Type_.V != LOCATABLE_REF_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          LOCATABLE_REF_MODEL_NAME,
+			Model:          LOCATABLE_REF_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + LOCATABLE_REF_MODEL_NAME,
-			Recommendation: "Set _type to " + LOCATABLE_REF_MODEL_NAME,
+			Message:        "_type must be " + LOCATABLE_REF_TYPE,
+			Recommendation: "Set _type to " + LOCATABLE_REF_TYPE,
 		})
 	}
 

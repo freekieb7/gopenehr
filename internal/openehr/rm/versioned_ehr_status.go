@@ -5,7 +5,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const VERSIONED_EHR_STATUS_MODEL_NAME string = "VERSIONED_EHR_STATUS"
+const VERSIONED_EHR_STATUS_TYPE string = "VERSIONED_EHR_STATUS"
 
 type VERSIONED_EHR_STATUS struct {
 	Type_       utils.Optional[string] `json:"_type,omitzero"`
@@ -15,7 +15,7 @@ type VERSIONED_EHR_STATUS struct {
 }
 
 func (v *VERSIONED_EHR_STATUS) SetModelName() {
-	v.Type_ = utils.Some(VERSIONED_EHR_STATUS_MODEL_NAME)
+	v.Type_ = utils.Some(VERSIONED_EHR_STATUS_TYPE)
 	v.UID.SetModelName()
 	v.OwnerID.SetModelName()
 	v.TimeCreated.SetModelName()
@@ -26,13 +26,13 @@ func (v *VERSIONED_EHR_STATUS) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if v.Type_.E && v.Type_.V != VERSIONED_EHR_STATUS_MODEL_NAME {
+	if v.Type_.E && v.Type_.V != VERSIONED_EHR_STATUS_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          VERSIONED_EHR_STATUS_MODEL_NAME,
+			Model:          VERSIONED_EHR_STATUS_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
-			Recommendation: "Ensure _type field is set to " + VERSIONED_EHR_STATUS_MODEL_NAME,
+			Recommendation: "Ensure _type field is set to " + VERSIONED_EHR_STATUS_TYPE,
 		})
 	}
 

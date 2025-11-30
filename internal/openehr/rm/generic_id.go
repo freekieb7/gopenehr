@@ -7,7 +7,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const GENERIC_ID_MODEL_NAME string = "GENERIC_ID"
+const GENERIC_ID_TYPE string = "GENERIC_ID"
 
 type GENERIC_ID struct {
 	Type_  utils.Optional[string] `json:"_type,omitzero"`
@@ -15,18 +15,8 @@ type GENERIC_ID struct {
 	Scheme string                 `json:"scheme"`
 }
 
-func (g *GENERIC_ID) isObjectIDModel() {}
-
-func (g *GENERIC_ID) HasModelName() bool {
-	return g.Type_.E
-}
-
-func (g *GENERIC_ID) GetModelName() string {
-	return GENERIC_ID_MODEL_NAME
-}
-
 func (g *GENERIC_ID) SetModelName() {
-	g.Type_ = utils.Some(GENERIC_ID_MODEL_NAME)
+	g.Type_ = utils.Some(GENERIC_ID_TYPE)
 }
 
 func (g *GENERIC_ID) Validate(path string) util.ValidateError {
@@ -34,13 +24,13 @@ func (g *GENERIC_ID) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if g.Type_.E && g.Type_.V != GENERIC_ID_MODEL_NAME {
+	if g.Type_.E && g.Type_.V != GENERIC_ID_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          GENERIC_ID_MODEL_NAME,
+			Model:          GENERIC_ID_TYPE,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", GENERIC_ID_MODEL_NAME, g.Type_.V),
-			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", GENERIC_ID_MODEL_NAME),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", GENERIC_ID_TYPE, g.Type_.V),
+			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", GENERIC_ID_TYPE),
 		})
 	}
 
@@ -48,7 +38,7 @@ func (g *GENERIC_ID) Validate(path string) util.ValidateError {
 	if g.Value == "" {
 		attrPath = path + ".value"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          GENERIC_ID_MODEL_NAME,
+			Model:          GENERIC_ID_TYPE,
 			Path:           attrPath,
 			Message:        "value field cannot be empty",
 			Recommendation: "Ensure value field is not empty",
@@ -59,7 +49,7 @@ func (g *GENERIC_ID) Validate(path string) util.ValidateError {
 	if g.Scheme == "" {
 		attrPath = path + ".scheme"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          GENERIC_ID_MODEL_NAME,
+			Model:          GENERIC_ID_TYPE,
 			Path:           attrPath,
 			Message:        "scheme field cannot be empty",
 			Recommendation: "Ensure scheme field is not empty",

@@ -7,27 +7,21 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const GENERIC_ENTRY_MODEL_NAME string = "GENERIC_ENTRY"
+const GENERIC_ENTRY_TYPE string = "GENERIC_ENTRY"
 
 type GENERIC_ENTRY struct {
-	Type_            utils.Optional[string]         `json:"_type,omitzero"`
-	Name             X_DV_TEXT                      `json:"name"`
-	ArchetypeNodeID  string                         `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID] `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]         `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]     `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]   `json:"feeder_audit,omitzero"`
-	Data             X_ITEM                         `json:"data"`
-}
-
-func (g *GENERIC_ENTRY) isContentItemModel() {}
-
-func (g *GENERIC_ENTRY) HasModelName() bool {
-	return g.Type_.E
+	Type_            utils.Optional[string]          `json:"_type,omitzero"`
+	Name             DvTextUnion                     `json:"name"`
+	ArchetypeNodeID  string                          `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion] `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]          `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]      `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]    `json:"feeder_audit,omitzero"`
+	Data             ItemUnion                       `json:"data"`
 }
 
 func (g *GENERIC_ENTRY) SetModelName() {
-	g.Type_ = utils.Some(GENERIC_ENTRY_MODEL_NAME)
+	g.Type_ = utils.Some(GENERIC_ENTRY_TYPE)
 	g.Name.SetModelName()
 	if g.UID.E {
 		g.UID.V.SetModelName()
@@ -51,13 +45,13 @@ func (g *GENERIC_ENTRY) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if g.Type_.E && g.Type_.V != GENERIC_ENTRY_MODEL_NAME {
+	if g.Type_.E && g.Type_.V != GENERIC_ENTRY_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          GENERIC_ENTRY_MODEL_NAME,
+			Model:          GENERIC_ENTRY_TYPE,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", GENERIC_ENTRY_MODEL_NAME, g.Type_.V),
-			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", GENERIC_ENTRY_MODEL_NAME),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", GENERIC_ENTRY_TYPE, g.Type_.V),
+			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", GENERIC_ENTRY_TYPE),
 		})
 	}
 

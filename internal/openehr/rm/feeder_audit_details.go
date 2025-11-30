@@ -5,21 +5,21 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const FEEDER_AUDIT_DETAILS_MODEL_NAME string = "FEEDER_AUDIT_DETAILS"
+const FEEDER_AUDIT_DETAILS_TYPE string = "FEEDER_AUDIT_DETAILS"
 
 type FEEDER_AUDIT_DETAILS struct {
-	Type_        utils.Optional[string]           `json:"_type,omitzero"`
-	SystemID     string                           `json:"system_id"`
-	Location     utils.Optional[PARTY_IDENTIFIED] `json:"location,omitzero"`
-	Subject      utils.Optional[X_PARTY_PROXY]    `json:"subject,omitzero"`
-	Provider     utils.Optional[PARTY_IDENTIFIED] `json:"provider,omitzero"`
-	Time         utils.Optional[DV_DATE_TIME]     `json:"time,omitzero"`
-	VersionID    utils.Optional[string]           `json:"version_id,omitzero"`
-	OtherDetails utils.Optional[X_ITEM_STRUCTURE] `json:"other_details,omitzero"`
+	Type_        utils.Optional[string]             `json:"_type,omitzero"`
+	SystemID     string                             `json:"system_id"`
+	Location     utils.Optional[PARTY_IDENTIFIED]   `json:"location,omitzero"`
+	Subject      utils.Optional[PartyProxyUnion]    `json:"subject,omitzero"`
+	Provider     utils.Optional[PARTY_IDENTIFIED]   `json:"provider,omitzero"`
+	Time         utils.Optional[DV_DATE_TIME]       `json:"time,omitzero"`
+	VersionID    utils.Optional[string]             `json:"version_id,omitzero"`
+	OtherDetails utils.Optional[ItemStructureUnion] `json:"other_details,omitzero"`
 }
 
 func (f *FEEDER_AUDIT_DETAILS) SetModelName() {
-	f.Type_ = utils.Some(FEEDER_AUDIT_DETAILS_MODEL_NAME)
+	f.Type_ = utils.Some(FEEDER_AUDIT_DETAILS_TYPE)
 	if f.Location.E {
 		f.Location.V.SetModelName()
 	}
@@ -42,10 +42,10 @@ func (f *FEEDER_AUDIT_DETAILS) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if f.Type_.E && f.Type_.V != FEEDER_AUDIT_DETAILS_MODEL_NAME {
+	if f.Type_.E && f.Type_.V != FEEDER_AUDIT_DETAILS_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          FEEDER_AUDIT_DETAILS_MODEL_NAME,
+			Model:          FEEDER_AUDIT_DETAILS_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
 			Recommendation: "Ensure _type field is set to FEEDER_AUDIT_DETAILS",
@@ -56,7 +56,7 @@ func (f *FEEDER_AUDIT_DETAILS) Validate(path string) util.ValidateError {
 	attrPath = path + ".system_id"
 	if f.SystemID == "" {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          FEEDER_AUDIT_DETAILS_MODEL_NAME,
+			Model:          FEEDER_AUDIT_DETAILS_TYPE,
 			Path:           attrPath,
 			Message:        "system_id field cannot be empty",
 			Recommendation: "Ensure system_id field is not empty",

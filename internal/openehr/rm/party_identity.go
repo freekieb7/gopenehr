@@ -7,21 +7,21 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const PARTY_IDENTITY_MODEL_NAME string = "PARTY_IDENTITY"
+const PARTY_IDENTITY_TYPE string = "PARTY_IDENTITY"
 
 type PARTY_IDENTITY struct {
-	Type_            utils.Optional[string]         `json:"_type,omitzero"`
-	Name             X_DV_TEXT                      `json:"name"`
-	ArchetypeNodeID  string                         `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID] `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]         `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]     `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]   `json:"feeder_audit,omitzero"`
-	Details          X_ITEM_STRUCTURE               `json:"details"`
+	Type_            utils.Optional[string]          `json:"_type,omitzero"`
+	Name             DvTextUnion                     `json:"name"`
+	ArchetypeNodeID  string                          `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion] `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]          `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]      `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]    `json:"feeder_audit,omitzero"`
+	Details          ItemStructureUnion              `json:"details"`
 }
 
 func (p *PARTY_IDENTITY) SetModelName() {
-	p.Type_ = utils.Some(PARTY_IDENTITY_MODEL_NAME)
+	p.Type_ = utils.Some(PARTY_IDENTITY_TYPE)
 	p.Name.SetModelName()
 	if p.UID.E {
 		p.UID.V.SetModelName()
@@ -45,13 +45,13 @@ func (p *PARTY_IDENTITY) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if p.Type_.E && p.Type_.V != PARTY_IDENTITY_MODEL_NAME {
+	if p.Type_.E && p.Type_.V != PARTY_IDENTITY_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          PARTY_IDENTITY_MODEL_NAME,
+			Model:          PARTY_IDENTITY_TYPE,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", PARTY_IDENTITY_MODEL_NAME, p.Type_.V),
-			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", PARTY_IDENTITY_MODEL_NAME),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", PARTY_IDENTITY_TYPE, p.Type_.V),
+			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", PARTY_IDENTITY_TYPE),
 		})
 	}
 
@@ -63,7 +63,7 @@ func (p *PARTY_IDENTITY) Validate(path string) util.ValidateError {
 	attrPath = path + ".archetype_node_id"
 	if p.ArchetypeNodeID == "" {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          PARTY_IDENTITY_MODEL_NAME,
+			Model:          PARTY_IDENTITY_TYPE,
 			Path:           attrPath,
 			Message:        "archetype_node_id is required",
 			Recommendation: "Ensure archetype_node_id is set",

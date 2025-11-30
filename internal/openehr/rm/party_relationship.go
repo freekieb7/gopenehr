@@ -7,24 +7,24 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const PARTY_RELATIONSHIP_MODEL_NAME string = "PARTY_RELATIONSHIP"
+const PARTY_RELATIONSHIP_TYPE string = "PARTY_RELATIONSHIP"
 
 type PARTY_RELATIONSHIP struct {
-	Type_            utils.Optional[string]           `json:"_type,omitzero"`
-	Name             X_DV_TEXT                        `json:"name"`
-	ArchetypeNodeID  string                           `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID]   `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]           `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]       `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]     `json:"feeder_audit,omitzero"`
-	Details          utils.Optional[X_ITEM_STRUCTURE] `json:"details,omitzero"`
-	Target           PARTY_REF                        `json:"target"`
-	TimeValidity     utils.Optional[DV_INTERVAL]      `json:"time_validity,omitzero"`
-	Source           PARTY_REF                        `json:"source"`
+	Type_            utils.Optional[string]             `json:"_type,omitzero"`
+	Name             DvTextUnion                        `json:"name"`
+	ArchetypeNodeID  string                             `json:"archetype_node_id"`
+	UID              utils.Optional[PartyProxyUnion]    `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]             `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]         `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]       `json:"feeder_audit,omitzero"`
+	Details          utils.Optional[ItemStructureUnion] `json:"details,omitzero"`
+	Target           PARTY_REF                          `json:"target"`
+	TimeValidity     utils.Optional[DV_INTERVAL]        `json:"time_validity,omitzero"`
+	Source           PARTY_REF                          `json:"source"`
 }
 
 func (p *PARTY_RELATIONSHIP) SetModelName() {
-	p.Type_ = utils.Some(PARTY_RELATIONSHIP_MODEL_NAME)
+	p.Type_ = utils.Some(PARTY_RELATIONSHIP_TYPE)
 	p.Name.SetModelName()
 	if p.UID.E {
 		p.UID.V.SetModelName()
@@ -55,13 +55,13 @@ func (p *PARTY_RELATIONSHIP) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if p.Type_.E && p.Type_.V != PARTY_RELATIONSHIP_MODEL_NAME {
+	if p.Type_.E && p.Type_.V != PARTY_RELATIONSHIP_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          PARTY_RELATIONSHIP_MODEL_NAME,
+			Model:          PARTY_RELATIONSHIP_TYPE,
 			Path:           attrPath,
-			Message:        "invalid " + PARTY_RELATIONSHIP_MODEL_NAME + " _type field: " + p.Type_.V,
-			Recommendation: "Ensure _type field is set to '" + PARTY_RELATIONSHIP_MODEL_NAME + "'",
+			Message:        "invalid " + PARTY_RELATIONSHIP_TYPE + " _type field: " + p.Type_.V,
+			Recommendation: "Ensure _type field is set to '" + PARTY_RELATIONSHIP_TYPE + "'",
 		})
 	}
 
@@ -79,7 +79,7 @@ func (p *PARTY_RELATIONSHIP) Validate(path string) util.ValidateError {
 	attrPath = path + ".archetype_node_id"
 	if p.ArchetypeNodeID == "" {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          PARTY_RELATIONSHIP_MODEL_NAME,
+			Model:          PARTY_RELATIONSHIP_TYPE,
 			Path:           attrPath,
 			Message:        "archetype_node_id is required",
 			Recommendation: "Ensure archetype_node_id is set",

@@ -7,26 +7,24 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const ROLE_MODEL_NAME string = "ROLE"
+const ROLE_TYPE string = "ROLE"
 
 type ROLE struct {
-	Type_            utils.Optional[string]           `json:"_type,omitempty"`
-	Name             X_DV_TEXT                        `json:"name"`
-	ArchetypeNodeID  string                           `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID]   `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]           `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]       `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]     `json:"feeder_audit,omitzero"`
-	Details          utils.Optional[X_ITEM_STRUCTURE] `json:"details,omitzero"`
-	Target           PARTY_REF                        `json:"target"`
-	TimeValidity     utils.Optional[DV_INTERVAL]      `json:"time_validity,omitzero"`
-	Source           PARTY_REF                        `json:"source"`
+	Type_            utils.Optional[string]             `json:"_type,omitempty"`
+	Name             DvTextUnion                        `json:"name"`
+	ArchetypeNodeID  string                             `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion]    `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]             `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]         `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]       `json:"feeder_audit,omitzero"`
+	Details          utils.Optional[ItemStructureUnion] `json:"details,omitzero"`
+	Target           PARTY_REF                          `json:"target"`
+	TimeValidity     utils.Optional[DV_INTERVAL]        `json:"time_validity,omitzero"`
+	Source           PARTY_REF                          `json:"source"`
 }
 
-func (a *ROLE) isVersionModel() {}
-
 func (a *ROLE) SetModelName() {
-	a.Type_ = utils.Some(ROLE_MODEL_NAME)
+	a.Type_ = utils.Some(ROLE_TYPE)
 	a.Name.SetModelName()
 	if a.UID.E {
 		a.UID.V.SetModelName()
@@ -58,12 +56,12 @@ func (a *ROLE) Validate(path string) util.ValidateError {
 
 	// Validate _type
 	attrPath = path + "._type"
-	if a.Type_.E && a.Type_.V != ROLE_MODEL_NAME {
+	if a.Type_.E && a.Type_.V != ROLE_TYPE {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ROLE_MODEL_NAME,
+			Model:          ROLE_TYPE,
 			Path:           attrPath,
-			Message:        "invalid " + ROLE_MODEL_NAME + " _type field: " + a.Type_.V,
-			Recommendation: "Ensure _type field is set to '" + ROLE_MODEL_NAME + "'",
+			Message:        "invalid " + ROLE_TYPE + " _type field: " + a.Type_.V,
+			Recommendation: "Ensure _type field is set to '" + ROLE_TYPE + "'",
 		})
 	}
 
@@ -119,13 +117,4 @@ func (a *ROLE) Validate(path string) util.ValidateError {
 	validateErr.Errs = append(validateErr.Errs, a.Source.Validate(attrPath).Errs...)
 
 	return validateErr
-}
-
-func (a *ROLE) ObjectVersionID() OBJECT_VERSION_ID {
-	if a.UID.E {
-		if objVerID, ok := a.UID.V.Value.(*OBJECT_VERSION_ID); ok {
-			return *objVerID
-		}
-	}
-	return OBJECT_VERSION_ID{}
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const PARTY_RELATED_MODEL_NAME string = "PARTY_RELATED"
+const PARTY_RELATED_TYPE string = "PARTY_RELATED"
 
 type PARTY_RELATED struct {
 	Type_        utils.Optional[string]          `json:"_type,omitzero"`
@@ -17,14 +17,8 @@ type PARTY_RELATED struct {
 	Relationship DV_CODED_TEXT                   `json:"relationship"`
 }
 
-func (p *PARTY_RELATED) isPartyProxyModel() {}
-
-func (p *PARTY_RELATED) HasModelName() bool {
-	return p.Type_.E
-}
-
 func (p *PARTY_RELATED) SetModelName() {
-	p.Type_ = utils.Some(PARTY_RELATED_MODEL_NAME)
+	p.Type_ = utils.Some(PARTY_RELATED_TYPE)
 	if p.ExternalRef.E {
 		p.ExternalRef.V.SetModelName()
 	}
@@ -40,10 +34,10 @@ func (p *PARTY_RELATED) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if p.Type_.E && p.Type_.V != PARTY_RELATED_MODEL_NAME {
+	if p.Type_.E && p.Type_.V != PARTY_RELATED_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          PARTY_RELATED_MODEL_NAME,
+			Model:          PARTY_RELATED_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
 			Recommendation: "Ensure _type field is set to PARTY_RELATED",

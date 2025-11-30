@@ -7,27 +7,21 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const SECTION_MODEL_NAME string = "SECTION"
+const SECTION_TYPE string = "SECTION"
 
 type SECTION struct {
-	Type_            utils.Optional[string]           `json:"_type,omitzero"`
-	Name             X_DV_TEXT                        `json:"name"`
-	ArchetypeNodeID  string                           `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID]   `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]           `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]       `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]     `json:"feeder_audit,omitzero"`
-	Items            utils.Optional[[]X_CONTENT_ITEM] `json:"items,omitzero"`
-}
-
-func (s *SECTION) isContentItemModel() {}
-
-func (s *SECTION) HasModelName() bool {
-	return s.Type_.E
+	Type_            utils.Optional[string]             `json:"_type,omitzero"`
+	Name             DvTextUnion                        `json:"name"`
+	ArchetypeNodeID  string                             `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion]    `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]             `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]         `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]       `json:"feeder_audit,omitzero"`
+	Items            utils.Optional[[]ContentItemUnion] `json:"items,omitzero"`
 }
 
 func (s *SECTION) SetModelName() {
-	s.Type_ = utils.Some(SECTION_MODEL_NAME)
+	s.Type_ = utils.Some(SECTION_TYPE)
 	s.Name.SetModelName()
 	if s.UID.E {
 		s.UID.V.SetModelName()
@@ -55,13 +49,13 @@ func (s *SECTION) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if s.Type_.E && s.Type_.V != SECTION_MODEL_NAME {
+	if s.Type_.E && s.Type_.V != SECTION_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          SECTION_MODEL_NAME,
+			Model:          SECTION_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + SECTION_MODEL_NAME,
-			Recommendation: "Set _type to " + SECTION_MODEL_NAME,
+			Message:        "_type must be " + SECTION_TYPE,
+			Recommendation: "Set _type to " + SECTION_TYPE,
 		})
 	}
 

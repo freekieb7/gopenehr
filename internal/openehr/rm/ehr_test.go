@@ -19,23 +19,19 @@ func TestSetModelType(t *testing.T) {
 		},
 		EHRStatus: OBJECT_REF{
 			Namespace: config.NAMESPACE_LOCAL,
-			Type:      VERSIONED_EHR_STATUS_MODEL_NAME,
-			ID: X_OBJECT_ID{
-				Value: &HIER_OBJECT_ID{
-					Type_: utils.Some(HIER_OBJECT_ID_MODEL_NAME),
-					Value: uuid.NewString(),
-				},
-			},
+			Type:      VERSIONED_EHR_STATUS_TYPE,
+			ID: ObjectIDFromHierObjectID(HIER_OBJECT_ID{
+				Type_: utils.Some(HIER_OBJECT_ID_TYPE),
+				Value: uuid.NewString(),
+			}),
 		},
 		EHRAccess: OBJECT_REF{
 			Namespace: config.NAMESPACE_LOCAL,
-			Type:      VERSIONED_EHR_ACCESS_MODEL_NAME,
-			ID: X_OBJECT_ID{
-				Value: &HIER_OBJECT_ID{
-					Type_: utils.Some(HIER_OBJECT_ID_MODEL_NAME),
-					Value: uuid.NewString(),
-				},
-			},
+			Type:      VERSIONED_EHR_ACCESS_TYPE,
+			ID: ObjectIDFromHierObjectID(HIER_OBJECT_ID{
+				Type_: utils.Some(HIER_OBJECT_ID_TYPE),
+				Value: uuid.NewString(),
+			}),
 		},
 		TimeCreated: DV_DATE_TIME{
 			Value: time.Now().UTC().Format(time.RFC3339),
@@ -43,13 +39,13 @@ func TestSetModelType(t *testing.T) {
 	}
 	ehr.SetModelName()
 
-	if !ehr.EHRID.Type_.E || ehr.EHRID.Type_.V != HIER_OBJECT_ID_MODEL_NAME {
+	if !ehr.EHRID.Type_.E || ehr.EHRID.Type_.V != HIER_OBJECT_ID_TYPE {
 		t.Errorf("EHRID _type not set correctly, got: %v", ehr.EHRID.Type_)
 	}
-	if !ehr.EHRStatus.Type_.E || ehr.EHRStatus.Type_.V != OBJECT_REF_MODEL_NAME {
+	if !ehr.EHRStatus.Type_.E || ehr.EHRStatus.Type_.V != OBJECT_REF_TYPE {
 		t.Errorf("EHRStatus _type not set correctly, got: %v", ehr.EHRStatus.Type_)
 	}
-	if !ehr.EHRAccess.Type_.E || ehr.EHRAccess.Type_.V != OBJECT_REF_MODEL_NAME {
+	if !ehr.EHRAccess.Type_.E || ehr.EHRAccess.Type_.V != OBJECT_REF_TYPE {
 		t.Errorf("EHRAccess _type not set correctly, got: %v", ehr.EHRAccess.Type_)
 	}
 }
@@ -80,20 +76,20 @@ func TestValidateInvalidEHR(t *testing.T) {
 		EHRID: HIER_OBJECT_ID{Value: "invalid-uuid."},
 		EHRStatus: OBJECT_REF{
 			Namespace: "local",
-			Type:      "EHR_STATUS",
-			ID:        X_OBJECT_ID{Value: &HIER_OBJECT_ID{Value: "also-invalid-uuid"}},
+			Type:      EHR_STATUS_TYPE,
+			ID:        ObjectIDFromHierObjectID(HIER_OBJECT_ID{Value: "also-invalid-uuid"}),
 		},
 		EHRAccess: OBJECT_REF{
 			Namespace: "local",
-			Type:      "EHR_ACCESS",
-			ID:        X_OBJECT_ID{Value: &HIER_OBJECT_ID{Value: "yet-another-invalid-uuid"}},
+			Type:      EHR_ACCESS_TYPE,
+			ID:        ObjectIDFromHierObjectID(HIER_OBJECT_ID{Value: "yet-another-invalid-uuid"}),
 		},
 		TimeCreated: DV_DATE_TIME{Value: "2023-01-01T00:00:00Z"},
 	}
 
 	validateErr := ehr.Validate("$")
 	if len(validateErr.Errs) != 6 {
-		t.Errorf("Expected 5 validation errors, got %d", len(validateErr.Errs))
+		t.Errorf("Expected 6 validation errors, got %d", len(validateErr.Errs))
 		for _, err := range validateErr.Errs {
 			t.Logf("Validation error: %s", err.Message)
 		}

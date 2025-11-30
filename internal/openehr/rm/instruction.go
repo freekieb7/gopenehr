@@ -7,38 +7,32 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const INSTRUCTION_MODEL_NAME string = "INSTRUCTION"
+const INSTRUCTION_TYPE string = "INSTRUCTION"
 
 type INSTRUCTION struct {
-	Type_               utils.Optional[string]           `json:"_type,omitzero"`
-	Name                X_DV_TEXT                        `json:"name"`
-	ArchetypeNodeID     string                           `json:"archetype_node_id"`
-	UID                 utils.Optional[X_UID_BASED_ID]   `json:"uid,omitzero"`
-	Links               utils.Optional[[]LINK]           `json:"links,omitzero"`
-	ArchetypeDetails    utils.Optional[ARCHETYPED]       `json:"archetype_details,omitzero"`
-	FeederAudit         utils.Optional[FEEDER_AUDIT]     `json:"feeder_audit,omitzero"`
-	Language            CODE_PHRASE                      `json:"language"`
-	Encoding            CODE_PHRASE                      `json:"encoding"`
-	OtherParticipations utils.Optional[[]PARTICIPATION]  `json:"other_participations,omitzero"`
-	WorkflowID          utils.Optional[OBJECT_REF]       `json:"workflow_id,omitzero"`
-	Subject             X_PARTY_PROXY                    `json:"subject"`
-	Provider            utils.Optional[X_PARTY_PROXY]    `json:"provider,omitzero"`
-	Protocol            utils.Optional[X_ITEM_STRUCTURE] `json:"protocol,omitzero"`
-	GuidelineID         utils.Optional[OBJECT_REF]       `json:"guideline_id,omitzero"`
-	Narrative           X_DV_TEXT                        `json:"narrative"`
-	ExpiryTime          utils.Optional[DV_DATE_TIME]     `json:"expiry_time,omitzero"`
-	WFDefinition        utils.Optional[DV_PARSABLE]      `json:"wf_definition,omitzero"`
-	Activities          utils.Optional[[]ACTIVITY]       `json:"activities,omitzero"`
-}
-
-func (i *INSTRUCTION) isContentItemModel() {}
-
-func (i *INSTRUCTION) HasModelName() bool {
-	return i.Type_.E
+	Type_               utils.Optional[string]             `json:"_type,omitzero"`
+	Name                DvTextUnion                        `json:"name"`
+	ArchetypeNodeID     string                             `json:"archetype_node_id"`
+	UID                 utils.Optional[UIDBasedIDUnion]    `json:"uid,omitzero"`
+	Links               utils.Optional[[]LINK]             `json:"links,omitzero"`
+	ArchetypeDetails    utils.Optional[ARCHETYPED]         `json:"archetype_details,omitzero"`
+	FeederAudit         utils.Optional[FEEDER_AUDIT]       `json:"feeder_audit,omitzero"`
+	Language            CODE_PHRASE                        `json:"language"`
+	Encoding            CODE_PHRASE                        `json:"encoding"`
+	OtherParticipations utils.Optional[[]PARTICIPATION]    `json:"other_participations,omitzero"`
+	WorkflowID          utils.Optional[OBJECT_REF]         `json:"workflow_id,omitzero"`
+	Subject             PartyProxyUnion                    `json:"subject"`
+	Provider            utils.Optional[PartyProxyUnion]    `json:"provider,omitzero"`
+	Protocol            utils.Optional[ItemStructureUnion] `json:"protocol,omitzero"`
+	GuidelineID         utils.Optional[OBJECT_REF]         `json:"guideline_id,omitzero"`
+	Narrative           DvTextUnion                        `json:"narrative"`
+	ExpiryTime          utils.Optional[DV_DATE_TIME]       `json:"expiry_time,omitzero"`
+	WFDefinition        utils.Optional[DV_PARSABLE]        `json:"wf_definition,omitzero"`
+	Activities          utils.Optional[[]ACTIVITY]         `json:"activities,omitzero"`
 }
 
 func (i *INSTRUCTION) SetModelName() {
-	i.Type_ = utils.Some(INSTRUCTION_MODEL_NAME)
+	i.Type_ = utils.Some(INSTRUCTION_TYPE)
 	i.Name.SetModelName()
 	if i.UID.E {
 		i.UID.V.SetModelName()
@@ -93,13 +87,13 @@ func (i *INSTRUCTION) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if i.Type_.E && i.Type_.V != INSTRUCTION_MODEL_NAME {
+	if i.Type_.E && i.Type_.V != INSTRUCTION_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          INSTRUCTION_MODEL_NAME,
+			Model:          INSTRUCTION_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + INSTRUCTION_MODEL_NAME,
-			Recommendation: "Set _type to " + INSTRUCTION_MODEL_NAME,
+			Message:        "_type must be " + INSTRUCTION_TYPE,
+			Recommendation: "Set _type to " + INSTRUCTION_TYPE,
 		})
 	}
 

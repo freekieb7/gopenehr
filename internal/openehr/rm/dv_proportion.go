@@ -7,7 +7,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const DV_PROPORTION_MODEL_NAME string = "DV_PROPORTION"
+const DV_PROPORTION_TYPE string = "DV_PROPORTION"
 
 type DV_PROPORTION struct {
 	Type_                utils.Optional[string]            `json:"_type,omitzero"`
@@ -23,14 +23,8 @@ type DV_PROPORTION struct {
 	OtherReferenceRanges utils.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges,omitzero"`
 }
 
-func (d *DV_PROPORTION) isDataValueModel() {}
-
-func (d *DV_PROPORTION) HasModelName() bool {
-	return d.Type_.E
-}
-
 func (d *DV_PROPORTION) SetModelName() {
-	d.Type_ = utils.Some(DV_PROPORTION_MODEL_NAME)
+	d.Type_ = utils.Some(DV_PROPORTION_TYPE)
 	if d.NormalStatus.E {
 		d.NormalStatus.V.SetModelName()
 	}
@@ -49,10 +43,10 @@ func (d *DV_PROPORTION) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.E && d.Type_.V != DV_PROPORTION_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_PROPORTION_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_PROPORTION_MODEL_NAME,
+			Model:          DV_PROPORTION_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
 			Recommendation: "Ensure _type field is set to DV_PROPORTION",

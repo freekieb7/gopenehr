@@ -7,7 +7,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const DV_INTERVAL_MODEL_NAME string = "DV_INTERVAL"
+const DV_INTERVAL_TYPE string = "DV_INTERVAL"
 
 type DV_INTERVAL struct {
 	Type_          utils.Optional[string] `json:"_type,omitzero"`
@@ -19,14 +19,8 @@ type DV_INTERVAL struct {
 	UpperIncluded  bool                   `json:"upper_included"`
 }
 
-func (d *DV_INTERVAL) isDataValueModel() {}
-
-func (d *DV_INTERVAL) HasModelName() bool {
-	return d.Type_.E
-}
-
 func (d *DV_INTERVAL) SetModelName() {
-	d.Type_ = utils.Some(DV_INTERVAL_MODEL_NAME)
+	d.Type_ = utils.Some(DV_INTERVAL_TYPE)
 }
 
 func (d *DV_INTERVAL) Validate(path string) util.ValidateError {
@@ -34,13 +28,13 @@ func (d *DV_INTERVAL) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.E && d.Type_.V != DV_INTERVAL_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_INTERVAL_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_INTERVAL_MODEL_NAME,
+			Model:          DV_INTERVAL_TYPE,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_INTERVAL_MODEL_NAME, d.Type_.V),
-			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", DV_INTERVAL_MODEL_NAME),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_INTERVAL_TYPE, d.Type_.V),
+			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", DV_INTERVAL_TYPE),
 		})
 	}
 

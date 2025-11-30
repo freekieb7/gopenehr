@@ -6,7 +6,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const DV_MULTIMEDIA_MODEL_NAME string = "DV_MULTIMEDIA"
+const DV_MULTIMEDIA_TYPE string = "DV_MULTIMEDIA"
 
 type DV_MULTIMEDIA struct {
 	Type_                   utils.Optional[string]         `json:"_type,omitzero"`
@@ -23,14 +23,8 @@ type DV_MULTIMEDIA struct {
 	Size                    int64                          `json:"size"`
 }
 
-func (d *DV_MULTIMEDIA) isDataValueModel() {}
-
-func (d *DV_MULTIMEDIA) HasModelName() bool {
-	return d.Type_.E
-}
-
 func (d *DV_MULTIMEDIA) SetModelName() {
-	d.Type_ = utils.Some(DV_MULTIMEDIA_MODEL_NAME)
+	d.Type_ = utils.Some(DV_MULTIMEDIA_TYPE)
 	if d.Charset.E {
 		d.Charset.V.SetModelName()
 	}
@@ -56,13 +50,13 @@ func (d *DV_MULTIMEDIA) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.E && d.Type_.V != DV_MULTIMEDIA_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_MULTIMEDIA_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_MULTIMEDIA_MODEL_NAME,
+			Model:          DV_MULTIMEDIA_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
-			Recommendation: "Ensure _type field is set to " + DV_MULTIMEDIA_MODEL_NAME,
+			Recommendation: "Ensure _type field is set to " + DV_MULTIMEDIA_TYPE,
 		})
 	}
 
@@ -71,7 +65,7 @@ func (d *DV_MULTIMEDIA) Validate(path string) util.ValidateError {
 		attrPath = path + ".charset"
 		if !terminology.IsValidCharsetTerminologyID(d.Charset.V.TerminologyID.Value) {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          DV_MULTIMEDIA_MODEL_NAME,
+				Model:          DV_MULTIMEDIA_TYPE,
 				Path:           attrPath,
 				Message:        "invalid charset terminology ID",
 				Recommendation: "Ensure charset terminology ID is valid",
@@ -79,7 +73,7 @@ func (d *DV_MULTIMEDIA) Validate(path string) util.ValidateError {
 		}
 		if !terminology.IsValidCharset(d.Charset.V.CodeString) {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          DV_MULTIMEDIA_MODEL_NAME,
+				Model:          DV_MULTIMEDIA_TYPE,
 				Path:           attrPath,
 				Message:        "invalid charset code string",
 				Recommendation: "Ensure charset code string is valid",
@@ -94,7 +88,7 @@ func (d *DV_MULTIMEDIA) Validate(path string) util.ValidateError {
 		attrPath = path + ".language"
 		if !terminology.IsValidLanguageTerminologyID(d.Language.V.TerminologyID.Value) {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          DV_MULTIMEDIA_MODEL_NAME,
+				Model:          DV_MULTIMEDIA_TYPE,
 				Path:           attrPath,
 				Message:        "invalid language terminology ID",
 				Recommendation: "Ensure language terminology ID is valid",
@@ -102,7 +96,7 @@ func (d *DV_MULTIMEDIA) Validate(path string) util.ValidateError {
 		}
 		if !terminology.IsValidLanguageCode(d.Language.V.CodeString) {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          DV_MULTIMEDIA_MODEL_NAME,
+				Model:          DV_MULTIMEDIA_TYPE,
 				Path:           attrPath,
 				Message:        "invalid language code string",
 				Recommendation: "Ensure language code string is valid",
@@ -144,7 +138,7 @@ func (d *DV_MULTIMEDIA) Validate(path string) util.ValidateError {
 	if d.Size < 0 {
 		attrPath = path + ".size"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_MULTIMEDIA_MODEL_NAME,
+			Model:          DV_MULTIMEDIA_TYPE,
 			Path:           attrPath,
 			Message:        "size must be non-negative",
 			Recommendation: "Ensure size is zero or positive",

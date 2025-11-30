@@ -7,29 +7,27 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const PERSON_MODEL_NAME string = "PERSON"
+const PERSON_TYPE string = "PERSON"
 
 type PERSON struct {
 	Type_                utils.Optional[string]               `json:"_type,omitzero"`
-	Name                 X_DV_TEXT                            `json:"name"`
+	Name                 DvTextUnion                          `json:"name"`
 	ArchetypeNodeID      string                               `json:"archetype_node_id"`
-	UID                  utils.Optional[X_UID_BASED_ID]       `json:"uid,omitzero"`
+	UID                  utils.Optional[UIDBasedIDUnion]      `json:"uid,omitzero"`
 	Links                utils.Optional[[]LINK]               `json:"links,omitzero"`
 	ArchetypeDetails     utils.Optional[ARCHETYPED]           `json:"archetype_details,omitzero"`
 	FeederAudit          utils.Optional[FEEDER_AUDIT]         `json:"feeder_audit,omitzero"`
 	Identities           []PARTY_IDENTITY                     `json:"identities"`
 	Contacts             utils.Optional[[]CONTACT]            `json:"contacts,omitzero"`
-	Details              utils.Optional[X_ITEM_STRUCTURE]     `json:"details,omitzero"`
+	Details              utils.Optional[ItemStructureUnion]   `json:"details,omitzero"`
 	ReverseRelationships utils.Optional[[]PARTY_RELATIONSHIP] `json:"reverse_relationships,omitzero"`
 	Relationships        utils.Optional[[]PARTY_RELATIONSHIP] `json:"relationships,omitzero"`
-	Languages            utils.Optional[[]X_DV_TEXT]          `json:"languages,omitzero"`
+	Languages            utils.Optional[[]DvTextUnion]        `json:"languages,omitzero"`
 	Roles                utils.Optional[[]PARTY_REF]          `json:"roles,omitzero"`
 }
 
-func (a *PERSON) isVersionModel() {}
-
 func (a *PERSON) SetModelName() {
-	a.Type_ = utils.Some(PERSON_MODEL_NAME)
+	a.Type_ = utils.Some(PERSON_TYPE)
 	a.Name.SetModelName()
 	if a.UID.E {
 		a.UID.V.SetModelName()
@@ -84,12 +82,12 @@ func (a *PERSON) Validate(path string) util.ValidateError {
 
 	// Validate _type
 	attrPath = path + "._type"
-	if a.Type_.E && a.Type_.V != PERSON_MODEL_NAME {
+	if a.Type_.E && a.Type_.V != PERSON_TYPE {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          PERSON_MODEL_NAME,
+			Model:          PERSON_TYPE,
 			Path:           attrPath,
-			Message:        "invalid " + PERSON_MODEL_NAME + " _type field: " + a.Type_.V,
-			Recommendation: "Ensure _type field is set to '" + PERSON_MODEL_NAME + "'",
+			Message:        "invalid " + PERSON_TYPE + " _type field: " + a.Type_.V,
+			Recommendation: "Ensure _type field is set to '" + PERSON_TYPE + "'",
 		})
 	}
 
@@ -101,7 +99,7 @@ func (a *PERSON) Validate(path string) util.ValidateError {
 	attrPath = path + ".archetype_node_id"
 	if a.ArchetypeNodeID == "" {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          AGENT_MODEL_NAME,
+			Model:          AGENT_TYPE,
 			Path:           attrPath,
 			Message:        "archetype_node_id is required",
 			Recommendation: "Ensure archetype_node_id is set",
@@ -138,7 +136,7 @@ func (a *PERSON) Validate(path string) util.ValidateError {
 	if len(a.Identities) == 0 {
 		attrPath = path + ".identities"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          AGENT_MODEL_NAME,
+			Model:          AGENT_TYPE,
 			Path:           attrPath,
 			Message:        "identities is required",
 			Recommendation: "Ensure identities is set",
@@ -197,13 +195,4 @@ func (a *PERSON) Validate(path string) util.ValidateError {
 	}
 
 	return validateErr
-}
-
-func (p *PERSON) ObjectVersionID() OBJECT_VERSION_ID {
-	if p.UID.E {
-		if objVerID, ok := p.UID.V.Value.(*OBJECT_VERSION_ID); ok {
-			return *objVerID
-		}
-	}
-	return OBJECT_VERSION_ID{}
 }

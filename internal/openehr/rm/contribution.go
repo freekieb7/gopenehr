@@ -7,7 +7,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const CONTRIBUTION_MODEL_NAME string = "CONTRIBUTION"
+const CONTRIBUTION_TYPE string = "CONTRIBUTION"
 
 type CONTRIBUTION struct {
 	Type_    utils.Optional[string] `json:"_type,omitzero"`
@@ -17,7 +17,7 @@ type CONTRIBUTION struct {
 }
 
 func (c *CONTRIBUTION) SetModelName() {
-	c.Type_ = utils.Some(CONTRIBUTION_MODEL_NAME)
+	c.Type_ = utils.Some(CONTRIBUTION_TYPE)
 	c.UID.SetModelName()
 	for i := range c.Versions {
 		c.Versions[i].SetModelName()
@@ -30,13 +30,13 @@ func (c *CONTRIBUTION) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if c.Type_.E && c.Type_.V != CONTRIBUTION_MODEL_NAME {
+	if c.Type_.E && c.Type_.V != CONTRIBUTION_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          CONTRIBUTION_MODEL_NAME,
+			Model:          CONTRIBUTION_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + CONTRIBUTION_MODEL_NAME,
-			Recommendation: "Set _type to " + CONTRIBUTION_MODEL_NAME,
+			Message:        "_type must be " + CONTRIBUTION_TYPE,
+			Recommendation: "Set _type to " + CONTRIBUTION_TYPE,
 		})
 	}
 
@@ -48,7 +48,7 @@ func (c *CONTRIBUTION) Validate(path string) util.ValidateError {
 	attrPath = path + ".versions"
 	if len(c.Versions) == 0 {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          CONTRIBUTION_MODEL_NAME,
+			Model:          CONTRIBUTION_TYPE,
 			Path:           attrPath,
 			Message:        "versions must contain at least one OBJECT_REF",
 			Recommendation: "Add at least one OBJECT_REF to versions",

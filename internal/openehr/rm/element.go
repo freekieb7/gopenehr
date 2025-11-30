@@ -7,29 +7,23 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const ELEMENT_MODEL_NAME string = "ELEMENT"
+const ELEMENT_TYPE string = "ELEMENT"
 
 type ELEMENT struct {
-	Type_            utils.Optional[string]         `json:"_type,omitzero"`
-	Name             X_DV_TEXT                      `json:"name"`
-	ArchetypeNodeID  string                         `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID] `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]         `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]     `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]   `json:"feeder_audit,omitzero"`
-	NullFlavour      utils.Optional[DV_CODED_TEXT]  `json:"null_flavour,omitzero"`
-	Value            utils.Optional[X_DATA_VALUE]   `json:"value,omitzero"`
-	NullReason       utils.Optional[X_DV_TEXT]      `json:"null_reason,omitzero"`
-}
-
-func (e *ELEMENT) isItemModel() {}
-
-func (e *ELEMENT) HasModelName() bool {
-	return e.Type_.E
+	Type_            utils.Optional[string]          `json:"_type,omitzero"`
+	Name             DvTextUnion                     `json:"name"`
+	ArchetypeNodeID  string                          `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion] `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]          `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]      `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]    `json:"feeder_audit,omitzero"`
+	NullFlavour      utils.Optional[DV_CODED_TEXT]   `json:"null_flavour,omitzero"`
+	Value            utils.Optional[DataValueUnion]  `json:"value,omitzero"`
+	NullReason       utils.Optional[DvTextUnion]     `json:"null_reason,omitzero"`
 }
 
 func (e *ELEMENT) SetModelName() {
-	e.Type_ = utils.Some(ELEMENT_MODEL_NAME)
+	e.Type_ = utils.Some(ELEMENT_TYPE)
 	e.Name.SetModelName()
 	if e.UID.E {
 		e.UID.V.SetModelName()
@@ -61,13 +55,13 @@ func (e *ELEMENT) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if e.Type_.E && e.Type_.V != ELEMENT_MODEL_NAME {
+	if e.Type_.E && e.Type_.V != ELEMENT_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ELEMENT_MODEL_NAME,
+			Model:          ELEMENT_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
-			Recommendation: "Ensure _type field is set to " + ELEMENT_MODEL_NAME,
+			Recommendation: "Ensure _type field is set to " + ELEMENT_TYPE,
 		})
 	}
 

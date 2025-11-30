@@ -2,92 +2,125 @@ package rm
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const PARTY_PROXY_MODEL_NAME string = "PARTY_PROXY"
+const PARTY_PROXY_TYPE string = "PARTY_PROXY"
 
-// Abstract
-type PARTY_PROXY struct {
-	Type_       utils.Optional[string]    `json:"_type,omitzero"`
-	ExternalRef utils.Optional[PARTY_REF] `json:"external_ref,omitzero"`
+type PartyProxyKind int
+
+const (
+	PartyProxyKind_Unknown PartyProxyKind = iota
+	PartyProxyKind_PARTY_SELF
+	PartyProxyKind_PARTY_IDENTIFIED
+	PartyProxyKind_PARTY_RELATED
+)
+
+type PartyProxyUnion struct {
+	Kind  PartyProxyKind
+	Value any
 }
 
-func (p PARTY_PROXY) MarshalJSON() ([]byte, error) {
-	return nil, fmt.Errorf("cannot marshal abstract PARTY_PROXY type")
-}
-
-func (p *PARTY_PROXY) UnmarshalJSON(data []byte) error {
-	return fmt.Errorf("cannot unmarshal abstract PARTY_PROXY type")
-}
-
-// ========== Union of PARTY_PROXY ==========
-
-type PartyProxyModel interface {
-	isPartyProxyModel()
-	HasModelName() bool
-	SetModelName()
-	Validate(path string) util.ValidateError
-}
-
-type X_PARTY_PROXY struct {
-	Value PartyProxyModel
-}
-
-func (x *X_PARTY_PROXY) SetModelName() {
-	x.Value.SetModelName()
-}
-
-func (x *X_PARTY_PROXY) Validate(path string) util.ValidateError {
-	var validateErr util.ValidateError
-	var attrPath string
-
-	// Abstract model requires _type to be defined
-	if !x.Value.HasModelName() {
-		attrPath = path + "._type"
-		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:   PARTY_PROXY_MODEL_NAME,
-			Path:    attrPath,
-			Message: "missing _type field for abstract model",
-		})
+func (p *PartyProxyUnion) SetModelName() {
+	switch p.Kind {
+	case PartyProxyKind_PARTY_SELF:
+		p.Value.(*PARTY_SELF).SetModelName()
+	case PartyProxyKind_PARTY_IDENTIFIED:
+		p.Value.(*PARTY_IDENTIFIED).SetModelName()
+	case PartyProxyKind_PARTY_RELATED:
+		p.Value.(*PARTY_RELATED).SetModelName()
 	}
-
-	return validateErr
 }
 
-func (x X_PARTY_PROXY) MarshalJSON() ([]byte, error) {
-	return json.Marshal(x.Value)
-}
-
-func (x *X_PARTY_PROXY) UnmarshalJSON(data []byte) error {
-	var extractor util.TypeExtractor
-	if err := json.Unmarshal(data, &extractor); err != nil {
-		return err
-	}
-
-	t := extractor.Type_
-	switch t {
-	case PARTY_SELF_MODEL_NAME:
-		x.Value = new(PARTY_SELF)
-	case PARTY_IDENTIFIED_MODEL_NAME:
-		x.Value = new(PARTY_IDENTIFIED)
-	case PARTY_RELATED_MODEL_NAME:
-		x.Value = new(PARTY_RELATED)
+func (p *PartyProxyUnion) Validate(path string) util.ValidateError {
+	switch p.Kind {
+	case PartyProxyKind_PARTY_SELF:
+		return p.Value.(*PARTY_SELF).Validate(path)
+	case PartyProxyKind_PARTY_IDENTIFIED:
+		return p.Value.(*PARTY_IDENTIFIED).Validate(path)
+	case PartyProxyKind_PARTY_RELATED:
+		return p.Value.(*PARTY_RELATED).Validate(path)
 	default:
 		return util.ValidateError{
 			Errs: []util.ValidationError{
 				{
-					Model:          PARTY_PROXY_MODEL_NAME,
-					Path:           "$.**._type",
-					Message:        fmt.Sprintf("unexpected PARTY_PROXY _type %s", t),
-					Recommendation: "Ensure _type field is one of the known PARTY_PROXY subtypes",
+					Model:          PARTY_PROXY_TYPE,
+					Path:           path,
+					Message:        "value is not known PARTY_PROXY subtype",
+					Recommendation: "Ensure value is properly set",
 				},
 			},
 		}
 	}
+}
 
-	return json.Unmarshal(data, x.Value)
+func (p PartyProxyUnion) MarshalJSON() ([]byte, error) {
+	return json.Marshal(p.Value)
+}
+
+func (p *PartyProxyUnion) UnmarshalJSON(data []byte) error {
+	t := util.UnsafeTypeFieldExtraction(data)
+	switch t {
+	case PARTY_SELF_TYPE:
+		p.Kind = PartyProxyKind_PARTY_SELF
+		p.Value = new(PARTY_SELF)
+	case PARTY_IDENTIFIED_TYPE:
+		p.Kind = PartyProxyKind_PARTY_IDENTIFIED
+		p.Value = new(PARTY_IDENTIFIED)
+	case PARTY_RELATED_TYPE:
+		p.Kind = PartyProxyKind_PARTY_RELATED
+		p.Value = new(PARTY_RELATED)
+	default:
+		p.Kind = PartyProxyKind_Unknown
+		return nil
+	}
+
+	return json.Unmarshal(data, p.Value)
+}
+
+func (p *PartyProxyUnion) PartySelf() *PARTY_SELF {
+	if p.Kind == PartyProxyKind_PARTY_SELF {
+		return p.Value.(*PARTY_SELF)
+	}
+	return nil
+}
+
+func (p *PartyProxyUnion) PartyIdentified() *PARTY_IDENTIFIED {
+	if p.Kind == PartyProxyKind_PARTY_IDENTIFIED {
+		return p.Value.(*PARTY_IDENTIFIED)
+	}
+	return nil
+}
+
+func (p *PartyProxyUnion) PartyRelated() *PARTY_RELATED {
+	if p.Kind == PartyProxyKind_PARTY_RELATED {
+		return p.Value.(*PARTY_RELATED)
+	}
+	return nil
+}
+
+func PartyProxyFromPartySelf(partySelf PARTY_SELF) PartyProxyUnion {
+	partySelf.Type_ = utils.Some(PARTY_SELF_TYPE)
+	return PartyProxyUnion{
+		Kind:  PartyProxyKind_PARTY_SELF,
+		Value: &partySelf,
+	}
+}
+
+func PartyProxyFromPartyIdentified(partyIdentified PARTY_IDENTIFIED) PartyProxyUnion {
+	partyIdentified.Type_ = utils.Some(PARTY_IDENTIFIED_TYPE)
+	return PartyProxyUnion{
+		Kind:  PartyProxyKind_PARTY_IDENTIFIED,
+		Value: &partyIdentified,
+	}
+}
+
+func PartyProxyFromPartyRelated(partyRelated PARTY_RELATED) PartyProxyUnion {
+	partyRelated.Type_ = utils.Some(PARTY_RELATED_TYPE)
+	return PartyProxyUnion{
+		Kind:  PartyProxyKind_PARTY_RELATED,
+		Value: &partyRelated,
+	}
 }

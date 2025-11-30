@@ -7,21 +7,15 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const DV_PARAGRAPH_MODEL_NAME string = "DV_PARAGRAPH"
+const DV_PARAGRAPH_TYPE string = "DV_PARAGRAPH"
 
 type DV_PARAGRAPH struct {
 	Type_ utils.Optional[string] `json:"_type,omitzero"`
-	Items []X_DV_TEXT            `json:"items"`
-}
-
-func (d *DV_PARAGRAPH) isDataValueModel() {}
-
-func (d *DV_PARAGRAPH) HasModelName() bool {
-	return d.Type_.E
+	Items []DvTextUnion          `json:"items"`
 }
 
 func (d *DV_PARAGRAPH) SetModelName() {
-	d.Type_ = utils.Some(DV_PARAGRAPH_MODEL_NAME)
+	d.Type_ = utils.Some(DV_PARAGRAPH_TYPE)
 	for i := range d.Items {
 		d.Items[i].SetModelName()
 	}
@@ -32,10 +26,10 @@ func (d *DV_PARAGRAPH) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.E && d.Type_.V != DV_PARAGRAPH_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_PARAGRAPH_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_PARAGRAPH_MODEL_NAME,
+			Model:          DV_PARAGRAPH_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
 			Recommendation: "Ensure _type field is set to DV_PARAGRAPH",

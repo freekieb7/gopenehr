@@ -106,12 +106,24 @@ func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus rm.E
 	versionedEHRStatus := NewVersionedEHRStatus(ehrStatus.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID(), ehrID)
 	versionedEHRAccess := NewVersionedEHRAccess(uuid.New(), ehrID)
 	ehrAccess := NewEHRAccess(uuid.MustParse(versionedEHRAccess.UID.Value))
-	ehrStatusVersion := NewOriginalVersion(&ehrStatus, utils.None[rm.OBJECT_VERSION_ID]())
-	ehrAccessVersion := NewOriginalVersion(&ehrAccess, utils.None[rm.OBJECT_VERSION_ID]())
+	ehrStatusVersion := NewOriginalVersion(*ehrStatus.UID.V.Value.(*rm.OBJECT_VERSION_ID), rm.OriginalVersionDataFromEHRStatus(ehrStatus), utils.None[rm.OBJECT_VERSION_ID]())
+	ehrAccessVersion := NewOriginalVersion(*ehrAccess.UID.V.Value.(*rm.OBJECT_VERSION_ID), rm.OriginalVersionDataFromEHRAccess(ehrAccess), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("EHR created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
-			ehrStatusVersion.ObjectRef(),
-			ehrAccessVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_EHR_STATUS_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedEHRStatus.UID.Value,
+				}),
+			},
+			{
+				Type:      rm.VERSIONED_EHR_ACCESS_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedEHRAccess.UID.Value,
+				}),
+			},
 		},
 	)
 
@@ -208,7 +220,7 @@ func (s *Service) GetEHRBySubject(ctx context.Context, subjectID, subjectNamespa
         ORDER BY created_at DESC
         LIMIT 1
     `
-	args := []any{rm.EHR_STATUS_MODEL_NAME, subjectNamespace, subjectID}
+	args := []any{rm.EHR_STATUS_TYPE, subjectNamespace, subjectID}
 
 	row := s.DB.QueryRow(ctx, query, args...)
 
@@ -280,9 +292,9 @@ func (s *Service) ValidateEHRStatus(ctx context.Context, ehrStatus rm.EHR_STATUS
 			switch v := externalRef.ID.Value.(type) {
 			case *rm.HIER_OBJECT_ID:
 				// Must be a valid type
-				if externalRef.Type != rm.VERSIONED_PARTY_MODEL_NAME {
+				if externalRef.Type != rm.VERSIONED_PARTY_TYPE {
 					validateErr.Errs = append(validateErr.Errs, outil.ValidationError{
-						Model:          rm.EHR_STATUS_MODEL_NAME,
+						Model:          rm.EHR_STATUS_TYPE,
 						Path:           attrPath + ".type",
 						Message:        fmt.Sprintf("invalid subject external_ref type: %s", externalRef.Type),
 						Recommendation: "Ensure external ref type is VERSIONED_PARTY",
@@ -292,7 +304,7 @@ func (s *Service) ValidateEHRStatus(ctx context.Context, ehrStatus rm.EHR_STATUS
 				// Must be a valid UUID
 				if err := uuid.Validate(v.Value); err != nil {
 					validateErr.Errs = append(validateErr.Errs, outil.ValidationError{
-						Model:          rm.EHR_STATUS_MODEL_NAME,
+						Model:          rm.EHR_STATUS_TYPE,
 						Path:           attrPath + ".id.value",
 						Message:        fmt.Sprintf("invalid subject external_ref id: %v", err),
 						Recommendation: "Ensure external ref id is a valid UUID",
@@ -309,7 +321,7 @@ func (s *Service) ValidateEHRStatus(ctx context.Context, ehrStatus rm.EHR_STATUS
 				if err != nil {
 					if err == database.ErrNoRows {
 						validateErr.Errs = append(validateErr.Errs, outil.ValidationError{
-							Model:          rm.EHR_STATUS_MODEL_NAME,
+							Model:          rm.EHR_STATUS_TYPE,
 							Path:           attrPath + ".id.value",
 							Message:        "Subject external ref id " + v.Value + " with type " + externalRef.Type + " does not exist in tbl_versioned_party",
 							Recommendation: "Ensure external ref id exists in tbl_versioned_party",
@@ -320,9 +332,9 @@ func (s *Service) ValidateEHRStatus(ctx context.Context, ehrStatus rm.EHR_STATUS
 				}
 			default:
 				validateErr.Errs = append(validateErr.Errs, outil.ValidationError{
-					Model:          rm.EHR_STATUS_MODEL_NAME,
+					Model:          rm.EHR_STATUS_TYPE,
 					Path:           attrPath + ".id",
-					Message:        fmt.Sprintf("Unsupported subject external_ref id type: %s", v.GetModelName()),
+					Message:        "Unsupported subject external_ref id type",
 					Recommendation: "Ensure external ref is of type HIER_OBJECT_ID and type is VERSIONED_PARTY",
 				})
 			}
@@ -349,7 +361,7 @@ func (s *Service) GetEHRStatus(ctx context.Context, ehrID uuid.UUID, filterOnTim
 		WHERE ov.type = $1
 		  AND ov.ehr_id = $2 
 	`)
-	args = []any{rm.EHR_STATUS_MODEL_NAME, ehrID}
+	args = []any{rm.EHR_STATUS_TYPE, ehrID}
 	argNum += 2
 
 	if !filterOnTime.IsZero() {
@@ -388,17 +400,23 @@ func (s *Service) UpdateEHRStatus(ctx context.Context, ehrID uuid.UUID, ehrStatu
 	if err != nil {
 		return rm.EHR_STATUS{}, fmt.Errorf("failed to get current EHR Status: %w", err)
 	}
-	currentEHRStatusID := currentEHRStatus.UID.V.Value.(*rm.OBJECT_VERSION_ID)
+	currentEHRStatusID := currentEHRStatus.UID.V.ObjectVersionID()
 
 	err = UpgradeObjectVersionID(&currentEHRStatus.UID, utils.Some(*currentEHRStatusID))
 	if err != nil {
 		return rm.EHR_STATUS{}, fmt.Errorf("failed to upgrade current EHR Status UID: %w", err)
 	}
 
-	ehrStatusVersion := NewOriginalVersion(&ehrStatus, utils.Some(*currentEHRStatusID))
+	ehrStatusVersion := NewOriginalVersion(ehrStatus.ObjectVersionID(), rm.OriginalVersionDataFromEHRStatus(ehrStatus), utils.Some(*currentEHRStatusID))
 	contribution := NewContribution("EHR Status updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
-			ehrStatusVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_EHR_STATUS_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: currentEHRStatusID.UID().String(),
+				}),
+			},
 		},
 	)
 
@@ -438,7 +456,7 @@ func (s *Service) GetVersionedEHRStatus(ctx context.Context, ehrID uuid.UUID) (r
 		  AND vo.ehr_id = $2
 		LIMIT 1
 	`
-	args := []any{rm.VERSIONED_EHR_STATUS_MODEL_NAME, ehrID}
+	args := []any{rm.VERSIONED_EHR_STATUS_TYPE, ehrID}
 
 	row := s.DB.QueryRow(ctx, query, args...)
 
@@ -507,7 +525,7 @@ func (s *Service) GetVersionedEHRStatusVersionAsJSON(ctx context.Context, ehrID 
 		WHERE ov.type = $1
 		  AND ov.ehr_id = $2 
 	`)
-	args = []any{rm.EHR_STATUS_MODEL_NAME, ehrID}
+	args = []any{rm.EHR_STATUS_TYPE, ehrID}
 	argNum += 2
 
 	if !filterAtTime.IsZero() {
@@ -553,7 +571,7 @@ func (s *Service) ValidateComposition(ctx context.Context, composition rm.COMPOS
 
 func (s *Service) ExistsComposition(ctx context.Context, ehrID uuid.UUID, versionID string) (bool, error) {
 	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.ehr_id = $1 AND ov.type = $2 AND ov.id = $3 LIMIT 1`
-	args := []any{ehrID, rm.COMPOSITION_MODEL_NAME, versionID}
+	args := []any{ehrID, rm.COMPOSITION_TYPE, versionID}
 
 	var exists int
 	if err := s.DB.QueryRow(ctx, query, args...).Scan(&exists); err != nil {
@@ -577,7 +595,7 @@ func (s *Service) CreateComposition(ctx context.Context, ehrID uuid.UUID, compos
 		return rm.COMPOSITION{}, fmt.Errorf("failed to upgrade composition UID: %w", err)
 	}
 
-	exists, err := s.ExistsComposition(ctx, ehrID, composition.UID.V.ValueAsString())
+	exists, err := s.ExistsComposition(ctx, ehrID, composition.UID.V.ObjectVersionID().Value)
 	if err != nil {
 		return rm.COMPOSITION{}, fmt.Errorf("failed to check if composition exists: %w", err)
 	}
@@ -585,11 +603,17 @@ func (s *Service) CreateComposition(ctx context.Context, ehrID uuid.UUID, compos
 		return rm.COMPOSITION{}, ErrCompositionAlreadyExists
 	}
 
-	versionedComposition := NewVersionedComposition(composition.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID(), ehrID)
-	compositionVersion := NewOriginalVersion(&composition, utils.None[rm.OBJECT_VERSION_ID]())
+	versionedComposition := NewVersionedComposition(composition.UID.V.ObjectVersionID().UID(), ehrID)
+	compositionVersion := NewOriginalVersion(*composition.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromComposition(composition), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Composition created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
-			compositionVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_COMPOSITION_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedComposition.UID.Value,
+				}),
+			},
 		},
 	)
 
@@ -629,25 +653,14 @@ func (s *Service) CreateComposition(ctx context.Context, ehrID uuid.UUID, compos
 	return composition, nil
 }
 
-func (s *Service) GetComposition(ctx context.Context, ehrID uuid.UUID, uidBasedID string) (rm.COMPOSITION, error) {
+func (s *Service) GetComposition(ctx context.Context, ehrID uuid.UUID, objectVersionID string) (rm.COMPOSITION, error) {
 	query := `
 		SELECT ovd.object_data 
 		FROM openehr.tbl_object_version ov 
 		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.type = $1 AND ov.ehr_id = $2
+		WHERE ov.type = $1 AND ov.ehr_id = $2 AND ov.id = $3 LIMIT 1
 	`
-	args := []any{rm.COMPOSITION_MODEL_NAME, ehrID}
-
-	if strings.Count(uidBasedID, "::") == 2 {
-		// UID is of type OBJECT_VERSION_ID
-		query += `AND ov.id = $3 `
-	} else {
-		// UID is of type HIER_OBJECT_ID
-		query += `AND ov.versioned_object_id = $3 `
-	}
-	args = append(args, uidBasedID)
-
-	query += `ORDER BY ov.created_at DESC LIMIT 1`
+	args := []any{rm.COMPOSITION_TYPE, ehrID, objectVersionID}
 
 	var composition rm.COMPOSITION
 	if err := s.DB.QueryRow(ctx, query, args...).Scan(&composition); err != nil {
@@ -660,21 +673,58 @@ func (s *Service) GetComposition(ctx context.Context, ehrID uuid.UUID, uidBasedI
 	return composition, nil
 }
 
-func (s *Service) UpdateComposition(ctx context.Context, ehrID uuid.UUID, composition rm.COMPOSITION) (rm.COMPOSITION, error) {
-	if !composition.UID.E {
-		return rm.COMPOSITION{}, ErrCompositionUIDNotProvided
+func (s *Service) GetCurrentCompositionByVersionedCompositionID(ctx context.Context, ehrID uuid.UUID, versionedCompositionID uuid.UUID) (rm.COMPOSITION, error) {
+	query := `
+		SELECT ovd.object_data 
+		FROM openehr.tbl_object_version ov 
+		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
+		WHERE ov.type = $1 AND ov.ehr_id = $2 AND ov.versioned_object_id = $3 
+		ORDER BY ov.created_at DESC
+		LIMIT 1
+	`
+	args := []any{rm.COMPOSITION_TYPE, ehrID, versionedCompositionID}
+
+	var composition rm.COMPOSITION
+	if err := s.DB.QueryRow(ctx, query, args...).Scan(&composition); err != nil {
+		if err == database.ErrNoRows {
+			return rm.COMPOSITION{}, ErrCompositionNotFound
+		}
+		return rm.COMPOSITION{}, fmt.Errorf("failed to fetch Composition by ID from database: %w", err)
 	}
 
-	currentComposition, err := s.GetComposition(ctx, ehrID, composition.UID.V.ValueAsString())
+	return composition, nil
+}
+
+func (s *Service) UpdateComposition(ctx context.Context, ehrID uuid.UUID, versionedCompositionID uuid.UUID, composition rm.COMPOSITION) (rm.COMPOSITION, error) {
+	err := s.ValidateComposition(ctx, composition)
 	if err != nil {
+		return rm.COMPOSITION{}, err
+	}
+
+	currentComposition, err := s.GetCurrentCompositionByVersionedCompositionID(ctx, ehrID, versionedCompositionID)
+	if err != nil {
+		if errors.Is(err, ErrCompositionNotFound) {
+			return rm.COMPOSITION{}, ErrCompositionNotFound
+		}
 		return rm.COMPOSITION{}, fmt.Errorf("failed to get current Composition: %w", err)
 	}
-	currentCompositionID := currentComposition.UID.V.Value.(*rm.OBJECT_VERSION_ID)
+	currentCompositionID := currentComposition.UID.V.ObjectVersionID()
 
-	compositionVersion := NewOriginalVersion(&composition, utils.Some(*currentCompositionID))
+	err = UpgradeObjectVersionID(&currentComposition.UID, utils.Some(*currentCompositionID))
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to upgrade current Composition UID: %w", err)
+	}
+
+	compositionVersion := NewOriginalVersion(*composition.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromComposition(composition), utils.Some(*currentCompositionID))
 	contribution := NewContribution("Composition updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
-			compositionVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_COMPOSITION_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedCompositionID.String(),
+				}),
+			},
 		},
 	)
 
@@ -683,18 +733,18 @@ func (s *Service) UpdateComposition(ctx context.Context, ehrID uuid.UUID, compos
 		return rm.COMPOSITION{}, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
-		if rbErr := tx.Rollback(ctx); rbErr != nil && rbErr != database.ErrTxClosed {
-			s.Logger.ErrorContext(ctx, "failed to rollback transaction", "error", rbErr)
+		if err := tx.Rollback(ctx); err != nil && err != database.ErrTxClosed {
+			s.Logger.ErrorContext(ctx, "Failed to rollback transaction", "error", err)
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.Some(ehrID))
+	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
 	if err != nil {
 		return rm.COMPOSITION{}, fmt.Errorf("failed to save contribution: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, compositionVersion, contribution.UID.Value, utils.Some(ehrID))
+	err = s.SaveObjectVersionWithTx(ctx, tx, compositionVersion, contribution.UID.Value, utils.None[uuid.UUID]())
 	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to save composition version: %w", err)
+		return rm.COMPOSITION{}, fmt.Errorf("failed to save composition: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -709,12 +759,10 @@ func (s *Service) DeleteComposition(ctx context.Context, ehrID uuid.UUID, versio
 		[]rm.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
-				Type:      rm.COMPOSITION_MODEL_NAME,
-				ID: rm.X_OBJECT_ID{
-					Value: &rm.HIER_OBJECT_ID{
-						Value: versionedObjectID.String(),
-					},
-				},
+				Type:      rm.COMPOSITION_TYPE,
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedObjectID.String(),
+				}),
 			},
 		},
 	)
@@ -755,7 +803,7 @@ func (s *Service) GetVersionedComposition(ctx context.Context, ehrID uuid.UUID, 
 		  AND vo.id = $3
 		LIMIT 1
 	`
-	args := []any{rm.VERSIONED_COMPOSITION_MODEL_NAME, ehrID, versionedObjectID}
+	args := []any{rm.VERSIONED_COMPOSITION_TYPE, ehrID, versionedObjectID}
 	row := s.DB.QueryRow(ctx, query, args...)
 
 	var versionedComposition rm.VERSIONED_COMPOSITION
@@ -824,7 +872,7 @@ func (s *Service) GetVersionedCompositionVersionJSON(ctx context.Context, ehrID 
 		  AND ov.ehr_id = $2
 		  AND ov.versioned_object_id = $3
 	`)
-	args = []any{rm.COMPOSITION_MODEL_NAME, ehrID, versionedObjectID}
+	args = []any{rm.COMPOSITION_TYPE, ehrID, versionedObjectID}
 	argNum += 3
 
 	if !filterAtTime.IsZero() {
@@ -889,11 +937,11 @@ func (s *Service) ValidateDirectory(ctx context.Context, ehrID uuid.UUID, direct
 
 			// Handle different reference types
 			switch currentRef.Type {
-			case rm.COMPOSITION_MODEL_NAME:
+			case rm.COMPOSITION_TYPE:
 				id, ok := currentRef.ID.Value.(*rm.OBJECT_VERSION_ID)
 				if !ok {
 					validateErr.Errs = append(validateErr.Errs, outil.ValidationError{
-						Model:          rm.COMPOSITION_MODEL_NAME,
+						Model:          rm.COMPOSITION_TYPE,
 						Path:           itemPath,
 						Message:        "Mismatch between type and id provided",
 						Recommendation: "Ensure the ID is of type OBJECT_VERSION_ID",
@@ -906,17 +954,17 @@ func (s *Service) ValidateDirectory(ctx context.Context, ehrID uuid.UUID, direct
 				}
 				if !exists {
 					validateErr.Errs = append(validateErr.Errs, outil.ValidationError{
-						Model:          rm.COMPOSITION_MODEL_NAME,
+						Model:          rm.COMPOSITION_TYPE,
 						Path:           itemPath,
 						Message:        "COMPOSITION does not exist for this EHR in the system",
 						Recommendation: "Ensure the composition exists for this EHR",
 					})
 				}
-			case rm.VERSIONED_COMPOSITION_MODEL_NAME:
+			case rm.VERSIONED_COMPOSITION_TYPE:
 				id, ok := currentRef.ID.Value.(*rm.HIER_OBJECT_ID)
 				if !ok {
 					validateErr.Errs = append(validateErr.Errs, outil.ValidationError{
-						Model:          rm.VERSIONED_COMPOSITION_MODEL_NAME,
+						Model:          rm.VERSIONED_COMPOSITION_TYPE,
 						Path:           itemPath,
 						Message:        "Mismatch between type and id provided",
 						Recommendation: "Ensure the ID is of type HIER_OBJECT_ID",
@@ -929,7 +977,7 @@ func (s *Service) ValidateDirectory(ctx context.Context, ehrID uuid.UUID, direct
 				}
 				if !exists {
 					validateErr.Errs = append(validateErr.Errs, outil.ValidationError{
-						Model:          rm.COMPOSITION_MODEL_NAME,
+						Model:          rm.COMPOSITION_TYPE,
 						Path:           itemPath,
 						Message:        "COMPOSITION does not exist for this EHR in the system",
 						Recommendation: "Ensure the composition exists for this EHR",
@@ -965,11 +1013,17 @@ func (s *Service) CreateDirectory(ctx context.Context, ehrID uuid.UUID, director
 	if err != nil {
 		return rm.FOLDER{}, fmt.Errorf("failed to upgrade directory UID: %w", err)
 	}
-	versionedFolder := NewVersionedFolder(directory.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID(), ehrID)
-	folderVersion := NewOriginalVersion(&directory, utils.None[rm.OBJECT_VERSION_ID]())
+	versionedFolder := NewVersionedFolder(directory.UID.V.ObjectVersionID().UID(), ehrID)
+	folderVersion := NewOriginalVersion(*directory.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromFolder(directory), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Directory created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
-			folderVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_FOLDER_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedFolder.UID.Value,
+				}),
+			},
 		},
 	)
 
@@ -1005,7 +1059,7 @@ func (s *Service) CreateDirectory(ctx context.Context, ehrID uuid.UUID, director
 
 func (s *Service) ExistsDirectory(ctx context.Context, ehrID uuid.UUID) (bool, error) {
 	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.ehr_id = $1 AND ov.type = $2 LIMIT 1`
-	args := []any{ehrID, rm.FOLDER_MODEL_NAME}
+	args := []any{ehrID, rm.FOLDER_TYPE}
 
 	var exists int
 	if err := s.DB.QueryRow(ctx, query, args...).Scan(&exists); err != nil {
@@ -1028,7 +1082,7 @@ func (s *Service) GetDirectory(ctx context.Context, ehrID uuid.UUID) (rm.FOLDER,
         ORDER BY ov.created_at DESC
         LIMIT 1
 	`
-	args := []any{rm.FOLDER_MODEL_NAME, ehrID}
+	args := []any{rm.FOLDER_TYPE, ehrID}
 	row := s.DB.QueryRow(ctx, query, args...)
 
 	var directory rm.FOLDER
@@ -1052,17 +1106,23 @@ func (s *Service) UpdateDirectory(ctx context.Context, ehrID uuid.UUID, director
 	if err != nil {
 		return rm.FOLDER{}, fmt.Errorf("failed to get current Directory: %w", err)
 	}
-	currentDirectoryID := currentDirectory.UID.V.Value.(*rm.OBJECT_VERSION_ID)
+	currentDirectoryID := currentDirectory.UID.V.ObjectVersionID()
 
 	err = UpgradeObjectVersionID(&currentDirectory.UID, utils.Some(*currentDirectoryID))
 	if err != nil {
 		return rm.FOLDER{}, fmt.Errorf("failed to upgrade current Directory UID: %w", err)
 	}
 
-	folderVersion := NewOriginalVersion(&directory, utils.Some(*currentDirectoryID))
+	folderVersion := NewOriginalVersion(*directory.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromFolder(directory), utils.Some(*currentDirectoryID))
 	contribution := NewContribution("Directory updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
-			folderVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_FOLDER_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: currentDirectoryID.UID().String(),
+				}),
+			},
 		},
 	)
 
@@ -1097,12 +1157,10 @@ func (s *Service) DeleteDirectory(ctx context.Context, ehrID uuid.UUID, versione
 		[]rm.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
-				Type:      rm.FOLDER_MODEL_NAME,
-				ID: rm.X_OBJECT_ID{
-					Value: &rm.HIER_OBJECT_ID{
-						Value: versionedObjectID.String(),
-					},
-				},
+				Type:      rm.FOLDER_TYPE,
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedObjectID.String(),
+				}),
 			},
 		},
 	)
@@ -1151,7 +1209,7 @@ func (s *Service) GetFolderInDirectoryVersion(ctx context.Context, ehrID uuid.UU
 		  AND ov.ehr_id = $2
 		  AND ovd.object_data @? $3
 	`, jsonPath))
-	args = []any{rm.FOLDER_MODEL_NAME, ehrID, jsonPath}
+	args = []any{rm.FOLDER_TYPE, ehrID, jsonPath}
 	argNum += 3
 
 	if !filterAtTime.IsZero() {
@@ -1197,7 +1255,7 @@ func (s *Service) ExistsAgent(ctx context.Context, versionID string) (bool, erro
 	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.type = $1 AND ov.id = $2 LIMIT 1`
 
 	var exists int
-	err := s.DB.QueryRow(ctx, query, rm.AGENT_MODEL_NAME, versionID).Scan(&exists)
+	err := s.DB.QueryRow(ctx, query, rm.AGENT_TYPE, versionID).Scan(&exists)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return false, nil
@@ -1218,7 +1276,7 @@ func (s *Service) CreateAgent(ctx context.Context, agent rm.AGENT) (rm.AGENT, er
 		return rm.AGENT{}, fmt.Errorf("failed to upgrade agent UID: %w", err)
 	}
 
-	exists, err := s.ExistsAgent(ctx, agent.UID.V.ValueAsString())
+	exists, err := s.ExistsAgent(ctx, agent.UID.V.ObjectVersionID().Value)
 	if err != nil {
 		return rm.AGENT{}, fmt.Errorf("failed to check existing agent: %w", err)
 	}
@@ -1226,11 +1284,17 @@ func (s *Service) CreateAgent(ctx context.Context, agent rm.AGENT) (rm.AGENT, er
 		return rm.AGENT{}, ErrAgentAlreadyExists
 	}
 
-	versionedParty := NewVersionedParty(agent.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID())
-	agentVersion := NewOriginalVersion(&agent, utils.None[rm.OBJECT_VERSION_ID]())
+	versionedParty := NewVersionedParty(agent.UID.V.ObjectVersionID().UID())
+	agentVersion := NewOriginalVersion(*agent.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromAgent(agent), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Agent created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
-			agentVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_PARTY_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedParty.UID.Value,
+				}),
+			},
 		},
 	)
 
@@ -1275,7 +1339,7 @@ func (s *Service) GetCurrentAgentVersionByVersionedPartyID(ctx context.Context, 
 	`
 
 	var agent rm.AGENT
-	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.AGENT_MODEL_NAME).Scan(&agent)
+	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.AGENT_TYPE).Scan(&agent)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return rm.AGENT{}, ErrAgentNotFound
@@ -1296,7 +1360,7 @@ func (s *Service) GetAgentAtVersion(ctx context.Context, versionID string) (rm.A
 	`
 
 	var agent rm.AGENT
-	err := s.DB.QueryRow(ctx, query, versionID, rm.AGENT_MODEL_NAME).Scan(&agent)
+	err := s.DB.QueryRow(ctx, query, versionID, rm.AGENT_TYPE).Scan(&agent)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return rm.AGENT{}, ErrAgentNotFound
@@ -1320,17 +1384,23 @@ func (s *Service) UpdateAgent(ctx context.Context, versionedPartyID uuid.UUID, a
 		}
 		return rm.AGENT{}, fmt.Errorf("failed to get current Agent: %w", err)
 	}
-	currentAgentID := currentAgent.UID.V.Value.(*rm.OBJECT_VERSION_ID)
+	currentAgentID := currentAgent.UID.V.ObjectVersionID()
 
 	err = UpgradeObjectVersionID(&currentAgent.UID, utils.Some(*currentAgentID))
 	if err != nil {
 		return rm.AGENT{}, fmt.Errorf("failed to upgrade current Agent UID: %w", err)
 	}
 
-	agentVersion := NewOriginalVersion(&agent, utils.Some(*currentAgentID))
+	agentVersion := NewOriginalVersion(*agent.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromAgent(agent), utils.Some(*currentAgentID))
 	contribution := NewContribution("Agent updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
-			agentVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_PARTY_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: currentAgentID.UID().String(),
+				}),
+			},
 		},
 	)
 
@@ -1365,13 +1435,10 @@ func (s *Service) DeleteAgent(ctx context.Context, versionedObjectID string) err
 		[]rm.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
-				Type:      rm.AGENT_MODEL_NAME,
-				ID: rm.X_OBJECT_ID{
-					Value: &rm.OBJECT_VERSION_ID{
-						Type_: utils.Some(rm.OBJECT_VERSION_ID_MODEL_NAME),
-						Value: versionedObjectID,
-					},
-				},
+				Type:      rm.AGENT_TYPE,
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedObjectID,
+				}),
 			},
 		},
 	)
@@ -1417,7 +1484,7 @@ func (s *Service) ExistsPerson(ctx context.Context, versionID string) (bool, err
 	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.type = $1 AND ov.id = $2 LIMIT 1`
 
 	var exists int
-	err := s.DB.QueryRow(ctx, query, rm.PERSON_MODEL_NAME, versionID).Scan(&exists)
+	err := s.DB.QueryRow(ctx, query, rm.PERSON_TYPE, versionID).Scan(&exists)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return false, nil
@@ -1438,7 +1505,7 @@ func (s *Service) CreatePerson(ctx context.Context, person rm.PERSON) (rm.PERSON
 		return rm.PERSON{}, fmt.Errorf("failed to upgrade person UID: %w", err)
 	}
 
-	exists, err := s.ExistsPerson(ctx, person.UID.V.ValueAsString())
+	exists, err := s.ExistsPerson(ctx, person.UID.V.ObjectVersionID().Value)
 	if err != nil {
 		return rm.PERSON{}, fmt.Errorf("failed to check existing person: %w", err)
 	}
@@ -1446,11 +1513,17 @@ func (s *Service) CreatePerson(ctx context.Context, person rm.PERSON) (rm.PERSON
 		return rm.PERSON{}, ErrPersonAlreadyExists
 	}
 
-	versionedParty := NewVersionedParty(person.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID())
-	personVersion := NewOriginalVersion(&person, utils.None[rm.OBJECT_VERSION_ID]())
+	versionedParty := NewVersionedParty(person.UID.V.ObjectVersionID().UID())
+	personVersion := NewOriginalVersion(*person.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromPerson(person), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Person created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
-			personVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_PARTY_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedParty.UID.Value,
+				}),
+			},
 		},
 	)
 
@@ -1495,7 +1568,7 @@ func (s *Service) GetCurrentPersonVersionByVersionedPartyID(ctx context.Context,
 	`
 
 	var person rm.PERSON
-	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.PERSON_MODEL_NAME).Scan(&person)
+	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.PERSON_TYPE).Scan(&person)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return rm.PERSON{}, ErrPersonNotFound
@@ -1516,7 +1589,7 @@ func (s *Service) GetPersonAtVersion(ctx context.Context, versionID string) (rm.
 	`
 
 	var person rm.PERSON
-	err := s.DB.QueryRow(ctx, query, versionID, rm.GROUP_MODEL_NAME).Scan(&person)
+	err := s.DB.QueryRow(ctx, query, versionID, rm.GROUP_TYPE).Scan(&person)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return rm.PERSON{}, ErrPersonNotFound
@@ -1540,17 +1613,23 @@ func (s *Service) UpdatePerson(ctx context.Context, versionedPartyID uuid.UUID, 
 		}
 		return rm.PERSON{}, fmt.Errorf("failed to get current Person: %w", err)
 	}
-	currentPersonID := currentPerson.UID.V.Value.(*rm.OBJECT_VERSION_ID)
+	currentPersonID := currentPerson.UID.V.ObjectVersionID()
 
 	err = UpgradeObjectVersionID(&currentPerson.UID, utils.Some(*currentPersonID))
 	if err != nil {
 		return rm.PERSON{}, fmt.Errorf("failed to upgrade current Person UID: %w", err)
 	}
 
-	personVersion := NewOriginalVersion(&person, utils.Some(*currentPersonID))
+	personVersion := NewOriginalVersion(*person.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromPerson(person), utils.Some(*currentPersonID))
 	contribution := NewContribution("Person updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
-			personVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_PARTY_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: currentPersonID.UID().String(),
+				}),
+			},
 		},
 	)
 
@@ -1585,13 +1664,10 @@ func (s *Service) DeletePerson(ctx context.Context, versionedObjectID uuid.UUID)
 		[]rm.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
-				Type:      rm.PERSON_MODEL_NAME,
-				ID: rm.X_OBJECT_ID{
-					Value: &rm.HIER_OBJECT_ID{
-						Type_: utils.Some(rm.HIER_OBJECT_ID_MODEL_NAME),
-						Value: versionedObjectID.String(),
-					},
-				},
+				Type:      rm.PERSON_TYPE,
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedObjectID.String(),
+				}),
 			},
 		},
 	)
@@ -1637,7 +1713,7 @@ func (s *Service) ExistsGroup(ctx context.Context, versionID string) (bool, erro
 	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.type = $1 AND ov.id = $2 LIMIT 1`
 
 	var exists int
-	err := s.DB.QueryRow(ctx, query, rm.GROUP_MODEL_NAME, versionID).Scan(&exists)
+	err := s.DB.QueryRow(ctx, query, rm.GROUP_TYPE, versionID).Scan(&exists)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return false, nil
@@ -1658,7 +1734,7 @@ func (s *Service) CreateGroup(ctx context.Context, group rm.GROUP) (rm.GROUP, er
 		return rm.GROUP{}, fmt.Errorf("failed to upgrade group UID: %w", err)
 	}
 
-	exists, err := s.ExistsGroup(ctx, group.UID.V.ValueAsString())
+	exists, err := s.ExistsGroup(ctx, group.UID.V.ObjectVersionID().Value)
 	if err != nil {
 		return rm.GROUP{}, fmt.Errorf("failed to check existing group: %w", err)
 	}
@@ -1666,11 +1742,17 @@ func (s *Service) CreateGroup(ctx context.Context, group rm.GROUP) (rm.GROUP, er
 		return rm.GROUP{}, ErrGroupAlreadyExists
 	}
 
-	versionedParty := NewVersionedParty(group.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID())
-	groupVersion := NewOriginalVersion(&group, utils.None[rm.OBJECT_VERSION_ID]())
+	versionedParty := NewVersionedParty(group.UID.V.ObjectVersionID().UID())
+	groupVersion := NewOriginalVersion(*group.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromGroup(group), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Group created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
-			groupVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_PARTY_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedParty.UID.Value,
+				}),
+			},
 		},
 	)
 
@@ -1715,7 +1797,7 @@ func (s *Service) GetCurrentGroupVersionByVersionedPartyID(ctx context.Context, 
 	`
 
 	var group rm.GROUP
-	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.GROUP_MODEL_NAME).Scan(&group)
+	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.GROUP_TYPE).Scan(&group)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return rm.GROUP{}, ErrGroupNotFound
@@ -1736,7 +1818,7 @@ func (s *Service) GetGroupAtVersion(ctx context.Context, versionID string) (rm.G
 	`
 
 	var group rm.GROUP
-	err := s.DB.QueryRow(ctx, query, versionID, rm.GROUP_MODEL_NAME).Scan(&group)
+	err := s.DB.QueryRow(ctx, query, versionID, rm.GROUP_TYPE).Scan(&group)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return rm.GROUP{}, ErrGroupNotFound
@@ -1760,17 +1842,23 @@ func (s *Service) UpdateGroup(ctx context.Context, versionedPartyID uuid.UUID, g
 		}
 		return rm.GROUP{}, fmt.Errorf("failed to get current Group: %w", err)
 	}
-	currentGroupID := currentGroup.UID.V.Value.(*rm.OBJECT_VERSION_ID)
+	currentGroupID := currentGroup.UID.V.ObjectVersionID()
 
 	err = UpgradeObjectVersionID(&currentGroup.UID, utils.Some(*currentGroupID))
 	if err != nil {
 		return rm.GROUP{}, fmt.Errorf("failed to upgrade current Group UID: %w", err)
 	}
 
-	groupVersion := NewOriginalVersion(&group, utils.Some(*currentGroupID))
+	groupVersion := NewOriginalVersion(*group.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromGroup(group), utils.Some(*currentGroupID))
 	contribution := NewContribution("Group updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
-			groupVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_PARTY_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: currentGroupID.UID().String(),
+				}),
+			},
 		},
 	)
 
@@ -1805,13 +1893,10 @@ func (s *Service) DeleteGroup(ctx context.Context, versionedObjectID uuid.UUID) 
 		[]rm.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
-				Type:      rm.GROUP_MODEL_NAME,
-				ID: rm.X_OBJECT_ID{
-					Value: &rm.HIER_OBJECT_ID{
-						Type_: utils.Some(rm.OBJECT_VERSION_ID_MODEL_NAME),
-						Value: versionedObjectID.String(),
-					},
-				},
+				Type:      rm.GROUP_TYPE,
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedObjectID.String(),
+				}),
 			},
 		},
 	)
@@ -1857,7 +1942,7 @@ func (s *Service) ExistsOrganisation(ctx context.Context, versionID string) (boo
 	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.type = $1 AND ov.id = $2 LIMIT 1`
 
 	var exists int
-	err := s.DB.QueryRow(ctx, query, rm.ORGANISATION_MODEL_NAME, versionID).Scan(&exists)
+	err := s.DB.QueryRow(ctx, query, rm.ORGANISATION_TYPE, versionID).Scan(&exists)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return false, nil
@@ -1878,7 +1963,7 @@ func (s *Service) CreateOrganisation(ctx context.Context, organisation rm.ORGANI
 		return rm.ORGANISATION{}, fmt.Errorf("failed to upgrade organisation UID: %w", err)
 	}
 
-	exists, err := s.ExistsOrganisation(ctx, organisation.UID.V.ValueAsString())
+	exists, err := s.ExistsOrganisation(ctx, organisation.UID.V.ObjectVersionID().Value)
 	if err != nil {
 		return rm.ORGANISATION{}, fmt.Errorf("failed to check existing organisation: %w", err)
 	}
@@ -1886,11 +1971,17 @@ func (s *Service) CreateOrganisation(ctx context.Context, organisation rm.ORGANI
 		return rm.ORGANISATION{}, ErrOrganisationAlreadyExists
 	}
 
-	versionedParty := NewVersionedParty(organisation.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID())
-	organisationVersion := NewOriginalVersion(&organisation, utils.None[rm.OBJECT_VERSION_ID]())
+	versionedParty := NewVersionedParty(organisation.UID.V.ObjectVersionID().UID())
+	organisationVersion := NewOriginalVersion(*organisation.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromOrganisation(organisation), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Organisation created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
-			organisationVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_PARTY_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedParty.UID.Value,
+				}),
+			},
 		},
 	)
 
@@ -1935,7 +2026,7 @@ func (s *Service) GetCurrentOrganisationVersionByVersionedPartyID(ctx context.Co
 	`
 
 	var organisation rm.ORGANISATION
-	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.AGENT_MODEL_NAME).Scan(&organisation)
+	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.AGENT_TYPE).Scan(&organisation)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return rm.ORGANISATION{}, ErrOrganisationNotFound
@@ -1956,7 +2047,7 @@ func (s *Service) GetOrganisationAtVersion(ctx context.Context, versionID string
 	`
 
 	var organisation rm.ORGANISATION
-	err := s.DB.QueryRow(ctx, query, versionID, rm.ORGANISATION_MODEL_NAME).Scan(&organisation)
+	err := s.DB.QueryRow(ctx, query, versionID, rm.ORGANISATION_TYPE).Scan(&organisation)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return rm.ORGANISATION{}, ErrOrganisationNotFound
@@ -1987,10 +2078,16 @@ func (s *Service) UpdateOrganisation(ctx context.Context, versionedPartyID uuid.
 		return rm.ORGANISATION{}, fmt.Errorf("failed to upgrade current Organisation UID: %w", err)
 	}
 
-	organisationVersion := NewOriginalVersion(&organisation, utils.Some(*currentOrganisationID))
+	organisationVersion := NewOriginalVersion(*organisation.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromOrganisation(organisation), utils.Some(*currentOrganisationID))
 	contribution := NewContribution("Organisation updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
-			organisationVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_PARTY_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: currentOrganisationID.UID().String(),
+				}),
+			},
 		},
 	)
 
@@ -2025,13 +2122,10 @@ func (s *Service) DeleteOrganisation(ctx context.Context, versionedObjectID uuid
 		[]rm.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
-				Type:      rm.ORGANISATION_MODEL_NAME,
-				ID: rm.X_OBJECT_ID{
-					Value: &rm.HIER_OBJECT_ID{
-						Type_: utils.Some(rm.HIER_OBJECT_ID_MODEL_NAME),
-						Value: versionedObjectID.String(),
-					},
-				},
+				Type:      rm.ORGANISATION_TYPE,
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedObjectID.String(),
+				}),
 			},
 		},
 	)
@@ -2077,7 +2171,7 @@ func (s *Service) ExistsRole(ctx context.Context, versionID string) (bool, error
 	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.type = $1 AND ov.id = $2 LIMIT 1`
 
 	var exists int
-	err := s.DB.QueryRow(ctx, query, rm.ROLE_MODEL_NAME, versionID).Scan(&exists)
+	err := s.DB.QueryRow(ctx, query, rm.ROLE_TYPE, versionID).Scan(&exists)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return false, nil
@@ -2098,7 +2192,7 @@ func (s *Service) CreateRole(ctx context.Context, role rm.ROLE) (rm.ROLE, error)
 		return rm.ROLE{}, fmt.Errorf("failed to upgrade role UID: %w", err)
 	}
 
-	exists, err := s.ExistsRole(ctx, role.UID.V.ValueAsString())
+	exists, err := s.ExistsRole(ctx, role.UID.V.ObjectVersionID().Value)
 	if err != nil {
 		return rm.ROLE{}, fmt.Errorf("failed to check existing role: %w", err)
 	}
@@ -2106,11 +2200,17 @@ func (s *Service) CreateRole(ctx context.Context, role rm.ROLE) (rm.ROLE, error)
 		return rm.ROLE{}, ErrRoleAlreadyExists
 	}
 
-	versionedParty := NewVersionedParty(role.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID())
-	roleVersion := NewOriginalVersion(&role, utils.None[rm.OBJECT_VERSION_ID]())
+	versionedParty := NewVersionedParty(role.UID.V.ObjectVersionID().UID())
+	roleVersion := NewOriginalVersion(*role.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromRole(role), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Role created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
-			roleVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_PARTY_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedParty.UID.Value,
+				}),
+			},
 		},
 	)
 
@@ -2155,7 +2255,7 @@ func (s *Service) GetCurrentRoleVersionByVersionedPartyID(ctx context.Context, v
 	`
 
 	var role rm.ROLE
-	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.ROLE_MODEL_NAME).Scan(&role)
+	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.ROLE_TYPE).Scan(&role)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return rm.ROLE{}, ErrRoleNotFound
@@ -2176,7 +2276,7 @@ func (s *Service) GetRoleAtVersion(ctx context.Context, versionID string) (rm.RO
 	`
 
 	var role rm.ROLE
-	err := s.DB.QueryRow(ctx, query, versionID, rm.ROLE_MODEL_NAME).Scan(&role)
+	err := s.DB.QueryRow(ctx, query, versionID, rm.ROLE_TYPE).Scan(&role)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
 			return rm.ROLE{}, ErrRoleNotFound
@@ -2207,10 +2307,16 @@ func (s *Service) UpdateRole(ctx context.Context, versionedPartyID uuid.UUID, ro
 		return rm.ROLE{}, fmt.Errorf("failed to upgrade current Role UID: %w", err)
 	}
 
-	roleVersion := NewOriginalVersion(&role, utils.Some(*currentRoleID))
+	roleVersion := NewOriginalVersion(*role.UID.V.ObjectVersionID(), rm.OriginalVersionDataFromRole(role), utils.Some(*currentRoleID))
 	contribution := NewContribution("Role updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
-			roleVersion.ObjectRef(),
+			{
+				Type:      rm.VERSIONED_PARTY_TYPE,
+				Namespace: "local",
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: currentRoleID.UID().String(),
+				}),
+			},
 		},
 	)
 
@@ -2245,13 +2351,10 @@ func (s *Service) DeleteRole(ctx context.Context, versionedObjectID uuid.UUID) e
 		[]rm.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
-				Type:      rm.ROLE_MODEL_NAME,
-				ID: rm.X_OBJECT_ID{
-					Value: &rm.HIER_OBJECT_ID{
-						Type_: utils.Some(rm.HIER_OBJECT_ID_MODEL_NAME),
-						Value: versionedObjectID.String(),
-					},
-				},
+				Type:      rm.ROLE_TYPE,
+				ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+					Value: versionedObjectID.String(),
+				}),
 			},
 		},
 	)
@@ -2292,7 +2395,7 @@ func (s *Service) GetVersionedParty(ctx context.Context, versionedObjectID uuid.
 	`
 
 	var versionedParty rm.VERSIONED_PARTY
-	err := s.DB.QueryRow(ctx, query, rm.VERSIONED_PARTY_MODEL_NAME, versionedObjectID).Scan(&versionedParty)
+	err := s.DB.QueryRow(ctx, query, rm.VERSIONED_PARTY_TYPE, versionedObjectID).Scan(&versionedParty)
 	if err != nil {
 		return rm.VERSIONED_PARTY{}, fmt.Errorf("failed to get versioned party by ID: %w", err)
 	}
@@ -2327,7 +2430,7 @@ func (s *Service) GetVersionedPartyRevisionHistory(ctx context.Context, versione
 			GROUP BY version->'id'->>'value'
 		) grouped
 	`
-	args := []any{[]string{rm.AGENT_MODEL_NAME, rm.PERSON_MODEL_NAME, rm.GROUP_MODEL_NAME, rm.ORGANISATION_MODEL_NAME, rm.ROLE_MODEL_NAME}, versionedObjectID}
+	args := []any{[]string{rm.AGENT_TYPE, rm.PERSON_TYPE, rm.GROUP_TYPE, rm.ORGANISATION_TYPE, rm.ROLE_TYPE}, versionedObjectID}
 	row := s.DB.QueryRow(ctx, query, args...)
 
 	var revisionHistory rm.REVISION_HISTORY
@@ -2441,23 +2544,23 @@ func (s *Service) SaveVersionedObjectWithTx(ctx context.Context, tx pgx.Tx, vers
 	switch v := versionedObject.(type) {
 	case rm.VERSIONED_EHR_STATUS:
 		v.SetModelName()
-		modelType = rm.VERSIONED_EHR_STATUS_MODEL_NAME
+		modelType = rm.VERSIONED_EHR_STATUS_TYPE
 		id = v.UID.Value
 	case rm.VERSIONED_EHR_ACCESS:
 		v.SetModelName()
-		modelType = rm.VERSIONED_EHR_ACCESS_MODEL_NAME
+		modelType = rm.VERSIONED_EHR_ACCESS_TYPE
 		id = v.UID.Value
 	case rm.VERSIONED_COMPOSITION:
 		v.SetModelName()
-		modelType = rm.VERSIONED_COMPOSITION_MODEL_NAME
+		modelType = rm.VERSIONED_COMPOSITION_TYPE
 		id = v.UID.Value
 	case rm.VERSIONED_FOLDER:
 		v.SetModelName()
-		modelType = rm.VERSIONED_FOLDER_MODEL_NAME
+		modelType = rm.VERSIONED_FOLDER_TYPE
 		id = v.UID.Value
 	case rm.VERSIONED_PARTY:
 		v.SetModelName()
-		modelType = rm.VERSIONED_PARTY_MODEL_NAME
+		modelType = rm.VERSIONED_PARTY_TYPE
 		id = v.UID.Value
 	default:
 		return fmt.Errorf("unsupported versioned object type for creation: %T", versionedObject)
@@ -2481,11 +2584,11 @@ func (s *Service) SaveVersionedObjectWithTx(ctx context.Context, tx pgx.Tx, vers
 }
 
 func (s *Service) SaveObjectVersionWithTx(ctx context.Context, tx pgx.Tx, version any, contributionID string, ehrID utils.Optional[uuid.UUID]) error {
-	var object any
+	var data rm.OriginalVersionDataUnion
 	switch v := version.(type) {
 	case rm.ORIGINAL_VERSION:
 		v.SetModelName()
-		object = v.Data
+		data = v.Data
 	// After enabling, make sure to change the data path below in the INSERT statement
 	// case rm.IMPORTED_VERSION:
 	// 	object = v.Data
@@ -2494,59 +2597,49 @@ func (s *Service) SaveObjectVersionWithTx(ctx context.Context, tx pgx.Tx, versio
 	}
 
 	var (
-		modelType         string
-		id                string
-		versionedObjectID uuid.UUID
+		modelType string
+		id        rm.OBJECT_VERSION_ID
 	)
-	switch v := object.(type) {
-	case *rm.EHR_STATUS:
-		modelType = rm.EHR_STATUS_MODEL_NAME
-		id = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).Value
-		versionedObjectID = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID()
-	case *rm.EHR_ACCESS:
-		modelType = rm.EHR_ACCESS_MODEL_NAME
-		id = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).Value
-		versionedObjectID = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID()
-	case *rm.COMPOSITION:
-		modelType = rm.COMPOSITION_MODEL_NAME
-		id = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).Value
-		versionedObjectID = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID()
-	case *rm.FOLDER:
-		modelType = rm.FOLDER_MODEL_NAME
-		id = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).Value
-		versionedObjectID = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID()
-	case *rm.ROLE:
-		modelType = rm.ROLE_MODEL_NAME
-		id = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).Value
-		versionedObjectID = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID()
-	case *rm.PERSON:
-		modelType = rm.PERSON_MODEL_NAME
-		id = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).Value
-		versionedObjectID = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID()
-	case *rm.AGENT:
-		modelType = rm.AGENT_MODEL_NAME
-		id = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).Value
-		versionedObjectID = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID()
-	case *rm.GROUP:
-		modelType = rm.GROUP_MODEL_NAME
-		id = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).Value
-		versionedObjectID = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID()
-	case *rm.ORGANISATION:
-		modelType = rm.ORGANISATION_MODEL_NAME
-		id = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).Value
-		versionedObjectID = v.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID()
+	switch data.Kind {
+	case rm.OriginalVersionDataKind_EHR_STATUS:
+		modelType = rm.EHR_STATUS_TYPE
+		id = *data.EHRStatus().UID.V.ObjectVersionID()
+	case rm.OriginalVersionDataKind_EHR_ACCESS:
+		modelType = rm.EHR_ACCESS_TYPE
+		id = *data.EHRAccess().UID.V.ObjectVersionID()
+	case rm.OriginalVersionDataKind_COMPOSITION:
+		modelType = rm.COMPOSITION_TYPE
+		id = *data.Composition().UID.V.ObjectVersionID()
+	case rm.OriginalVersionDataKind_FOLDER:
+		modelType = rm.FOLDER_TYPE
+		id = *data.Folder().UID.V.ObjectVersionID()
+	case rm.OriginalVersionDataKind_ROLE:
+		modelType = rm.ROLE_TYPE
+		id = *data.Role().UID.V.ObjectVersionID()
+	case rm.OriginalVersionDataKind_PERSON:
+		modelType = rm.PERSON_TYPE
+		id = *data.Person().UID.V.ObjectVersionID()
+	case rm.OriginalVersionDataKind_AGENT:
+		modelType = rm.AGENT_TYPE
+		id = *data.Agent().UID.V.ObjectVersionID()
+	case rm.OriginalVersionDataKind_GROUP:
+		modelType = rm.GROUP_TYPE
+		id = *data.Group().UID.V.ObjectVersionID()
+	case rm.OriginalVersionDataKind_ORGANISATION:
+		modelType = rm.ORGANISATION_TYPE
+		id = *data.Organisation().UID.V.ObjectVersionID()
 	default:
-		return fmt.Errorf("unsupported object type for version creation: %T", object)
+		return fmt.Errorf("unsupported object type for version creation: %d", data.Kind)
 	}
 
 	query := `INSERT INTO openehr.tbl_object_version (id, versioned_object_id, type, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`
-	args := []any{id, versionedObjectID, modelType, ehrID, contributionID}
+	args := []any{id.Value, id.UID(), modelType, ehrID, contributionID}
 	if _, err := tx.Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("failed to insert object version into the database: %w", err)
 	}
 
 	query = `INSERT INTO openehr.tbl_object_version_data (id, version_data, object_data) VALUES ($1, jsonb_set($2, '{data}', 'null', true), $2->'data')`
-	args = []any{id, version}
+	args = []any{id.Value, version}
 	if _, err := tx.Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("failed to insert object version data into the database: %w", err)
 	}
@@ -2696,13 +2789,10 @@ func NewVersionedEHRAccess(id, ehrID uuid.UUID) rm.VERSIONED_EHR_ACCESS {
 		},
 		OwnerID: rm.OBJECT_REF{
 			Namespace: config.NAMESPACE_LOCAL,
-			Type:      rm.EHR_MODEL_NAME,
-			ID: rm.X_OBJECT_ID{
-				Value: &rm.HIER_OBJECT_ID{
-					Type_: utils.Some(rm.HIER_OBJECT_ID_MODEL_NAME),
-					Value: ehrID.String(),
-				},
-			},
+			Type:      rm.EHR_TYPE,
+			ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+				Value: ehrID.String(),
+			}),
 		},
 		TimeCreated: rm.DV_DATE_TIME{
 			Value: time.Now().UTC().Format(time.RFC3339),
@@ -2712,17 +2802,13 @@ func NewVersionedEHRAccess(id, ehrID uuid.UUID) rm.VERSIONED_EHR_ACCESS {
 
 func NewEHRAccess(id uuid.UUID) rm.EHR_ACCESS {
 	return rm.EHR_ACCESS{
-		UID: utils.Some(rm.X_UID_BASED_ID{
-			Value: &rm.OBJECT_VERSION_ID{
-				Type_: utils.Some(rm.OBJECT_VERSION_ID_MODEL_NAME),
-				Value: fmt.Sprintf("%s::%s::1", id.String(), config.SYSTEM_ID_GOPENEHR),
-			},
+		UID: utils.Some(rm.UIDBasedIDFromObjectVersionID(&rm.OBJECT_VERSION_ID{
+			Type_: utils.Some(rm.OBJECT_VERSION_ID_TYPE),
+			Value: fmt.Sprintf("%s::%s::1", id.String(), config.SYSTEM_ID_GOPENEHR),
+		})),
+		Name: rm.DvTextFromDvText(rm.DV_TEXT{
+			Value: "EHR Access",
 		}),
-		Name: rm.X_DV_TEXT{
-			Value: &rm.DV_TEXT{
-				Value: "EHR Access",
-			},
-		},
 		ArchetypeNodeID: "openEHR-EHR-EHR_ACCESS.generic.v1",
 	}
 }
@@ -2734,13 +2820,10 @@ func NewVersionedEHRStatus(id, ehrID uuid.UUID) rm.VERSIONED_EHR_STATUS {
 		},
 		OwnerID: rm.OBJECT_REF{
 			Namespace: config.NAMESPACE_LOCAL,
-			Type:      rm.EHR_MODEL_NAME,
-			ID: rm.X_OBJECT_ID{
-				Value: &rm.HIER_OBJECT_ID{
-					Type_: utils.Some(rm.HIER_OBJECT_ID_MODEL_NAME),
-					Value: ehrID.String(),
-				},
-			},
+			Type:      rm.EHR_TYPE,
+			ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+				Value: ehrID.String(),
+			}),
 		},
 		TimeCreated: rm.DV_DATE_TIME{
 			Value: time.Now().UTC().Format(time.RFC3339),
@@ -2750,17 +2833,13 @@ func NewVersionedEHRStatus(id, ehrID uuid.UUID) rm.VERSIONED_EHR_STATUS {
 
 func NewEHRStatus(id uuid.UUID) rm.EHR_STATUS {
 	return rm.EHR_STATUS{
-		UID: utils.Some(rm.X_UID_BASED_ID{
-			Value: &rm.OBJECT_VERSION_ID{
-				Type_: utils.Some(rm.OBJECT_VERSION_ID_MODEL_NAME),
-				Value: fmt.Sprintf("%s::%s::1", id.String(), config.SYSTEM_ID_GOPENEHR),
-			},
+		UID: utils.Some(rm.UIDBasedIDFromObjectVersionID(&rm.OBJECT_VERSION_ID{
+			Type_: utils.Some(rm.OBJECT_VERSION_ID_TYPE),
+			Value: fmt.Sprintf("%s::%s::1", id.String(), config.SYSTEM_ID_GOPENEHR),
+		})),
+		Name: rm.DvTextFromDvText(rm.DV_TEXT{
+			Value: "EHR Status",
 		}),
-		Name: rm.X_DV_TEXT{
-			Value: &rm.DV_TEXT{
-				Value: "EHR Status",
-			},
-		},
 		ArchetypeNodeID: "openEHR-EHR-EHR_STATUS.generic.v1",
 		Subject:         rm.PARTY_SELF{},
 		IsQueryable:     true,
@@ -2775,13 +2854,10 @@ func NewVersionedComposition(id, ehrID uuid.UUID) rm.VERSIONED_COMPOSITION {
 		},
 		OwnerID: rm.OBJECT_REF{
 			Namespace: config.NAMESPACE_LOCAL,
-			Type:      rm.EHR_MODEL_NAME,
-			ID: rm.X_OBJECT_ID{
-				Value: &rm.HIER_OBJECT_ID{
-					Type_: utils.Some(rm.HIER_OBJECT_ID_MODEL_NAME),
-					Value: ehrID.String(),
-				},
-			},
+			Type:      rm.EHR_TYPE,
+			ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+				Value: ehrID.String(),
+			}),
 		},
 		TimeCreated: rm.DV_DATE_TIME{
 			Value: time.Now().UTC().Format(time.RFC3339),
@@ -2796,13 +2872,10 @@ func NewVersionedFolder(id, ehrID uuid.UUID) rm.VERSIONED_FOLDER {
 		},
 		OwnerID: rm.OBJECT_REF{
 			Namespace: config.NAMESPACE_LOCAL,
-			Type:      rm.EHR_MODEL_NAME,
-			ID: rm.X_OBJECT_ID{
-				Value: &rm.HIER_OBJECT_ID{
-					Type_: utils.Some(rm.HIER_OBJECT_ID_MODEL_NAME),
-					Value: ehrID.String(),
-				},
-			},
+			Type:      rm.EHR_TYPE,
+			ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+				Value: ehrID.String(),
+			}),
 		},
 		TimeCreated: rm.DV_DATE_TIME{
 			Value: time.Now().UTC().Format(time.RFC3339),
@@ -2817,13 +2890,10 @@ func NewVersionedParty(uid uuid.UUID) rm.VERSIONED_PARTY {
 		},
 		OwnerID: rm.OBJECT_REF{
 			Namespace: config.NAMESPACE_LOCAL,
-			Type:      rm.ORGANISATION_MODEL_NAME,
-			ID: rm.X_OBJECT_ID{
-				Value: &rm.HIER_OBJECT_ID{
-					Type_: utils.Some(rm.HIER_OBJECT_ID_MODEL_NAME),
-					Value: uid.String(),
-				},
-			},
+			Type:      rm.ORGANISATION_TYPE,
+			ID: rm.ObjectIDFromHierObjectID(rm.HIER_OBJECT_ID{
+				Value: uid.String(),
+			}),
 		},
 		TimeCreated: rm.DV_DATE_TIME{
 			Value: time.Now().UTC().Format(time.RFC3339),
@@ -2831,15 +2901,13 @@ func NewVersionedParty(uid uuid.UUID) rm.VERSIONED_PARTY {
 	}
 }
 
-func UpgradeObjectVersionID(currentUID *utils.Optional[rm.X_UID_BASED_ID], previousUID utils.Optional[rm.OBJECT_VERSION_ID]) error {
+func UpgradeObjectVersionID(currentUID *utils.Optional[rm.UIDBasedIDUnion], previousUID utils.Optional[rm.OBJECT_VERSION_ID]) error {
 	// Provide ID when EHR Status does not have one
 	if !currentUID.E {
-		*currentUID = utils.Some(rm.X_UID_BASED_ID{
-			Value: &rm.OBJECT_VERSION_ID{
-				Type_: utils.Some(rm.OBJECT_VERSION_ID_MODEL_NAME),
-				Value: fmt.Sprintf("%s::%s::1", uuid.NewString(), config.SYSTEM_ID_GOPENEHR),
-			},
-		})
+		*currentUID = utils.Some(rm.UIDBasedIDFromObjectVersionID(&rm.OBJECT_VERSION_ID{
+			Type_: utils.Some(rm.OBJECT_VERSION_ID_TYPE),
+			Value: fmt.Sprintf("%s::%s::1", uuid.NewString(), config.SYSTEM_ID_GOPENEHR),
+		}))
 	}
 
 	switch v := currentUID.V.Value.(type) {
@@ -2854,12 +2922,10 @@ func UpgradeObjectVersionID(currentUID *utils.Optional[rm.X_UID_BASED_ID], previ
 	case *rm.HIER_OBJECT_ID:
 		// Add namespace and version to convert to OBJECT_VERSION_ID
 		hierID := currentUID.V.Value.(*rm.HIER_OBJECT_ID)
-		*currentUID = utils.Some(rm.X_UID_BASED_ID{
-			Value: &rm.OBJECT_VERSION_ID{
-				Type_: utils.Some(rm.OBJECT_VERSION_ID_MODEL_NAME),
-				Value: fmt.Sprintf("%s::%s::1", hierID.Value, config.SYSTEM_ID_GOPENEHR),
-			},
-		})
+		*currentUID = utils.Some(rm.UIDBasedIDFromObjectVersionID(&rm.OBJECT_VERSION_ID{
+			Type_: utils.Some(rm.OBJECT_VERSION_ID_TYPE),
+			Value: fmt.Sprintf("%s::%s::1", hierID.Value, config.SYSTEM_ID_GOPENEHR),
+		}))
 	default:
 		return fmt.Errorf("EHR Status UID must be of type OBJECT_VERSION_ID or HIER_OBJECT_ID, got %T", currentUID.V.Value)
 	}
@@ -2876,11 +2942,9 @@ func NewContribution(description string, auditChangeType terminology.AuditChange
 			SystemID:      config.SYSTEM_ID_GOPENEHR,
 			TimeCommitted: rm.DV_DATE_TIME{Value: time.Now().UTC().Format(time.RFC3339)},
 			Description:   utils.Some(rm.DV_TEXT{Value: description}),
-			Committer: rm.X_PARTY_PROXY{
-				Value: &rm.PARTY_SELF{
-					Type_: utils.Some(rm.PARTY_SELF_MODEL_NAME),
-				},
-			},
+			Committer: rm.PartyProxyFromPartySelf(rm.PARTY_SELF{
+				Type_: utils.Some(rm.PARTY_SELF_TYPE),
+			}),
 		},
 	}
 
@@ -2912,9 +2976,9 @@ func NewContribution(description string, auditChangeType terminology.AuditChange
 	return contribution
 }
 
-func NewOriginalVersion(data rm.VersionModel, precedingVersion utils.Optional[rm.OBJECT_VERSION_ID]) rm.ORIGINAL_VERSION {
+func NewOriginalVersion(id rm.OBJECT_VERSION_ID, data rm.OriginalVersionDataUnion, precedingVersion utils.Optional[rm.OBJECT_VERSION_ID]) rm.ORIGINAL_VERSION {
 	return rm.ORIGINAL_VERSION{
-		UID:                 data.ObjectVersionID(),
+		UID:                 id,
 		PrecedingVersionUID: precedingVersion,
 		LifecycleState: rm.DV_CODED_TEXT{
 			Value: terminology.VersionLifecycleStateNames[terminology.VERSION_LIFECYCLE_STATE_CODE_COMPLETE],

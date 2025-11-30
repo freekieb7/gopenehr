@@ -7,20 +7,16 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const REFERENCE_RANGE_MODEL_NAME string = "REFERENCE_RANGE"
+const REFERENCE_RANGE_TYPE string = "REFERENCE_RANGE"
 
 type REFERENCE_RANGE struct {
 	Type_   utils.Optional[string] `json:"_type,omitzero"`
-	Meaning X_DV_TEXT              `json:"meaning"`
+	Meaning DvTextUnion            `json:"meaning"`
 	Range   DV_INTERVAL            `json:"range"`
 }
 
-func (r *REFERENCE_RANGE) HasModelName() bool {
-	return r.Type_.E
-}
-
 func (r *REFERENCE_RANGE) SetModelName() {
-	r.Type_ = utils.Some(REFERENCE_RANGE_MODEL_NAME)
+	r.Type_ = utils.Some(REFERENCE_RANGE_TYPE)
 	r.Meaning.SetModelName()
 	r.Range.SetModelName()
 }
@@ -29,12 +25,12 @@ func (r *REFERENCE_RANGE) Validate(path string) util.ValidateError {
 	var validateErr util.ValidateError
 
 	// Validate _type
-	if r.Type_.E && r.Type_.V != REFERENCE_RANGE_MODEL_NAME {
+	if r.Type_.E && r.Type_.V != REFERENCE_RANGE_TYPE {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          REFERENCE_RANGE_MODEL_NAME,
+			Model:          REFERENCE_RANGE_TYPE,
 			Path:           "._type",
-			Message:        fmt.Sprintf("invalid %s _type field: %s", REFERENCE_RANGE_MODEL_NAME, r.Type_.V),
-			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", REFERENCE_RANGE_MODEL_NAME),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", REFERENCE_RANGE_TYPE, r.Type_.V),
+			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", REFERENCE_RANGE_TYPE),
 		})
 	}
 

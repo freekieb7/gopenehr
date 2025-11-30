@@ -5,17 +5,17 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const PARTY_REF_MODEL_NAME string = "PARTY_REF"
+const PARTY_REF_TYPE string = "PARTY_REF"
 
 type PARTY_REF struct {
 	Type_     utils.Optional[string] `json:"_type,omitzero"`
 	Namespace string                 `json:"namespace"`
 	Type      string                 `json:"type"`
-	ID        X_OBJECT_ID            `json:"id"`
+	ID        ObjectIDUnion          `json:"id"`
 }
 
 func (p *PARTY_REF) SetModelName() {
-	p.Type_ = utils.Some(PARTY_REF_MODEL_NAME)
+	p.Type_ = utils.Some(PARTY_REF_TYPE)
 	p.ID.SetModelName()
 }
 
@@ -24,10 +24,10 @@ func (p *PARTY_REF) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if p.Type_.E && p.Type_.V != PARTY_REF_MODEL_NAME {
+	if p.Type_.E && p.Type_.V != PARTY_REF_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          PARTY_REF_MODEL_NAME,
+			Model:          PARTY_REF_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
 			Recommendation: "Ensure _type field is set to PARTY_REF",
@@ -38,7 +38,7 @@ func (p *PARTY_REF) Validate(path string) util.ValidateError {
 	if p.Namespace == "" {
 		attrPath = path + ".namespace"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          PARTY_REF_MODEL_NAME,
+			Model:          PARTY_REF_TYPE,
 			Path:           attrPath,
 			Message:        "namespace cannot be empty",
 			Recommendation: "Provide a valid namespace",
@@ -49,7 +49,7 @@ func (p *PARTY_REF) Validate(path string) util.ValidateError {
 	if p.Type == "" {
 		attrPath = path + ".type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          PARTY_REF_MODEL_NAME,
+			Model:          PARTY_REF_TYPE,
 			Path:           attrPath,
 			Message:        "type cannot be empty",
 			Recommendation: "Provide a valid type",

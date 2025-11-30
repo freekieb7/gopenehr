@@ -33,3 +33,9 @@ serve:
 .PHONY: aql-gen
 aql-gen:
 	docker run --rm -u $(id -u ${USER}):$(id -g ${USER}) --volume `pwd`/internal/openehr/aql:/work antlr/antlr4 -Dlanguage=Go AQL.g4 -o gen -package gen
+
+.PHONY: pprof
+pprof:
+	go test -test.benchmem -cpuprofile cpu.prof -memprofile mem.prof -bench BenchmarkCompositionUnmarshal ./internal/openehr/rmv2/...
+	go tool pprof -http localhost:8080 mem.prof
+	

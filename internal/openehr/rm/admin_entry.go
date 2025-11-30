@@ -7,13 +7,13 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const ADMIN_ENTRY_MODEL_NAME string = "ADMIN_ENTRY"
+const ADMIN_ENTRY_TYPE string = "ADMIN_ENTRY"
 
 type ADMIN_ENTRY struct {
 	Type_               utils.Optional[string]          `json:"_type,omitzero"`
-	Name                X_DV_TEXT                       `json:"name"`
+	Name                DvTextUnion                     `json:"name"`
 	ArchetypeNodeID     string                          `json:"archetype_node_id"`
-	UID                 utils.Optional[X_UID_BASED_ID]  `json:"uid,omitzero"`
+	UID                 utils.Optional[UIDBasedIDUnion] `json:"uid,omitzero"`
 	Links               utils.Optional[[]LINK]          `json:"links,omitzero"`
 	ArchetypeDetails    utils.Optional[ARCHETYPED]      `json:"archetype_details,omitzero"`
 	FeederAudit         utils.Optional[FEEDER_AUDIT]    `json:"feeder_audit,omitzero"`
@@ -21,19 +21,13 @@ type ADMIN_ENTRY struct {
 	Encoding            CODE_PHRASE                     `json:"encoding"`
 	OtherParticipations utils.Optional[[]PARTICIPATION] `json:"other_participations,omitzero"`
 	WorkflowID          utils.Optional[OBJECT_REF]      `json:"workflow_id,omitzero"`
-	Subject             X_PARTY_PROXY                   `json:"subject"`
-	Provider            utils.Optional[X_PARTY_PROXY]   `json:"provider,omitzero"`
-	Data                X_ITEM_STRUCTURE                `json:"data"`
-}
-
-func (a *ADMIN_ENTRY) isContentItemModel() {}
-
-func (a *ADMIN_ENTRY) HasModelName() bool {
-	return a.Type_.E
+	Subject             PartyProxyUnion                 `json:"subject"`
+	Provider            utils.Optional[PartyProxyUnion] `json:"provider,omitzero"`
+	Data                ItemStructureUnion              `json:"data"`
 }
 
 func (a *ADMIN_ENTRY) SetModelName() {
-	a.Type_ = utils.Some(ADMIN_ENTRY_MODEL_NAME)
+	a.Type_ = utils.Some(ADMIN_ENTRY_TYPE)
 	a.Name.SetModelName()
 	if a.UID.E {
 		a.UID.V.SetModelName()
@@ -71,13 +65,13 @@ func (a *ADMIN_ENTRY) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if a.Type_.E && a.Type_.V != ADMIN_ENTRY_MODEL_NAME {
+	if a.Type_.E && a.Type_.V != ADMIN_ENTRY_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ADMIN_ENTRY_MODEL_NAME,
+			Model:          ADMIN_ENTRY_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + ADMIN_ENTRY_MODEL_NAME,
-			Recommendation: "Set _type to " + ADMIN_ENTRY_MODEL_NAME,
+			Message:        "_type must be " + ADMIN_ENTRY_TYPE,
+			Recommendation: "Set _type to " + ADMIN_ENTRY_TYPE,
 		})
 	}
 

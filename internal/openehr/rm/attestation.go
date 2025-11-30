@@ -7,24 +7,24 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const ATTESTATION_MODEL_NAME = "ATTESTATION"
+const ATTESTATION_TYPE = "ATTESTATION"
 
 type ATTESTATION struct {
 	Type_         utils.Optional[string]        `json:"_type,omitzero"`
 	SystemID      string                        `json:"system_id"`
 	TimeCommitted DV_DATE_TIME                  `json:"time_committed"`
 	ChangeType    DV_CODED_TEXT                 `json:"change_type"`
-	Description   utils.Optional[X_DV_TEXT]     `json:"description,omitzero"`
-	Committer     X_PARTY_PROXY                 `json:"committer"`
+	Description   utils.Optional[DvTextUnion]   `json:"description,omitzero"`
+	Committer     PartyProxyUnion               `json:"committer"`
 	AttestedView  utils.Optional[DV_MULTIMEDIA] `json:"attested_view,omitzero"`
 	Proof         utils.Optional[string]        `json:"proof,omitzero"`
 	Items         utils.Optional[[]DV_EHR_URI]  `json:"items,omitzero"`
-	Reason        X_DV_TEXT                     `json:"reason"`
+	Reason        DvTextUnion                   `json:"reason"`
 	IsPending     bool                          `json:"is_pending"`
 }
 
 func (a *ATTESTATION) SetModelName() {
-	a.Type_ = utils.Some(ATTESTATION_MODEL_NAME)
+	a.Type_ = utils.Some(ATTESTATION_TYPE)
 	a.TimeCommitted.SetModelName()
 	a.ChangeType.SetModelName()
 	if a.Description.E {
@@ -45,13 +45,13 @@ func (a *ATTESTATION) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if a.Type_.E && a.Type_.V != ATTESTATION_MODEL_NAME {
+	if a.Type_.E && a.Type_.V != ATTESTATION_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ATTESTATION_MODEL_NAME,
+			Model:          ATTESTATION_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + ATTESTATION_MODEL_NAME,
-			Recommendation: "Set _type to " + ATTESTATION_MODEL_NAME,
+			Message:        "_type must be " + ATTESTATION_TYPE,
+			Recommendation: "Set _type to " + ATTESTATION_TYPE,
 		})
 	}
 
@@ -59,7 +59,7 @@ func (a *ATTESTATION) Validate(path string) util.ValidateError {
 	attrPath = path + ".system_id"
 	if a.SystemID == "" {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ATTESTATION_MODEL_NAME,
+			Model:          ATTESTATION_TYPE,
 			Path:           attrPath,
 			Message:        "system_id cannot be empty",
 			Recommendation: "Provide a valid system_id",

@@ -7,27 +7,21 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const CLUSTER_MODEL_NAME string = "CLUSTER"
+const CLUSTER_TYPE string = "CLUSTER"
 
 type CLUSTER struct {
-	Type_            utils.Optional[string]         `json:"_type,omitzero"`
-	Name             X_DV_TEXT                      `json:"name"`
-	ArchetypeNodeID  string                         `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID] `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]         `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]     `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]   `json:"feeder_audit,omitzero"`
-	Items            []X_ITEM                       `json:"items"`
-}
-
-func (c *CLUSTER) isItemModel() {}
-
-func (c *CLUSTER) HasModelName() bool {
-	return c.Type_.E
+	Type_            utils.Optional[string]          `json:"_type,omitzero"`
+	Name             DvTextUnion                     `json:"name"`
+	ArchetypeNodeID  string                          `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion] `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]          `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]      `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]    `json:"feeder_audit,omitzero"`
+	Items            []ItemUnion                     `json:"items"`
 }
 
 func (c *CLUSTER) SetModelName() {
-	c.Type_ = utils.Some(CLUSTER_MODEL_NAME)
+	c.Type_ = utils.Some(CLUSTER_TYPE)
 	c.Name.SetModelName()
 	if c.UID.E {
 		c.UID.V.SetModelName()
@@ -53,10 +47,10 @@ func (c *CLUSTER) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if c.Type_.E && c.Type_.V != CLUSTER_MODEL_NAME {
+	if c.Type_.E && c.Type_.V != CLUSTER_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:   CLUSTER_MODEL_NAME,
+			Model:   CLUSTER_TYPE,
 			Path:    attrPath,
 			Message: "invalid _type value",
 		})

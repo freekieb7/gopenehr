@@ -7,7 +7,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const PARTY_IDENTIFIED_MODEL_NAME string = "PARTY_IDENTIFIED"
+const PARTY_IDENTIFIED_TYPE string = "PARTY_IDENTIFIED"
 
 type PARTY_IDENTIFIED struct {
 	Type_       utils.Optional[string]          `json:"_type,omitzero"`
@@ -16,14 +16,8 @@ type PARTY_IDENTIFIED struct {
 	Identifiers utils.Optional[[]DV_IDENTIFIER] `json:"identifiers,omitzero"`
 }
 
-func (p *PARTY_IDENTIFIED) isPartyProxyModel() {}
-
-func (p *PARTY_IDENTIFIED) HasModelName() bool {
-	return p.Type_.E
-}
-
 func (p *PARTY_IDENTIFIED) SetModelName() {
-	p.Type_ = utils.Some(PARTY_IDENTIFIED_MODEL_NAME)
+	p.Type_ = utils.Some(PARTY_IDENTIFIED_TYPE)
 	if p.ExternalRef.E {
 		p.ExternalRef.V.SetModelName()
 	}
@@ -39,10 +33,10 @@ func (p *PARTY_IDENTIFIED) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if p.Type_.E && p.Type_.V != PARTY_IDENTIFIED_MODEL_NAME {
+	if p.Type_.E && p.Type_.V != PARTY_IDENTIFIED_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          PARTY_IDENTIFIED_MODEL_NAME,
+			Model:          PARTY_IDENTIFIED_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
 			Recommendation: "Ensure _type field is set to PARTY_IDENTIFIED",

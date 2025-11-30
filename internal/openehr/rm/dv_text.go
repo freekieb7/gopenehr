@@ -11,7 +11,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const DV_TEXT_MODEL_NAME string = "DV_TEXT"
+const DV_TEXT_TYPE string = "DV_TEXT"
 
 type DV_TEXT struct {
 	Type_      utils.Optional[string]         `json:"_type,omitzero"`
@@ -22,16 +22,8 @@ type DV_TEXT struct {
 	Encoding   utils.Optional[CODE_PHRASE]    `json:"encoding,omitzero"`
 }
 
-func (d *DV_TEXT) isDataValueModel() {}
-
-func (d *DV_TEXT) isDvTextModel() {}
-
-func (d *DV_TEXT) HasModelName() bool {
-	return d.Type_.E
-}
-
 func (d *DV_TEXT) SetModelName() {
-	d.Type_ = utils.Some(DV_TEXT_MODEL_NAME)
+	d.Type_ = utils.Some(DV_TEXT_TYPE)
 	if d.Mappings.E {
 		for i := range d.Mappings.V {
 			d.Mappings.V[i].SetModelName()
@@ -50,13 +42,13 @@ func (d *DV_TEXT) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.E && d.Type_.V != DV_TEXT_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_TEXT_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_TEXT_MODEL_NAME,
+			Model:          DV_TEXT_TYPE,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_TEXT_MODEL_NAME, d.Type_.V),
-			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", DV_TEXT_MODEL_NAME),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", DV_TEXT_TYPE, d.Type_.V),
+			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", DV_TEXT_TYPE),
 		})
 	}
 
@@ -66,7 +58,7 @@ func (d *DV_TEXT) Validate(path string) util.ValidateError {
 		validFormats := []string{"plain", "plain_no_newlines", "markdown"}
 		if !slices.Contains(validFormats, d.Formatting.V) {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          DV_TEXT_MODEL_NAME,
+				Model:          DV_TEXT_TYPE,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid formatting field: %s", d.Formatting.V),
 				Recommendation: "Ensure formatting field is one of 'plain', 'plain_no_newlines', 'markdown'",
@@ -78,14 +70,14 @@ func (d *DV_TEXT) Validate(path string) util.ValidateError {
 	attrPath = path + ".value"
 	if d.Value == "" {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_TEXT_MODEL_NAME,
+			Model:          DV_TEXT_TYPE,
 			Path:           attrPath,
 			Message:        "value field is required",
 			Recommendation: "Ensure value field is not empty",
 		})
 	} else if len(d.Value) > 10000 {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_TEXT_MODEL_NAME,
+			Model:          DV_TEXT_TYPE,
 			Path:           attrPath,
 			Message:        "value field exceeds maximum length of 10000 characters",
 			Recommendation: "Ensure value field does not exceed 10000 characters",
@@ -95,7 +87,7 @@ func (d *DV_TEXT) Validate(path string) util.ValidateError {
 	if d.Formatting.E && d.Formatting.V == "plain_no_newlines" {
 		if strings.ContainsAny(d.Value, "\n\r") {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          DV_TEXT_MODEL_NAME,
+				Model:          DV_TEXT_TYPE,
 				Path:           attrPath,
 				Message:        "value field contains newlines but formatting is 'plain_no_newlines'",
 				Recommendation: "Ensure value field does not contain newlines when formatting is 'plain_no_newlines'",
@@ -117,7 +109,7 @@ func (d *DV_TEXT) Validate(path string) util.ValidateError {
 		attrPath = path + ".language"
 		if !terminology.IsValidLanguageTerminologyID(d.Language.V.TerminologyID.Value) {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          DV_TEXT_MODEL_NAME,
+				Model:          DV_TEXT_TYPE,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid language field: %s", d.Language.V.TerminologyID.Value),
 				Recommendation: "Ensure language field is a known ISO 639-1 or ISO 639-2 language code",
@@ -126,7 +118,7 @@ func (d *DV_TEXT) Validate(path string) util.ValidateError {
 
 		if !terminology.IsValidLanguageCode(d.Language.V.CodeString) {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          DV_TEXT_MODEL_NAME,
+				Model:          DV_TEXT_TYPE,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid language field: %s", d.Language.V.CodeString),
 				Recommendation: "Ensure language field is a known ISO 639-1 or ISO 639-2 language code",
@@ -140,7 +132,7 @@ func (d *DV_TEXT) Validate(path string) util.ValidateError {
 		attrPath = path + ".encoding"
 		if !terminology.IsValidCharsetTerminologyID(d.Encoding.V.TerminologyID.Value) {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          DV_TEXT_MODEL_NAME,
+				Model:          DV_TEXT_TYPE,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid encoding field: %s", d.Encoding.V.TerminologyID.Value),
 				Recommendation: "Ensure encoding field is a known IANA character set",
@@ -149,7 +141,7 @@ func (d *DV_TEXT) Validate(path string) util.ValidateError {
 
 		if !terminology.IsValidCharset(d.Encoding.V.CodeString) {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          DV_TEXT_MODEL_NAME,
+				Model:          DV_TEXT_TYPE,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid encoding field: %s", d.Encoding.V.CodeString),
 				Recommendation: "Ensure encoding field is a known IANA character set",
@@ -161,29 +153,34 @@ func (d *DV_TEXT) Validate(path string) util.ValidateError {
 	return validateErr
 }
 
-// ========== Union of DV_TEXT ==========
+type DvTextKind int
 
-type DvTextModel interface {
-	isDvTextModel()
-	HasModelName() bool
-	SetModelName()
-	Validate(path string) util.ValidateError
+const (
+	DvTextKind_Unknown DvTextKind = iota
+	DvTextKind_DV_TEXT
+	DvTextKind_DV_CODED_TEXT
+)
+
+type DvTextUnion struct {
+	Kind  DvTextKind
+	Value any
 }
 
-type X_DV_TEXT struct {
-	Value DvTextModel
+func (d DvTextUnion) SetModelName() {
+	switch d.Kind {
+	case DvTextKind_DV_TEXT:
+		d.Value.(*DV_TEXT).SetModelName()
+	case DvTextKind_DV_CODED_TEXT:
+		d.Value.(*DV_CODED_TEXT).SetModelName()
+	}
 }
 
-func (x X_DV_TEXT) SetModelName() {
-	x.Value.SetModelName()
-}
-
-func (x X_DV_TEXT) Validate(path string) util.ValidateError {
-	if x.Value == nil {
+func (d DvTextUnion) Validate(path string) util.ValidateError {
+	if d.Kind == DvTextKind_Unknown {
 		return util.ValidateError{
 			Errs: []util.ValidationError{
 				{
-					Model:          DV_TEXT_MODEL_NAME,
+					Model:          DV_TEXT_TYPE,
 					Path:           path,
 					Message:        "value is not known DV_TEXT subtype",
 					Recommendation: "Ensure value is properly set",
@@ -192,28 +189,65 @@ func (x X_DV_TEXT) Validate(path string) util.ValidateError {
 		}
 	}
 
-	return x.Value.Validate(path)
-}
-
-func (a X_DV_TEXT) MarshalJSON() ([]byte, error) {
-	return json.Marshal(a.Value)
-}
-
-func (a *X_DV_TEXT) UnmarshalJSON(data []byte) error {
-	var extractor util.TypeExtractor
-	if err := json.Unmarshal(data, &extractor); err != nil {
-		return err
-	}
-
-	t := extractor.Type_
-	switch t {
-	case DV_TEXT_MODEL_NAME, "":
-		a.Value = new(DV_TEXT)
-	case DV_CODED_TEXT_MODEL_NAME:
-		a.Value = new(DV_CODED_TEXT)
+	switch d.Kind {
+	case DvTextKind_DV_TEXT:
+		return d.Value.(*DV_TEXT).Validate(path)
+	case DvTextKind_DV_CODED_TEXT:
+		return d.Value.(*DV_CODED_TEXT).Validate(path)
 	default:
-		return fmt.Errorf("DV_TEXT unexpected _type %s", t)
+		return util.ValidateError{}
+	}
+}
+
+func (d DvTextUnion) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.Value)
+}
+
+func (d *DvTextUnion) UnmarshalJSON(data []byte) error {
+	t := util.UnsafeTypeFieldExtraction(data)
+	switch t {
+	case DV_TEXT_TYPE, "":
+		d.Kind = DvTextKind_DV_TEXT
+		d.Value = &DV_TEXT{}
+	case DV_CODED_TEXT_TYPE:
+		d.Kind = DvTextKind_DV_CODED_TEXT
+		d.Value = &DV_CODED_TEXT{}
+	default:
+		d.Kind = DvTextKind_Unknown
+		return nil
 	}
 
-	return json.Unmarshal(data, a.Value)
+	return json.Unmarshal(data, d.Value)
+}
+
+func (d *DvTextUnion) DvText() *DV_TEXT {
+	if d.Kind == DvTextKind_DV_TEXT {
+		return d.Value.(*DV_TEXT)
+	}
+	return nil
+}
+
+func (d *DvTextUnion) DvCodedText() *DV_CODED_TEXT {
+	if d.Kind == DvTextKind_DV_CODED_TEXT {
+		return d.Value.(*DV_CODED_TEXT)
+	}
+	return nil
+}
+
+func DvTextFromDvText(dvText DV_TEXT) DvTextUnion {
+	dvText.Type_ = utils.Some(DV_TEXT_TYPE)
+
+	return DvTextUnion{
+		Kind:  DvTextKind_DV_TEXT,
+		Value: &dvText,
+	}
+}
+
+func DvTextFromDvCodedText(dvCodedText DV_CODED_TEXT) DvTextUnion {
+	dvCodedText.Type_ = utils.Some(DV_CODED_TEXT_TYPE)
+
+	return DvTextUnion{
+		Kind:  DvTextKind_DV_CODED_TEXT,
+		Value: &dvCodedText,
+	}
 }

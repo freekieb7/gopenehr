@@ -7,29 +7,23 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const ACTIVITY_MODEL_NAME string = "ACTIVITY"
+const ACTIVITY_TYPE string = "ACTIVITY"
 
 type ACTIVITY struct {
-	Type_             utils.Optional[string]         `json:"_type,omitzero"`
-	Name              X_DV_TEXT                      `json:"name"`
-	ArchetypeNodeID   string                         `json:"archetype_node_id"`
-	UID               utils.Optional[X_UID_BASED_ID] `json:"uid,omitzero"`
-	Links             utils.Optional[[]LINK]         `json:"links,omitzero"`
-	ArchetypeDetails  utils.Optional[ARCHETYPED]     `json:"archetype_details,omitzero"`
-	FeederAudit       utils.Optional[FEEDER_AUDIT]   `json:"feeder_audit,omitzero"`
-	Timing            utils.Optional[DV_PARSABLE]    `json:"timing,omitzero"`
-	ActionArchetypeID string                         `json:"action_archetype_id"`
-	Description       X_ITEM_STRUCTURE               `json:"description"`
-}
-
-func (a *ACTIVITY) isContentItemModel() {}
-
-func (a *ACTIVITY) HasModelName() bool {
-	return a.Type_.E
+	Type_             utils.Optional[string]          `json:"_type,omitzero"`
+	Name              DvTextUnion                     `json:"name"`
+	ArchetypeNodeID   string                          `json:"archetype_node_id"`
+	UID               utils.Optional[UIDBasedIDUnion] `json:"uid,omitzero"`
+	Links             utils.Optional[[]LINK]          `json:"links,omitzero"`
+	ArchetypeDetails  utils.Optional[ARCHETYPED]      `json:"archetype_details,omitzero"`
+	FeederAudit       utils.Optional[FEEDER_AUDIT]    `json:"feeder_audit,omitzero"`
+	Timing            utils.Optional[DV_PARSABLE]     `json:"timing,omitzero"`
+	ActionArchetypeID string                          `json:"action_archetype_id"`
+	Description       ItemStructureUnion              `json:"description"`
 }
 
 func (a *ACTIVITY) SetModelName() {
-	a.Type_ = utils.Some(ACTIVITY_MODEL_NAME)
+	a.Type_ = utils.Some(ACTIVITY_TYPE)
 	a.Name.SetModelName()
 	if a.UID.E {
 		a.UID.V.SetModelName()
@@ -56,13 +50,13 @@ func (a *ACTIVITY) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if a.Type_.E && a.Type_.V != ACTIVITY_MODEL_NAME {
+	if a.Type_.E && a.Type_.V != ACTIVITY_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ACTIVITY_MODEL_NAME,
+			Model:          ACTIVITY_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + ACTIVITY_MODEL_NAME,
-			Recommendation: "Set _type to " + ACTIVITY_MODEL_NAME,
+			Message:        "_type must be " + ACTIVITY_TYPE,
+			Recommendation: "Set _type to " + ACTIVITY_TYPE,
 		})
 	}
 

@@ -5,7 +5,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const VERSIONED_FOLDER_MODEL_NAME string = "VERSIONED_FOLDER"
+const VERSIONED_FOLDER_TYPE string = "VERSIONED_FOLDER"
 
 type VERSIONED_FOLDER struct {
 	Type_       utils.Optional[string] `json:"_type,omitzero"`
@@ -15,7 +15,7 @@ type VERSIONED_FOLDER struct {
 }
 
 func (vf *VERSIONED_FOLDER) SetModelName() {
-	vf.Type_ = utils.Some(VERSIONED_FOLDER_MODEL_NAME)
+	vf.Type_ = utils.Some(VERSIONED_FOLDER_TYPE)
 	vf.UID.SetModelName()
 	vf.OwnerID.SetModelName()
 	vf.TimeCreated.SetModelName()
@@ -26,13 +26,13 @@ func (vf *VERSIONED_FOLDER) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if vf.Type_.E && vf.Type_.V != VERSIONED_FOLDER_MODEL_NAME {
+	if vf.Type_.E && vf.Type_.V != VERSIONED_FOLDER_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          VERSIONED_FOLDER_MODEL_NAME,
+			Model:          VERSIONED_FOLDER_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + VERSIONED_FOLDER_MODEL_NAME,
-			Recommendation: "Set _type to " + VERSIONED_FOLDER_MODEL_NAME,
+			Message:        "_type must be " + VERSIONED_FOLDER_TYPE,
+			Recommendation: "Set _type to " + VERSIONED_FOLDER_TYPE,
 		})
 	}
 

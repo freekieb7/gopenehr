@@ -7,7 +7,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const DV_TIME_MODEL_NAME string = "DV_TIME"
+const DV_TIME_TYPE string = "DV_TIME"
 
 type DV_TIME struct {
 	Type_                utils.Optional[string]            `json:"_type,omitzero"`
@@ -20,14 +20,8 @@ type DV_TIME struct {
 	Value                string                            `json:"value"`
 }
 
-func (d *DV_TIME) isDataValueModel() {}
-
-func (d *DV_TIME) HasModelName() bool {
-	return d.Type_.E
-}
-
 func (d *DV_TIME) SetModelName() {
-	d.Type_ = utils.Some(DV_TIME_MODEL_NAME)
+	d.Type_ = utils.Some(DV_TIME_TYPE)
 	if d.NormalStatus.E {
 		d.NormalStatus.V.SetModelName()
 	}
@@ -49,10 +43,10 @@ func (d *DV_TIME) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.E && d.Type_.V != DV_TIME_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_TIME_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_TIME_MODEL_NAME,
+			Model:          DV_TIME_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
 			Recommendation: "Ensure _type field is set to DV_TIME",

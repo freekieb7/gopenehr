@@ -7,25 +7,23 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const FOLDER_MODEL_NAME = "FOLDER"
+const FOLDER_TYPE = "FOLDER"
 
 type FOLDER struct {
-	Type_            utils.Optional[string]           `json:"_type,omitzero"`
-	Name             X_DV_TEXT                        `json:"name"`
-	ArchetypeNodeID  string                           `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID]   `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]           `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]       `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]     `json:"feeder_audit,omitzero"`
-	Items            utils.Optional[[]OBJECT_REF]     `json:"items,omitzero"`
-	Folders          utils.Optional[[]FOLDER]         `json:"folders,omitzero"`
-	Details          utils.Optional[X_ITEM_STRUCTURE] `json:"details,omitzero"`
+	Type_            utils.Optional[string]             `json:"_type,omitzero"`
+	Name             DvTextUnion                        `json:"name"`
+	ArchetypeNodeID  string                             `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion]    `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]             `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]         `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]       `json:"feeder_audit,omitzero"`
+	Items            utils.Optional[[]OBJECT_REF]       `json:"items,omitzero"`
+	Folders          utils.Optional[[]FOLDER]           `json:"folders,omitzero"`
+	Details          utils.Optional[ItemStructureUnion] `json:"details,omitzero"`
 }
 
-func (f *FOLDER) isVersionModel() {}
-
 func (f *FOLDER) SetModelName() {
-	f.Type_ = utils.Some(FOLDER_MODEL_NAME)
+	f.Type_ = utils.Some(FOLDER_TYPE)
 	if f.UID.E {
 		f.UID.V.SetModelName()
 	}
@@ -60,10 +58,10 @@ func (f *FOLDER) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if f.Type_.E && f.Type_.V != FOLDER_MODEL_NAME {
+	if f.Type_.E && f.Type_.V != FOLDER_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          FOLDER_MODEL_NAME,
+			Model:          FOLDER_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
 			Recommendation: "Ensure _type field is set to FOLDER",
@@ -119,13 +117,4 @@ func (f *FOLDER) Validate(path string) util.ValidateError {
 	}
 
 	return validateErr
-}
-
-func (f *FOLDER) ObjectVersionID() OBJECT_VERSION_ID {
-	if f.UID.E {
-		if objVerID, ok := f.UID.V.Value.(*OBJECT_VERSION_ID); ok {
-			return *objVerID
-		}
-	}
-	return OBJECT_VERSION_ID{}
 }

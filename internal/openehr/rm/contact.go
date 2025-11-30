@@ -7,22 +7,22 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const CONTACT_MODEL_NAME string = "CONTACT"
+const CONTACT_TYPE string = "CONTACT"
 
 type CONTACT struct {
-	Type_            utils.Optional[string]         `json:"_type,omitzero"`
-	Name             X_DV_TEXT                      `json:"name"`
-	ArchetypeNodeID  string                         `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID] `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]         `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]     `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]   `json:"feeder_audit,omitzero"`
-	Addresses        []ADDRESS                      `json:"addresses"`
-	TimeValidity     utils.Optional[DV_INTERVAL]    `json:"time_validity,omitzero"`
+	Type_            utils.Optional[string]          `json:"_type,omitzero"`
+	Name             DvTextUnion                     `json:"name"`
+	ArchetypeNodeID  string                          `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion] `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]          `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]      `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]    `json:"feeder_audit,omitzero"`
+	Addresses        []ADDRESS                       `json:"addresses"`
+	TimeValidity     utils.Optional[DV_INTERVAL]     `json:"time_validity,omitzero"`
 }
 
 func (c *CONTACT) SetModelName() {
-	c.Type_ = utils.Some(CONTACT_MODEL_NAME)
+	c.Type_ = utils.Some(CONTACT_TYPE)
 	c.Name.SetModelName()
 	if c.UID.E {
 		c.UID.V.SetModelName()
@@ -51,13 +51,13 @@ func (c *CONTACT) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if c.Type_.E && c.Type_.V != CONTACT_MODEL_NAME {
+	if c.Type_.E && c.Type_.V != CONTACT_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          CONTACT_MODEL_NAME,
+			Model:          CONTACT_TYPE,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", CONTACT_MODEL_NAME, c.Type_.V),
-			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", CONTACT_MODEL_NAME),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", CONTACT_TYPE, c.Type_.V),
+			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", CONTACT_TYPE),
 		})
 	}
 
@@ -69,7 +69,7 @@ func (c *CONTACT) Validate(path string) util.ValidateError {
 	attrPath = path + ".archetype_node_id"
 	if c.ArchetypeNodeID == "" {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          CONTACT_MODEL_NAME,
+			Model:          CONTACT_TYPE,
 			Path:           attrPath,
 			Message:        "archetype_node_id is required",
 			Recommendation: "Ensure archetype_node_id is not empty",

@@ -5,17 +5,17 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const INSTRUCTION_DETAILS_MODEL_NAME string = "INSTRUCTION_DETAILS"
+const INSTRUCTION_DETAILS_TYPE string = "INSTRUCTION_DETAILS"
 
 type INSTRUCTION_DETAILS struct {
-	Type_         utils.Optional[string]           `json:"_type,omitzero"`
-	InstructionID LOCATABLE_REF                    `json:"instruction_id"`
-	ActivityID    string                           `json:"activity"`
-	WfDetails     utils.Optional[X_ITEM_STRUCTURE] `json:"wf_details,omitzero"`
+	Type_         utils.Optional[string]             `json:"_type,omitzero"`
+	InstructionID LOCATABLE_REF                      `json:"instruction_id"`
+	ActivityID    string                             `json:"activity"`
+	WfDetails     utils.Optional[ItemStructureUnion] `json:"wf_details,omitzero"`
 }
 
 func (i *INSTRUCTION_DETAILS) SetModelName() {
-	i.Type_ = utils.Some(INSTRUCTION_DETAILS_MODEL_NAME)
+	i.Type_ = utils.Some(INSTRUCTION_DETAILS_TYPE)
 	i.InstructionID.SetModelName()
 	if i.WfDetails.E {
 		i.WfDetails.V.SetModelName()
@@ -27,13 +27,13 @@ func (i *INSTRUCTION_DETAILS) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if i.Type_.E && i.Type_.V != INSTRUCTION_DETAILS_MODEL_NAME {
+	if i.Type_.E && i.Type_.V != INSTRUCTION_DETAILS_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          INSTRUCTION_DETAILS_MODEL_NAME,
+			Model:          INSTRUCTION_DETAILS_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + INSTRUCTION_DETAILS_MODEL_NAME,
-			Recommendation: "Set _type to " + INSTRUCTION_DETAILS_MODEL_NAME,
+			Message:        "_type must be " + INSTRUCTION_DETAILS_TYPE,
+			Recommendation: "Set _type to " + INSTRUCTION_DETAILS_TYPE,
 		})
 	}
 

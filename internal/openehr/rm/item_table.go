@@ -7,27 +7,21 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const ITEM_TABLE_MODEL_NAME string = "ITEM_TABLE"
+const ITEM_TABLE_TYPE string = "ITEM_TABLE"
 
 type ITEM_TABLE struct {
-	Type_            utils.Optional[string]         `json:"_type,omitzero"`
-	Name             X_DV_TEXT                      `json:"name"`
-	ArchetypeNodeID  string                         `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID] `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]         `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]     `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]   `json:"feeder_audit,omitzero"`
-	Rows             utils.Optional[[]CLUSTER]      `json:"rows,omitzero"`
-}
-
-func (i *ITEM_TABLE) isItemStructureModel() {}
-
-func (i *ITEM_TABLE) HasModelName() bool {
-	return i.Type_.E
+	Type_            utils.Optional[string]          `json:"_type,omitzero"`
+	Name             DvTextUnion                     `json:"name"`
+	ArchetypeNodeID  string                          `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion] `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]          `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]      `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]    `json:"feeder_audit,omitzero"`
+	Rows             utils.Optional[[]CLUSTER]       `json:"rows,omitzero"`
 }
 
 func (i *ITEM_TABLE) SetModelName() {
-	i.Type_ = utils.Some(ITEM_TABLE_MODEL_NAME)
+	i.Type_ = utils.Some(ITEM_TABLE_TYPE)
 	i.Name.SetModelName()
 	if i.UID.E {
 		i.UID.V.SetModelName()
@@ -55,13 +49,13 @@ func (i *ITEM_TABLE) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if i.Type_.E && i.Type_.V != ITEM_TABLE_MODEL_NAME {
+	if i.Type_.E && i.Type_.V != ITEM_TABLE_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          ITEM_TABLE_MODEL_NAME,
+			Model:          ITEM_TABLE_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
-			Recommendation: "Ensure _type field is set to " + ITEM_TABLE_MODEL_NAME,
+			Recommendation: "Ensure _type field is set to " + ITEM_TABLE_TYPE,
 		})
 	}
 

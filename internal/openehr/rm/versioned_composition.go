@@ -5,7 +5,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const VERSIONED_COMPOSITION_MODEL_NAME string = "VERSIONED_COMPOSITION"
+const VERSIONED_COMPOSITION_TYPE string = "VERSIONED_COMPOSITION"
 
 type VERSIONED_COMPOSITION struct {
 	Type_       utils.Optional[string] `json:"_type,omitzero"`
@@ -15,7 +15,7 @@ type VERSIONED_COMPOSITION struct {
 }
 
 func (vc *VERSIONED_COMPOSITION) SetModelName() {
-	vc.Type_ = utils.Some(VERSIONED_COMPOSITION_MODEL_NAME)
+	vc.Type_ = utils.Some(VERSIONED_COMPOSITION_TYPE)
 	vc.UID.SetModelName()
 	vc.OwnerID.SetModelName()
 	vc.TimeCreated.SetModelName()
@@ -26,13 +26,13 @@ func (vc *VERSIONED_COMPOSITION) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if vc.Type_.E && vc.Type_.V != VERSIONED_COMPOSITION_MODEL_NAME {
+	if vc.Type_.E && vc.Type_.V != VERSIONED_COMPOSITION_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          VERSIONED_COMPOSITION_MODEL_NAME,
+			Model:          VERSIONED_COMPOSITION_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + VERSIONED_COMPOSITION_MODEL_NAME,
-			Recommendation: "Set _type to " + VERSIONED_COMPOSITION_MODEL_NAME,
+			Message:        "_type must be " + VERSIONED_COMPOSITION_TYPE,
+			Recommendation: "Set _type to " + VERSIONED_COMPOSITION_TYPE,
 		})
 	}
 

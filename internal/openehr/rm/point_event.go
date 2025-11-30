@@ -7,29 +7,23 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const POINT_EVENT_MODEL_NAME string = "POINT_EVENT"
+const POINT_EVENT_TYPE string = "POINT_EVENT"
 
 type POINT_EVENT struct {
-	Type_            utils.Optional[string]           `json:"_type,omitzero"`
-	Name             X_DV_TEXT                        `json:"name"`
-	ArchetypeNodeID  string                           `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID]   `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]           `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]       `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]     `json:"feeder_audit,omitzero"`
-	Time             DV_DATE_TIME                     `json:"time"`
-	State            utils.Optional[X_ITEM_STRUCTURE] `json:"state,omitzero"`
-	Data             X_ITEM_STRUCTURE                 `json:"data"`
-}
-
-func (p *POINT_EVENT) isEventModel() {}
-
-func (p *POINT_EVENT) HasModelName() bool {
-	return p.Type_.E
+	Type_            utils.Optional[string]             `json:"_type,omitzero"`
+	Name             DvTextUnion                        `json:"name"`
+	ArchetypeNodeID  string                             `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion]    `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]             `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]         `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]       `json:"feeder_audit,omitzero"`
+	Time             DV_DATE_TIME                       `json:"time"`
+	State            utils.Optional[ItemStructureUnion] `json:"state,omitzero"`
+	Data             ItemStructureUnion                 `json:"data"`
 }
 
 func (p *POINT_EVENT) SetModelName() {
-	p.Type_ = utils.Some(POINT_EVENT_MODEL_NAME)
+	p.Type_ = utils.Some(POINT_EVENT_TYPE)
 	p.Name.SetModelName()
 	if p.UID.E {
 		p.UID.V.SetModelName()
@@ -57,13 +51,13 @@ func (p *POINT_EVENT) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if p.Type_.E && p.Type_.V != POINT_EVENT_MODEL_NAME {
+	if p.Type_.E && p.Type_.V != POINT_EVENT_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          POINT_EVENT_MODEL_NAME,
+			Model:          POINT_EVENT_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + POINT_EVENT_MODEL_NAME,
-			Recommendation: "Set _type to " + POINT_EVENT_MODEL_NAME,
+			Message:        "_type must be " + POINT_EVENT_TYPE,
+			Recommendation: "Set _type to " + POINT_EVENT_TYPE,
 		})
 	}
 

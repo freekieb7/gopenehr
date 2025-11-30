@@ -7,7 +7,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const DV_SCALE_MODEL_NAME string = "DV_SCALE"
+const DV_SCALE_TYPE string = "DV_SCALE"
 
 type DV_SCALE struct {
 	Type_                utils.Optional[string]            `json:"_type,omitzero"`
@@ -18,14 +18,8 @@ type DV_SCALE struct {
 	Value                float64                           `json:"value"`
 }
 
-func (d *DV_SCALE) isDataValueModel() {}
-
-func (d *DV_SCALE) HasModelName() bool {
-	return d.Type_.E
-}
-
 func (d *DV_SCALE) SetModelName() {
-	d.Type_ = utils.Some(DV_SCALE_MODEL_NAME)
+	d.Type_ = utils.Some(DV_SCALE_TYPE)
 }
 
 func (d *DV_SCALE) Validate(path string) util.ValidateError {
@@ -33,10 +27,10 @@ func (d *DV_SCALE) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.E && d.Type_.V != DV_SCALE_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_SCALE_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_SCALE_MODEL_NAME,
+			Model:          DV_SCALE_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
 			Recommendation: "Ensure _type field is set to DV_SCALE",

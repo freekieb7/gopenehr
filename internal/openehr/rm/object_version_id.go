@@ -10,27 +10,15 @@ import (
 	"github.com/google/uuid"
 )
 
-const OBJECT_VERSION_ID_MODEL_NAME string = "OBJECT_VERSION_ID"
+const OBJECT_VERSION_ID_TYPE string = "OBJECT_VERSION_ID"
 
 type OBJECT_VERSION_ID struct {
 	Type_ utils.Optional[string] `json:"_type,omitzero"`
 	Value string                 `json:"value"`
 }
 
-func (o *OBJECT_VERSION_ID) isUidBasedIDModel() {}
-
-func (o *OBJECT_VERSION_ID) isObjectIDModel() {}
-
-func (o *OBJECT_VERSION_ID) HasModelName() bool {
-	return o.Type_.E
-}
-
-func (o *OBJECT_VERSION_ID) GetModelName() string {
-	return OBJECT_VERSION_ID_MODEL_NAME
-}
-
 func (o *OBJECT_VERSION_ID) SetModelName() {
-	o.Type_ = utils.Some(OBJECT_VERSION_ID_MODEL_NAME)
+	o.Type_ = utils.Some(OBJECT_VERSION_ID_TYPE)
 }
 
 func (o *OBJECT_VERSION_ID) Validate(path string) util.ValidateError {
@@ -38,13 +26,13 @@ func (o *OBJECT_VERSION_ID) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if o.Type_.E && o.Type_.V != OBJECT_VERSION_ID_MODEL_NAME {
+	if o.Type_.E && o.Type_.V != OBJECT_VERSION_ID_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          OBJECT_VERSION_ID_MODEL_NAME,
+			Model:          OBJECT_VERSION_ID_TYPE,
 			Path:           attrPath,
-			Message:        fmt.Sprintf("invalid %s _type field: %s", OBJECT_VERSION_ID_MODEL_NAME, o.Type_.V),
-			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", OBJECT_VERSION_ID_MODEL_NAME),
+			Message:        fmt.Sprintf("invalid %s _type field: %s", OBJECT_VERSION_ID_TYPE, o.Type_.V),
+			Recommendation: fmt.Sprintf("Ensure _type field is set to '%s'", OBJECT_VERSION_ID_TYPE),
 		})
 	}
 
@@ -52,7 +40,7 @@ func (o *OBJECT_VERSION_ID) Validate(path string) util.ValidateError {
 	attrPath = path + ".value"
 	if o.Value == "" {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          OBJECT_VERSION_ID_MODEL_NAME,
+			Model:          OBJECT_VERSION_ID_TYPE,
 			Path:           attrPath,
 			Message:        "value field cannot be empty",
 			Recommendation: "Ensure value field is not empty",
@@ -62,7 +50,7 @@ func (o *OBJECT_VERSION_ID) Validate(path string) util.ValidateError {
 		parts := strings.Split(o.Value, "::")
 		if len(parts) != 3 {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          OBJECT_VERSION_ID_MODEL_NAME,
+				Model:          OBJECT_VERSION_ID_TYPE,
 				Path:           attrPath,
 				Message:        fmt.Sprintf("invalid value format: %s", o.Value),
 				Recommendation: "Ensure value field follows the lexical form: object_id '::' creating_system_id '::' version_tree_id",
@@ -73,7 +61,7 @@ func (o *OBJECT_VERSION_ID) Validate(path string) util.ValidateError {
 		uid := parts[0]
 		if err := util.ValidateUID(uid); err != nil {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          OBJECT_VERSION_ID_MODEL_NAME,
+				Model:          OBJECT_VERSION_ID_TYPE,
 				Path:           attrPath + ".object_id",
 				Message:        fmt.Sprintf("invalid object_id format: %s", uid),
 				Recommendation: "Ensure object_id follows a valid UID format",
@@ -84,7 +72,7 @@ func (o *OBJECT_VERSION_ID) Validate(path string) util.ValidateError {
 		creatingSystemID := parts[1]
 		if creatingSystemID == "" {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          OBJECT_VERSION_ID_MODEL_NAME,
+				Model:          OBJECT_VERSION_ID_TYPE,
 				Path:           attrPath + ".creating_system_id",
 				Message:        "creating_system_id cannot be empty",
 				Recommendation: "Ensure creating_system_id is not empty",
@@ -96,14 +84,14 @@ func (o *OBJECT_VERSION_ID) Validate(path string) util.ValidateError {
 		versionTreeID := parts[2]
 		if versionTreeID == "" {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          OBJECT_VERSION_ID_MODEL_NAME,
+				Model:          OBJECT_VERSION_ID_TYPE,
 				Path:           attrPath + ".version_tree_id",
 				Message:        "version_tree_id cannot be empty",
 				Recommendation: "Ensure version_tree_id is not empty",
 			})
 		} else if !util.VersionTreeIDRegex.MatchString(versionTreeID) {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          OBJECT_VERSION_ID_MODEL_NAME,
+				Model:          OBJECT_VERSION_ID_TYPE,
 				Path:           attrPath + ".version_tree_id",
 				Message:        fmt.Sprintf("invalid version_tree_id format: %s", versionTreeID),
 				Recommendation: "Ensure version_tree_id follows the lexical form: trunk_version [ '.' branch_number '.' branch_version ]",

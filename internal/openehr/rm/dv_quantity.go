@@ -7,7 +7,7 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const DV_QUANTITY_MODEL_NAME string = "DV_QUANTITY"
+const DV_QUANTITY_TYPE string = "DV_QUANTITY"
 
 type DV_QUANTITY struct {
 	Type_                utils.Optional[string]            `json:"_type,omitzero"`
@@ -18,14 +18,8 @@ type DV_QUANTITY struct {
 	Value                float64                           `json:"value"`
 }
 
-func (d *DV_QUANTITY) isDataValueModel() {}
-
-func (d *DV_QUANTITY) HasModelName() bool {
-	return d.Type_.E
-}
-
 func (d *DV_QUANTITY) SetModelName() {
-	d.Type_ = utils.Some(DV_QUANTITY_MODEL_NAME)
+	d.Type_ = utils.Some(DV_QUANTITY_TYPE)
 	if d.NormalStatus.E {
 		d.NormalStatus.V.SetModelName()
 	}
@@ -45,10 +39,10 @@ func (d *DV_QUANTITY) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if d.Type_.E && d.Type_.V != DV_QUANTITY_MODEL_NAME {
+	if d.Type_.E && d.Type_.V != DV_QUANTITY_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          DV_QUANTITY_MODEL_NAME,
+			Model:          DV_QUANTITY_TYPE,
 			Path:           attrPath,
 			Message:        "invalid _type field",
 			Recommendation: "Ensure _type field is set to DV_QUANTITY",

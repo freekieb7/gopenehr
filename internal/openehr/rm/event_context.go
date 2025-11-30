@@ -7,21 +7,21 @@ import (
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const EVENT_CONTEXT_MODEL_NAME string = "EVENT_CONTEXT"
+const EVENT_CONTEXT_TYPE string = "EVENT_CONTEXT"
 
 type EVENT_CONTEXT struct {
-	Type_              utils.Optional[string]           `json:"_type,omitzero"`
-	StartTime          DV_DATE_TIME                     `json:"start_time"`
-	EndTime            utils.Optional[DV_DATE_TIME]     `json:"end_time,omitzero"`
-	Location           utils.Optional[string]           `json:"location,omitzero"`
-	Setting            DV_CODED_TEXT                    `json:"setting"`
-	OtherContext       utils.Optional[X_ITEM_STRUCTURE] `json:"other_context,omitzero"`
-	HealthCareFacility utils.Optional[PARTY_IDENTIFIED] `json:"health_care_facility,omitzero"`
-	Participations     utils.Optional[[]PARTICIPATION]  `json:"participations,omitzero"`
+	Type_              utils.Optional[string]             `json:"_type,omitzero"`
+	StartTime          DV_DATE_TIME                       `json:"start_time"`
+	EndTime            utils.Optional[DV_DATE_TIME]       `json:"end_time,omitzero"`
+	Location           utils.Optional[string]             `json:"location,omitzero"`
+	Setting            DV_CODED_TEXT                      `json:"setting"`
+	OtherContext       utils.Optional[ItemStructureUnion] `json:"other_context,omitzero"`
+	HealthCareFacility utils.Optional[PARTY_IDENTIFIED]   `json:"health_care_facility,omitzero"`
+	Participations     utils.Optional[[]PARTICIPATION]    `json:"participations,omitzero"`
 }
 
 func (e *EVENT_CONTEXT) SetModelName() {
-	e.Type_ = utils.Some(EVENT_CONTEXT_MODEL_NAME)
+	e.Type_ = utils.Some(EVENT_CONTEXT_TYPE)
 	e.StartTime.SetModelName()
 	if e.EndTime.E {
 		e.EndTime.V.SetModelName()
@@ -44,13 +44,13 @@ func (e *EVENT_CONTEXT) Validate(path string) util.ValidateError {
 	var attrPath string
 
 	// Validate _type
-	if e.Type_.E && e.Type_.V != EVENT_CONTEXT_MODEL_NAME {
+	if e.Type_.E && e.Type_.V != EVENT_CONTEXT_TYPE {
 		attrPath = path + "._type"
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          EVENT_CONTEXT_MODEL_NAME,
+			Model:          EVENT_CONTEXT_TYPE,
 			Path:           attrPath,
-			Message:        "_type must be " + EVENT_CONTEXT_MODEL_NAME,
-			Recommendation: "Set _type to " + EVENT_CONTEXT_MODEL_NAME,
+			Message:        "_type must be " + EVENT_CONTEXT_TYPE,
+			Recommendation: "Set _type to " + EVENT_CONTEXT_TYPE,
 		})
 	}
 
@@ -85,7 +85,7 @@ func (e *EVENT_CONTEXT) Validate(path string) util.ValidateError {
 		if len(e.Participations.V) == 0 {
 			attrPath = path + ".participations"
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-				Model:          EVENT_CONTEXT_MODEL_NAME,
+				Model:          EVENT_CONTEXT_TYPE,
 				Path:           attrPath,
 				Message:        "participations array cannot be empty",
 				Recommendation: "Ensure participations array has at least one PARTICIPATION item",

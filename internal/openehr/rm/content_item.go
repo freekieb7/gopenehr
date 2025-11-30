@@ -2,122 +2,119 @@ package rm
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
-	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
-const CONTENT_ITEM_MODEL_NAME string = "CONTENT_ITEM"
+const CONTENT_ITEM_TYPE = "CONTENT_ITEM"
 
-// Abstract
-type CONTENT_ITEM struct {
-	Type_            utils.Optional[string]         `json:"_type,omitzero"`
-	Name             X_DV_TEXT                      `json:"name"`
-	ArchetypeNodeID  string                         `json:"archetype_node_id"`
-	UID              utils.Optional[X_UID_BASED_ID] `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]         `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]     `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]   `json:"feeder_audit,omitzero"`
+type ContentItemKind int
+
+const (
+	ContentItemKind_Unknown ContentItemKind = iota
+	ContentItemKind_Section
+	ContentItemKind_AdminEntry
+	ContentItemKind_Observation
+	ContentItemKind_Evaluation
+	ContentItemKind_Instruction
+	ContentItemKind_Activity
+	ContentItemKind_Action
+	ContentItemKind_GenericEntry
+)
+
+type ContentItemUnion struct {
+	Kind  ContentItemKind
+	Value any
 }
 
-func (c CONTENT_ITEM) MarshalJSON() ([]byte, error) {
-	return nil, fmt.Errorf("cannot marshal abstract CONTENT_ITEM type")
+func (c *ContentItemUnion) SetModelName() {
+	switch c.Kind {
+	case ContentItemKind_Section:
+		c.Value.(*SECTION).SetModelName()
+	case ContentItemKind_AdminEntry:
+		c.Value.(*ADMIN_ENTRY).SetModelName()
+	case ContentItemKind_Observation:
+		c.Value.(*OBSERVATION).SetModelName()
+	case ContentItemKind_Evaluation:
+		c.Value.(*EVALUATION).SetModelName()
+	case ContentItemKind_Instruction:
+		c.Value.(*INSTRUCTION).SetModelName()
+	case ContentItemKind_Activity:
+		c.Value.(*ACTIVITY).SetModelName()
+	case ContentItemKind_Action:
+		c.Value.(*ACTION).SetModelName()
+	case ContentItemKind_GenericEntry:
+		c.Value.(*GENERIC_ENTRY).SetModelName()
+	}
 }
 
-func (c *CONTENT_ITEM) UnmarshalJSON(data []byte) error {
-	return fmt.Errorf("cannot unmarshal abstract CONTENT_ITEM type")
-}
-
-// ======== Union of CONTENT_ITEM subtypes ========
-
-type ContentItemModel interface {
-	isContentItemModel()
-	HasModelName() bool
-	SetModelName()
-	Validate(path string) util.ValidateError
-}
-
-type X_CONTENT_ITEM struct {
-	Value ContentItemModel
-}
-
-func (x *X_CONTENT_ITEM) SetModelName() {
-	x.Value.SetModelName()
-}
-
-func (x *X_CONTENT_ITEM) Validate(path string) util.ValidateError {
-	if x.Value == nil {
+func (c *ContentItemUnion) Validate(path string) util.ValidateError {
+	switch c.Kind {
+	case ContentItemKind_Section:
+		return c.Value.(*SECTION).Validate(path)
+	case ContentItemKind_AdminEntry:
+		return c.Value.(*ADMIN_ENTRY).Validate(path)
+	case ContentItemKind_Observation:
+		return c.Value.(*OBSERVATION).Validate(path)
+	case ContentItemKind_Evaluation:
+		return c.Value.(*EVALUATION).Validate(path)
+	case ContentItemKind_Instruction:
+		return c.Value.(*INSTRUCTION).Validate(path)
+	case ContentItemKind_Activity:
+		return c.Value.(*ACTIVITY).Validate(path)
+	case ContentItemKind_Action:
+		return c.Value.(*ACTION).Validate(path)
+	case ContentItemKind_GenericEntry:
+		return c.Value.(*GENERIC_ENTRY).Validate(path)
+	default:
 		return util.ValidateError{
 			Errs: []util.ValidationError{
 				{
-					Model:          CONTENT_ITEM_MODEL_NAME,
+					Model:          CONTENT_ITEM_TYPE,
 					Path:           path,
-					Message:        "value is not known CONTENT_ITEM subtype",
+					Message:        "Unknown CONTENT_ITEM value",
 					Recommendation: "Ensure value is properly set",
 				},
 			},
 		}
 	}
-
-	var validateErr util.ValidateError
-	var attrPath string
-
-	// Abstract model requires _type to be defined
-	if !x.Value.HasModelName() {
-		attrPath = path + "._type"
-		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
-			Model:          CONTENT_ITEM_MODEL_NAME,
-			Path:           attrPath,
-			Message:        "empty _type field",
-			Recommendation: "Ensure _type field is defined",
-		})
-	}
-	validateErr.Errs = append(validateErr.Errs, x.Value.Validate(path).Errs...)
-
-	return validateErr
 }
 
-func (x X_CONTENT_ITEM) MarshalJSON() ([]byte, error) {
-	return json.Marshal(x.Value)
+func (c ContentItemUnion) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.Value)
 }
 
-func (x *X_CONTENT_ITEM) UnmarshalJSON(data []byte) error {
-	var extractor util.TypeExtractor
-	if err := json.Unmarshal(data, &extractor); err != nil {
-		return err
-	}
-
-	t := extractor.Type_
+func (c *ContentItemUnion) UnmarshalJSON(data []byte) error {
+	t := util.UnsafeTypeFieldExtraction(data)
 	switch t {
-	case SECTION_MODEL_NAME:
-		x.Value = new(SECTION)
-	case ADMIN_ENTRY_MODEL_NAME:
-		x.Value = new(ADMIN_ENTRY)
-	case OBSERVATION_MODEL_NAME:
-		x.Value = new(OBSERVATION)
-	case EVALUATION_MODEL_NAME:
-		x.Value = new(EVALUATION)
-	case INSTRUCTION_MODEL_NAME:
-		x.Value = new(INSTRUCTION)
-	case ACTIVITY_MODEL_NAME:
-		x.Value = new(ACTIVITY)
-	case ACTION_MODEL_NAME:
-		x.Value = new(ACTION)
-	case GENERIC_ENTRY_MODEL_NAME:
-		x.Value = new(GENERIC_ENTRY)
+	case SECTION_TYPE:
+		c.Kind = ContentItemKind_Section
+		c.Value = &SECTION{}
+	case ADMIN_ENTRY_TYPE:
+		c.Kind = ContentItemKind_AdminEntry
+		c.Value = &ADMIN_ENTRY{}
+	case OBSERVATION_TYPE:
+		c.Kind = ContentItemKind_Observation
+		c.Value = &OBSERVATION{}
+	case EVALUATION_TYPE:
+		c.Kind = ContentItemKind_Evaluation
+		c.Value = &EVALUATION{}
+	case INSTRUCTION_TYPE:
+		c.Kind = ContentItemKind_Instruction
+		c.Value = &INSTRUCTION{}
+	case ACTIVITY_TYPE:
+		c.Kind = ContentItemKind_Activity
+		c.Value = &ACTIVITY{}
+	case ACTION_TYPE:
+		c.Kind = ContentItemKind_Action
+		c.Value = &ACTION{}
+	case GENERIC_ENTRY_TYPE:
+		c.Kind = ContentItemKind_GenericEntry
+		c.Value = &GENERIC_ENTRY{}
 	default:
-		return util.ValidateError{
-			Errs: []util.ValidationError{
-				{
-					Model:          CONTENT_ITEM_MODEL_NAME,
-					Path:           "$.**._type",
-					Message:        fmt.Sprintf("unexpected CONTENT_ITEM _type %s", t),
-					Recommendation: "Ensure _type field is one of the known CONTENT_ITEM subtypes",
-				},
-			},
-		}
+		c.Kind = ContentItemKind_Unknown
+		return nil
 	}
 
-	return json.Unmarshal(data, x.Value)
+	return json.Unmarshal(data, c.Value)
 }

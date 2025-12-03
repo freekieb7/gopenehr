@@ -7,7 +7,6 @@ import (
 
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 	"github.com/freekieb7/gopenehr/pkg/utils"
-	"github.com/google/uuid"
 )
 
 const OBJECT_VERSION_ID_TYPE string = "OBJECT_VERSION_ID"
@@ -102,8 +101,8 @@ func (o *OBJECT_VERSION_ID) Validate(path string) util.ValidateError {
 	return validateErr
 }
 
-func (o OBJECT_VERSION_ID) UID() uuid.UUID {
-	return uuid.MustParse(strings.Split(o.Value, "::")[0])
+func (o OBJECT_VERSION_ID) UID() string {
+	return strings.Split(o.Value, "::")[0]
 }
 
 func (o OBJECT_VERSION_ID) SystemID() string {

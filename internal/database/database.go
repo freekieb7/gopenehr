@@ -16,8 +16,8 @@ type Database struct {
 	*pgxpool.Pool
 }
 
-func New() Database {
-	return Database{}
+func New() *Database {
+	return &Database{}
 }
 
 func (db *Database) Connect(ctx context.Context, url string) error {

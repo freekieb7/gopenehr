@@ -12,9 +12,9 @@ const UID_BASED_ID_TYPE string = "UID_BASED_ID"
 type UIDBasedIDKind int
 
 const (
-	UIDBasedIDKind_Unknown UIDBasedIDKind = iota
-	UIDBasedIDKind_HIER_OBJECT_ID
-	UIDBasedIDKind_OBJECT_VERSION_ID
+	UID_BASED_ID_kind_unknown UIDBasedIDKind = iota
+	UID_BASED_ID_kind_HIER_OBJECT_ID
+	UID_BASED_ID_kind_OBJECT_VERSION_ID
 )
 
 type UIDBasedIDUnion struct {
@@ -24,18 +24,18 @@ type UIDBasedIDUnion struct {
 
 func (u *UIDBasedIDUnion) SetModelName() {
 	switch u.Kind {
-	case UIDBasedIDKind_HIER_OBJECT_ID:
+	case UID_BASED_ID_kind_HIER_OBJECT_ID:
 		u.Value.(*HIER_OBJECT_ID).SetModelName()
-	case UIDBasedIDKind_OBJECT_VERSION_ID:
+	case UID_BASED_ID_kind_OBJECT_VERSION_ID:
 		u.Value.(*OBJECT_VERSION_ID).SetModelName()
 	}
 }
 
 func (u *UIDBasedIDUnion) Validate(path string) util.ValidateError {
 	switch u.Kind {
-	case UIDBasedIDKind_HIER_OBJECT_ID:
+	case UID_BASED_ID_kind_HIER_OBJECT_ID:
 		return u.Value.(*HIER_OBJECT_ID).Validate(path)
-	case UIDBasedIDKind_OBJECT_VERSION_ID:
+	case UID_BASED_ID_kind_OBJECT_VERSION_ID:
 		return u.Value.(*OBJECT_VERSION_ID).Validate(path)
 	default:
 		return util.ValidateError{
@@ -59,47 +59,47 @@ func (u *UIDBasedIDUnion) UnmarshalJSON(data []byte) error {
 	t := util.UnsafeTypeFieldExtraction(data)
 	switch t {
 	case HIER_OBJECT_ID_TYPE:
-		u.Kind = UIDBasedIDKind_HIER_OBJECT_ID
+		u.Kind = UID_BASED_ID_kind_HIER_OBJECT_ID
 		u.Value = new(HIER_OBJECT_ID)
 	case OBJECT_VERSION_ID_TYPE:
-		u.Kind = UIDBasedIDKind_OBJECT_VERSION_ID
+		u.Kind = UID_BASED_ID_kind_OBJECT_VERSION_ID
 		u.Value = new(OBJECT_VERSION_ID)
 	default:
-		u.Kind = UIDBasedIDKind_Unknown
+		u.Kind = UID_BASED_ID_kind_unknown
 		return nil
 	}
 
 	return json.Unmarshal(data, u.Value)
 }
 
-func (u *UIDBasedIDUnion) HierObjectID() *HIER_OBJECT_ID {
-	if u.Kind == UIDBasedIDKind_HIER_OBJECT_ID {
+func (u *UIDBasedIDUnion) HIER_OBJECT_ID() *HIER_OBJECT_ID {
+	if u.Kind == UID_BASED_ID_kind_HIER_OBJECT_ID {
 		return u.Value.(*HIER_OBJECT_ID)
 	}
 	return nil
 }
 
-func (u *UIDBasedIDUnion) ObjectVersionID() *OBJECT_VERSION_ID {
-	if u.Kind == UIDBasedIDKind_OBJECT_VERSION_ID {
+func (u *UIDBasedIDUnion) OBJECT_VERSION_ID() *OBJECT_VERSION_ID {
+	if u.Kind == UID_BASED_ID_kind_OBJECT_VERSION_ID {
 		return u.Value.(*OBJECT_VERSION_ID)
 	}
 	return nil
 }
 
-func UIDBasedIDFromHierObjectID(id *HIER_OBJECT_ID) UIDBasedIDUnion {
+func UID_BASED_ID_from_HIER_OBJECT_ID(id *HIER_OBJECT_ID) UIDBasedIDUnion {
 	id.Type_ = utils.Some(HIER_OBJECT_ID_TYPE)
 
 	return UIDBasedIDUnion{
-		Kind:  UIDBasedIDKind_HIER_OBJECT_ID,
+		Kind:  UID_BASED_ID_kind_HIER_OBJECT_ID,
 		Value: id,
 	}
 }
 
-func UIDBasedIDFromObjectVersionID(id *OBJECT_VERSION_ID) UIDBasedIDUnion {
+func UID_BASED_ID_from_OBJECT_VERSION_ID(id *OBJECT_VERSION_ID) UIDBasedIDUnion {
 	id.Type_ = utils.Some(OBJECT_VERSION_ID_TYPE)
 
 	return UIDBasedIDUnion{
-		Kind:  UIDBasedIDKind_OBJECT_VERSION_ID,
+		Kind:  UID_BASED_ID_kind_OBJECT_VERSION_ID,
 		Value: id,
 	}
 }

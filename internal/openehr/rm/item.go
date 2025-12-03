@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
+	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
 const ITEM_TYPE string = "ITEM"
@@ -11,9 +12,9 @@ const ITEM_TYPE string = "ITEM"
 type ItemKind int
 
 const (
-	ItemKind_Unknown ItemKind = iota
-	ItemKind_CLUSTER
-	ItemKind_ELEMENT
+	ITEM_kind_unknown ItemKind = iota
+	ITEM_kind_CLUSTER
+	ITEM_kind_ELEMENT
 )
 
 type ItemUnion struct {
@@ -23,18 +24,18 @@ type ItemUnion struct {
 
 func (i *ItemUnion) SetModelName() {
 	switch i.Kind {
-	case ItemKind_CLUSTER:
+	case ITEM_kind_CLUSTER:
 		i.Value.(*CLUSTER).SetModelName()
-	case ItemKind_ELEMENT:
+	case ITEM_kind_ELEMENT:
 		i.Value.(*ELEMENT).SetModelName()
 	}
 }
 
 func (i *ItemUnion) Validate(path string) util.ValidateError {
 	switch i.Kind {
-	case ItemKind_CLUSTER:
+	case ITEM_kind_CLUSTER:
 		return i.Value.(*CLUSTER).Validate(path)
-	case ItemKind_ELEMENT:
+	case ITEM_kind_ELEMENT:
 		return i.Value.(*ELEMENT).Validate(path)
 	default:
 		return util.ValidateError{
@@ -58,15 +59,45 @@ func (i *ItemUnion) UnmarshalJSON(data []byte) error {
 	t := util.UnsafeTypeFieldExtraction(data)
 	switch t {
 	case CLUSTER_TYPE:
-		i.Kind = ItemKind_CLUSTER
+		i.Kind = ITEM_kind_CLUSTER
 		i.Value = new(CLUSTER)
 	case ELEMENT_TYPE:
-		i.Kind = ItemKind_ELEMENT
+		i.Kind = ITEM_kind_ELEMENT
 		i.Value = new(ELEMENT)
 	default:
-		i.Kind = ItemKind_Unknown
+		i.Kind = ITEM_kind_unknown
 		return nil
 	}
 
 	return json.Unmarshal(data, i.Value)
+}
+
+func (i *ItemUnion) CLUSTER() *CLUSTER {
+	if i.Kind != ITEM_kind_CLUSTER {
+		return nil
+	}
+	return i.Value.(*CLUSTER)
+}
+
+func (i *ItemUnion) ELEMENT() *ELEMENT {
+	if i.Kind != ITEM_kind_ELEMENT {
+		return nil
+	}
+	return i.Value.(*ELEMENT)
+}
+
+func ITEM_from_CLUSTER(cluster CLUSTER) ItemUnion {
+	cluster.Type_ = utils.Some(CLUSTER_TYPE)
+	return ItemUnion{
+		Kind:  ITEM_kind_CLUSTER,
+		Value: &cluster,
+	}
+}
+
+func ITEM_from_ELEMENT(element ELEMENT) ItemUnion {
+	element.Type_ = utils.Some(ELEMENT_TYPE)
+	return ItemUnion{
+		Kind:  ITEM_kind_ELEMENT,
+		Value: &element,
+	}
 }

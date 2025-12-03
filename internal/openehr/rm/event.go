@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
+	"github.com/freekieb7/gopenehr/pkg/utils"
 )
 
 const EVENT_TYPE string = "EVENT"
@@ -11,9 +12,9 @@ const EVENT_TYPE string = "EVENT"
 type EventKind int
 
 const (
-	EventKind_Unknown EventKind = iota
-	EventKind_POINT_EVENT
-	EventKind_INTERVAL_EVENT
+	EVENT_kind_unknown EventKind = iota
+	EVENT_kind_POINT_EVENT
+	EVENT_kind_INTERVAL_EVENT
 )
 
 type EventUnion struct {
@@ -23,18 +24,18 @@ type EventUnion struct {
 
 func (e *EventUnion) SetModelName() {
 	switch e.Kind {
-	case EventKind_POINT_EVENT:
+	case EVENT_kind_POINT_EVENT:
 		e.Value.(*POINT_EVENT).SetModelName()
-	case EventKind_INTERVAL_EVENT:
+	case EVENT_kind_INTERVAL_EVENT:
 		e.Value.(*INTERVAL_EVENT).SetModelName()
 	}
 }
 
 func (e *EventUnion) Validate(path string) util.ValidateError {
 	switch e.Kind {
-	case EventKind_POINT_EVENT:
+	case EVENT_kind_POINT_EVENT:
 		return e.Value.(*POINT_EVENT).Validate(path)
-	case EventKind_INTERVAL_EVENT:
+	case EVENT_kind_INTERVAL_EVENT:
 		return e.Value.(*INTERVAL_EVENT).Validate(path)
 	default:
 		return util.ValidateError{
@@ -58,15 +59,45 @@ func (e *EventUnion) UnmarshalJSON(data []byte) error {
 	t := util.UnsafeTypeFieldExtraction(data)
 	switch t {
 	case POINT_EVENT_TYPE:
-		e.Kind = EventKind_POINT_EVENT
+		e.Kind = EVENT_kind_POINT_EVENT
 		e.Value = &POINT_EVENT{}
 	case INTERVAL_EVENT_TYPE:
-		e.Kind = EventKind_INTERVAL_EVENT
+		e.Kind = EVENT_kind_INTERVAL_EVENT
 		e.Value = &INTERVAL_EVENT{}
 	default:
-		e.Kind = EventKind_Unknown
+		e.Kind = EVENT_kind_unknown
 		return nil
 	}
 
 	return json.Unmarshal(data, e.Value)
+}
+
+func (o *EventUnion) POINT_EVENT() *POINT_EVENT {
+	if o.Kind == EVENT_kind_POINT_EVENT {
+		return o.Value.(*POINT_EVENT)
+	}
+	return nil
+}
+
+func (o *EventUnion) INTERVAL_EVENT() *INTERVAL_EVENT {
+	if o.Kind == EVENT_kind_INTERVAL_EVENT {
+		return o.Value.(*INTERVAL_EVENT)
+	}
+	return nil
+}
+
+func EVENT_from_POINT_EVENT(pointEvent POINT_EVENT) EventUnion {
+	pointEvent.Type_ = utils.Some(POINT_EVENT_TYPE)
+	return EventUnion{
+		Kind:  EVENT_kind_POINT_EVENT,
+		Value: &pointEvent,
+	}
+}
+
+func EVENT_from_INTERVAL_EVENT(intervalEvent INTERVAL_EVENT) EventUnion {
+	intervalEvent.Type_ = utils.Some(INTERVAL_EVENT_TYPE)
+	return EventUnion{
+		Kind:  EVENT_kind_INTERVAL_EVENT,
+		Value: &intervalEvent,
+	}
 }

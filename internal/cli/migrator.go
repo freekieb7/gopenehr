@@ -20,6 +20,14 @@ type Migrator struct {
 	MigrationsDir string
 }
 
+func NewMigrator(db *database.Database, logger *slog.Logger, migrationsDir string) *Migrator {
+	return &Migrator{
+		DB:            db,
+		Logger:        logger,
+		MigrationsDir: migrationsDir,
+	}
+}
+
 func (m *Migrator) Run(ctx context.Context, args []string) error {
 	cmd := "help"
 	if len(args) >= 1 {

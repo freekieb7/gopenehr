@@ -15,8 +15,6 @@ services:
       - "3000:3000"
     environment:
       DATABASE_URL: "postgres://gopenehr:gopenehrpass@postgres:5432/gopenehr?sslmode=disable"
-      OTEL_ENDPOINT: "alloy:4317"
-      OTEL_INSECURE: true
     command: ["serve"]
     depends_on:
       migrate:
@@ -43,21 +41,21 @@ services:
       retries: 5
       start_period: 80s
 
-  alloy:
-    image: grafana/alloy:v1.11.3
-    volumes:
-      - ./alloy:/etc/alloy
-    ports:
-      - "4317:4317" # OTLP gRPC
-      - "4318:4318" # OTLP HTTP
-      - "12345:12345" # UI
-    environment:
-      GRAFANA_CLOUD_OTLP_ENDPOINT: https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
-      GRAFANA_CLOUD_INSTANCE_ID: 
-      GRAFANA_CLOUD_API_KEY: 
-    command:
-      - run
-      - /etc/alloy/config.alloy
-      - --storage.path=/var/lib/alloy/data
-      - --server.http.listen-addr=0.0.0.0:12345
-      - --stability.level=experimental # Enable all functionality
+  # alloy:
+  #   image: grafana/alloy:v1.11.3
+  #   volumes:
+  #     - ./alloy:/etc/alloy
+  #   ports:
+  #     - "4317:4317" # OTLP gRPC
+  #     - "4318:4318" # OTLP HTTP
+  #     - "12345:12345" # UI
+  #   environment:
+  #     GRAFANA_CLOUD_OTLP_ENDPOINT: https://otlp-gateway-prod-eu-west-2.grafana.net/otlp
+  #     GRAFANA_CLOUD_INSTANCE_ID: 
+  #     GRAFANA_CLOUD_API_KEY: 
+  #   command:
+  #     - run
+  #     - /etc/alloy/config.alloy
+  #     - --storage.path=/var/lib/alloy/data
+  #     - --server.http.listen-addr=0.0.0.0:12345
+  #     - --stability.level=experimental # Enable all functionality

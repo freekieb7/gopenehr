@@ -10,17 +10,17 @@ import (
 const DV_PROPORTION_TYPE string = "DV_PROPORTION"
 
 type DV_PROPORTION struct {
-	Type_                utils.Optional[string]            `json:"_type,omitzero"`
-	NormalStatus         utils.Optional[CODE_PHRASE]       `json:"normal_status,omitzero"`
-	MagnitudeStatus      utils.Optional[string]            `json:"magnitude_status,omitzero"`
-	AccuracyIsPercent    utils.Optional[bool]              `json:"accuracy_is_percent,omitzero"`
-	Accuracy             utils.Optional[float64]           `json:"accuracy,omitzero"`
-	Numerator            float64                           `json:"numerator"`
-	Denominator          float64                           `json:"denominator"`
-	Type                 int64                             `json:"type"`
-	Precision            utils.Optional[int64]             `json:"precision,omitzero"`
-	NormalRange          utils.Optional[DV_INTERVAL]       `json:"normal_range,omitzero"`
-	OtherReferenceRanges utils.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges,omitzero"`
+	Type_                utils.Optional[string]                            `json:"_type,omitzero"`
+	NormalStatus         utils.Optional[CODE_PHRASE]                       `json:"normal_status,omitzero"`
+	MagnitudeStatus      utils.Optional[string]                            `json:"magnitude_status,omitzero"`
+	AccuracyIsPercent    utils.Optional[bool]                              `json:"accuracy_is_percent,omitzero"`
+	Accuracy             utils.Optional[float64]                           `json:"accuracy,omitzero"`
+	Numerator            float64                                           `json:"numerator"`
+	Denominator          float64                                           `json:"denominator"`
+	Type                 int64                                             `json:"type"`
+	Precision            utils.Optional[int64]                             `json:"precision,omitzero"`
+	NormalRange          utils.Optional[DV_INTERVAL[*DV_PROPORTION]]       `json:"normal_range,omitzero"`
+	OtherReferenceRanges utils.Optional[[]REFERENCE_RANGE[*DV_PROPORTION]] `json:"other_reference_ranges,omitzero"`
 }
 
 func (d *DV_PROPORTION) SetModelName() {

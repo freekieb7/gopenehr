@@ -97,7 +97,7 @@ func (e *EHR) Validate(path string) util.ValidateError {
 			Recommendation: fmt.Sprintf("Ensure ehr_status _type field is set to '%s' or '%s'", EHR_STATUS_TYPE, VERSIONED_EHR_STATUS_TYPE),
 		})
 	}
-	if e.EHRStatus.ID.Kind != ObjectIDKind_HIER_OBJECT_ID {
+	if e.EHRStatus.ID.Kind != OBJECT_ID_kind_HIER_OBJECT_ID {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          EHR_TYPE,
 			Path:           attrPath + ".id",
@@ -117,7 +117,7 @@ func (e *EHR) Validate(path string) util.ValidateError {
 			Recommendation: fmt.Sprintf("Ensure ehr_access _type field is set to '%s' or '%s'", EHR_ACCESS_TYPE, VERSIONED_EHR_ACCESS_TYPE),
 		})
 	}
-	if e.EHRAccess.ID.Kind != ObjectIDKind_HIER_OBJECT_ID {
+	if e.EHRAccess.ID.Kind != OBJECT_ID_kind_HIER_OBJECT_ID {
 		validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 			Model:          EHR_TYPE,
 			Path:           attrPath + ".id",
@@ -139,7 +139,7 @@ func (e *EHR) Validate(path string) util.ValidateError {
 					Recommendation: fmt.Sprintf("Ensure compositions[%d] _type field is set to '%s'", i, VERSIONED_COMPOSITION_TYPE),
 				})
 			}
-			if e.Compositions.V[i].ID.Kind != ObjectIDKind_HIER_OBJECT_ID {
+			if e.Compositions.V[i].ID.Kind != OBJECT_ID_kind_HIER_OBJECT_ID {
 				validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 					Model:          EHR_TYPE,
 					Path:           attrPath + ".id",
@@ -163,7 +163,7 @@ func (e *EHR) Validate(path string) util.ValidateError {
 				Recommendation: fmt.Sprintf("Ensure directory _type field is set to '%s'", FOLDER_TYPE),
 			})
 		}
-		if directory.ID.Kind != ObjectIDKind_HIER_OBJECT_ID {
+		if directory.ID.Kind != OBJECT_ID_kind_HIER_OBJECT_ID {
 			validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 				Model:          EHR_TYPE,
 				Path:           attrPath + ".id",
@@ -191,7 +191,7 @@ func (e *EHR) Validate(path string) util.ValidateError {
 					Recommendation: fmt.Sprintf("Ensure folders[%d] _type field is set to '%s'", i, FOLDER_TYPE),
 				})
 			}
-			if e.Folders.V[i].ID.Kind != ObjectIDKind_HIER_OBJECT_ID {
+			if e.Folders.V[i].ID.Kind != OBJECT_ID_kind_HIER_OBJECT_ID {
 				validateErr.Errs = append(validateErr.Errs, util.ValidationError{
 					Model:          EHR_TYPE,
 					Path:           attrPath + ".id",

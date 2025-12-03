@@ -9,6 +9,11 @@ import (
 
 const OBJECT_REF_TYPE = "OBJECT_REF"
 
+const (
+	Namespace_local   = "local"
+	Namespace_unknown = "unknown"
+)
+
 type OBJECT_REF struct {
 	Type_     utils.Optional[string] `json:"_type,omitzero"`
 	Namespace string                 `json:"namespace"`

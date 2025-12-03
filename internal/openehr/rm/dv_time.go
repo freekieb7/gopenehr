@@ -10,14 +10,14 @@ import (
 const DV_TIME_TYPE string = "DV_TIME"
 
 type DV_TIME struct {
-	Type_                utils.Optional[string]            `json:"_type,omitzero"`
-	NormalStatus         utils.Optional[CODE_PHRASE]       `json:"normal_status,omitzero"`
-	NormalRange          utils.Optional[DV_INTERVAL]       `json:"normal_range,omitzero"`
-	OtherReferenceRanges utils.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges,omitzero"`
-	MagnitudeStatus      utils.Optional[string]            `json:"magnitude_status,omitzero"`
-	AccuracyIsPercent    utils.Optional[bool]              `json:"accuracy_is_percent,omitzero"`
-	Accuracy             utils.Optional[DV_DURATION]       `json:"accuracy,omitzero"`
-	Value                string                            `json:"value"`
+	Type_                utils.Optional[string]                      `json:"_type,omitzero"`
+	NormalStatus         utils.Optional[CODE_PHRASE]                 `json:"normal_status,omitzero"`
+	NormalRange          utils.Optional[DV_INTERVAL[*DV_TIME]]       `json:"normal_range,omitzero"`
+	OtherReferenceRanges utils.Optional[[]REFERENCE_RANGE[*DV_TIME]] `json:"other_reference_ranges,omitzero"`
+	MagnitudeStatus      utils.Optional[string]                      `json:"magnitude_status,omitzero"`
+	AccuracyIsPercent    utils.Optional[bool]                        `json:"accuracy_is_percent,omitzero"`
+	Accuracy             utils.Optional[DV_DURATION]                 `json:"accuracy,omitzero"`
+	Value                string                                      `json:"value"`
 }
 
 func (d *DV_TIME) SetModelName() {

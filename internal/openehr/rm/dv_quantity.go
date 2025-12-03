@@ -10,12 +10,18 @@ import (
 const DV_QUANTITY_TYPE string = "DV_QUANTITY"
 
 type DV_QUANTITY struct {
-	Type_                utils.Optional[string]            `json:"_type,omitzero"`
-	NormalStatus         utils.Optional[CODE_PHRASE]       `json:"normal_status,omitzero"`
-	NormalRange          utils.Optional[DV_INTERVAL]       `json:"normal_range,omitzero"`
-	OtherReferenceRanges utils.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges,omitzero"`
-	Symbol               DV_CODED_TEXT                     `json:"symbol"`
-	Value                float64                           `json:"value"`
+	Type_                utils.Optional[string]                          `json:"_type,omitzero"`
+	NormalStatus         utils.Optional[CODE_PHRASE]                     `json:"normal_status,omitzero"`
+	NormalRange          utils.Optional[DV_INTERVAL[*DV_QUANTITY]]       `json:"normal_range,omitzero"`
+	OtherReferenceRanges utils.Optional[[]REFERENCE_RANGE[*DV_QUANTITY]] `json:"other_reference_ranges,omitzero"`
+	MagnitudeStatus      utils.Optional[string]                          `json:"magnitude_status,omitzero"`
+	AccuracyIsPercent    utils.Optional[bool]                            `json:"accuracy_is_percent,omitzero"`
+	Accuracy             utils.Optional[float64]                         `json:"accuracy,omitzero"`
+	Magnitude            float64                                         `json:"magnitude"`
+	Precision            utils.Optional[int]                             `json:"precision,omitzero"`
+	Units                string                                          `json:"units"`
+	UnitsSystem          utils.Optional[string]                          `json:"units_system,omitzero"`
+	UnitsDisplayName     utils.Optional[string]                          `json:"units_display_name,omitzero"`
 }
 
 func (d *DV_QUANTITY) SetModelName() {
@@ -31,7 +37,6 @@ func (d *DV_QUANTITY) SetModelName() {
 			d.OtherReferenceRanges.V[i].SetModelName()
 		}
 	}
-	d.Symbol.SetModelName()
 }
 
 func (d *DV_QUANTITY) Validate(path string) util.ValidateError {
@@ -69,9 +74,41 @@ func (d *DV_QUANTITY) Validate(path string) util.ValidateError {
 		}
 	}
 
-	// Validate symbol
-	attrPath = path + ".symbol"
-	validateErr.Errs = append(validateErr.Errs, d.Symbol.Validate(attrPath).Errs...)
+	// // Validate magnitude_status
+	// if d.MagnitudeStatus.E {
+	// 	attrPath = path + ".magnitude_status"
+	// 	// Add any specific validation for magnitude_status if needed
+	// }
+
+	// // Validate accuracy_is_percent
+	// if d.AccuracyIsPercent.E {
+	// 	attrPath = path + ".accuracy_is_percent"
+	// 	// Add any specific validation for accuracy_is_percent if needed
+	// }
+
+	// // Validate accuracy
+	// if d.Accuracy.E {
+	// 	attrPath = path + ".accuracy"
+	// 	// Add any specific validation for accuracy if needed
+	// }
+
+	// // Validate precision
+	// if d.Precision.E {
+	// 	attrPath = path + ".precision"
+	// 	// Add any specific validation for precision if needed
+	// }
+
+	// // Validate units_system
+	// if d.UnitsSystem.E {
+	// 	attrPath = path + ".units_system"
+	// 	// Add any specific validation for units_system if needed
+	// }
+
+	// // Validate units_display_name
+	// if d.UnitsDisplayName.E {
+	// 	attrPath = path + ".units_display_name"
+	// 	// Add any specific validation for units_display_name if needed
+	// }
 
 	return validateErr
 }

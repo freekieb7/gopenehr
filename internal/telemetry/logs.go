@@ -59,8 +59,11 @@ func NewLogger(name string, loggerProvider *sdkLog.LoggerProvider) *Logger {
 		Level: slog.LevelInfo,
 	})
 
-	otel := otelslog.NewHandler(name, otelslog.WithLoggerProvider(loggerProvider))
+	if loggerProvider == nil {
+		return &Logger{slog.New(stdout)}
+	}
 
+	otel := otelslog.NewHandler(name, otelslog.WithLoggerProvider(loggerProvider))
 	fanout := NewFanoutHandler(stdout, otel)
 
 	return &Logger{slog.New(fanout)}

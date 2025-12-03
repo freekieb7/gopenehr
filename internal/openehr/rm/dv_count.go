@@ -10,14 +10,14 @@ import (
 const DV_COUNT_TYPE string = "DV_COUNT"
 
 type DV_COUNT struct {
-	Type_                utils.Optional[string]            `json:"_type,omitzero"`
-	NormalStatus         utils.Optional[CODE_PHRASE]       `json:"normal_status,omitzero"`
-	MagnitudeStatus      utils.Optional[string]            `json:"magnitude_status,omitzero"`
-	AccuracyIsPercent    utils.Optional[bool]              `json:"accuracy_is_percent,omitzero"`
-	Accuracy             utils.Optional[float64]           `json:"accuracy,omitzero"`
-	Magnitude            int64                             `json:"magnitude"`
-	NormalRange          utils.Optional[DV_INTERVAL]       `json:"normal_range,omitzero"`
-	OtherReferenceRanges utils.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges,omitzero"`
+	Type_                utils.Optional[string]                       `json:"_type,omitzero"`
+	NormalStatus         utils.Optional[CODE_PHRASE]                  `json:"normal_status,omitzero"`
+	MagnitudeStatus      utils.Optional[string]                       `json:"magnitude_status,omitzero"`
+	AccuracyIsPercent    utils.Optional[bool]                         `json:"accuracy_is_percent,omitzero"`
+	Accuracy             utils.Optional[float64]                      `json:"accuracy,omitzero"`
+	Magnitude            int64                                        `json:"magnitude"`
+	NormalRange          utils.Optional[DV_INTERVAL[*DV_COUNT]]       `json:"normal_range,omitzero"`
+	OtherReferenceRanges utils.Optional[[]REFERENCE_RANGE[*DV_COUNT]] `json:"other_reference_ranges,omitzero"`
 }
 
 func (d *DV_COUNT) SetModelName() {

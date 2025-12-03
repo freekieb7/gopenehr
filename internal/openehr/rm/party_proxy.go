@@ -12,10 +12,10 @@ const PARTY_PROXY_TYPE string = "PARTY_PROXY"
 type PartyProxyKind int
 
 const (
-	PartyProxyKind_Unknown PartyProxyKind = iota
-	PartyProxyKind_PARTY_SELF
-	PartyProxyKind_PARTY_IDENTIFIED
-	PartyProxyKind_PARTY_RELATED
+	PARTY_PROXY_kind_unknown PartyProxyKind = iota
+	PARTY_PROXY_kind_PARTY_SELF
+	PARTY_PROXY_kind_PARTY_IDENTIFIED
+	PARTY_PROXY_kind_PARTY_RELATED
 )
 
 type PartyProxyUnion struct {
@@ -25,22 +25,22 @@ type PartyProxyUnion struct {
 
 func (p *PartyProxyUnion) SetModelName() {
 	switch p.Kind {
-	case PartyProxyKind_PARTY_SELF:
+	case PARTY_PROXY_kind_PARTY_SELF:
 		p.Value.(*PARTY_SELF).SetModelName()
-	case PartyProxyKind_PARTY_IDENTIFIED:
+	case PARTY_PROXY_kind_PARTY_IDENTIFIED:
 		p.Value.(*PARTY_IDENTIFIED).SetModelName()
-	case PartyProxyKind_PARTY_RELATED:
+	case PARTY_PROXY_kind_PARTY_RELATED:
 		p.Value.(*PARTY_RELATED).SetModelName()
 	}
 }
 
 func (p *PartyProxyUnion) Validate(path string) util.ValidateError {
 	switch p.Kind {
-	case PartyProxyKind_PARTY_SELF:
+	case PARTY_PROXY_kind_PARTY_SELF:
 		return p.Value.(*PARTY_SELF).Validate(path)
-	case PartyProxyKind_PARTY_IDENTIFIED:
+	case PARTY_PROXY_kind_PARTY_IDENTIFIED:
 		return p.Value.(*PARTY_IDENTIFIED).Validate(path)
-	case PartyProxyKind_PARTY_RELATED:
+	case PARTY_PROXY_kind_PARTY_RELATED:
 		return p.Value.(*PARTY_RELATED).Validate(path)
 	default:
 		return util.ValidateError{
@@ -64,63 +64,63 @@ func (p *PartyProxyUnion) UnmarshalJSON(data []byte) error {
 	t := util.UnsafeTypeFieldExtraction(data)
 	switch t {
 	case PARTY_SELF_TYPE:
-		p.Kind = PartyProxyKind_PARTY_SELF
-		p.Value = new(PARTY_SELF)
+		p.Kind = PARTY_PROXY_kind_PARTY_SELF
+		p.Value = &PARTY_SELF{}
 	case PARTY_IDENTIFIED_TYPE:
-		p.Kind = PartyProxyKind_PARTY_IDENTIFIED
-		p.Value = new(PARTY_IDENTIFIED)
+		p.Kind = PARTY_PROXY_kind_PARTY_IDENTIFIED
+		p.Value = &PARTY_IDENTIFIED{}
 	case PARTY_RELATED_TYPE:
-		p.Kind = PartyProxyKind_PARTY_RELATED
-		p.Value = new(PARTY_RELATED)
+		p.Kind = PARTY_PROXY_kind_PARTY_RELATED
+		p.Value = &PARTY_RELATED{}
 	default:
-		p.Kind = PartyProxyKind_Unknown
+		p.Kind = PARTY_PROXY_kind_unknown
 		return nil
 	}
 
 	return json.Unmarshal(data, p.Value)
 }
 
-func (p *PartyProxyUnion) PartySelf() *PARTY_SELF {
-	if p.Kind == PartyProxyKind_PARTY_SELF {
+func (p *PartyProxyUnion) PARTY_SELF() *PARTY_SELF {
+	if p.Kind == PARTY_PROXY_kind_PARTY_SELF {
 		return p.Value.(*PARTY_SELF)
 	}
 	return nil
 }
 
-func (p *PartyProxyUnion) PartyIdentified() *PARTY_IDENTIFIED {
-	if p.Kind == PartyProxyKind_PARTY_IDENTIFIED {
+func (p *PartyProxyUnion) PARTY_IDENTIFIED() *PARTY_IDENTIFIED {
+	if p.Kind == PARTY_PROXY_kind_PARTY_IDENTIFIED {
 		return p.Value.(*PARTY_IDENTIFIED)
 	}
 	return nil
 }
 
-func (p *PartyProxyUnion) PartyRelated() *PARTY_RELATED {
-	if p.Kind == PartyProxyKind_PARTY_RELATED {
+func (p *PartyProxyUnion) PARTY_RELATED() *PARTY_RELATED {
+	if p.Kind == PARTY_PROXY_kind_PARTY_RELATED {
 		return p.Value.(*PARTY_RELATED)
 	}
 	return nil
 }
 
-func PartyProxyFromPartySelf(partySelf PARTY_SELF) PartyProxyUnion {
+func PARTY_PROXY_from_PARTY_SELF(partySelf PARTY_SELF) PartyProxyUnion {
 	partySelf.Type_ = utils.Some(PARTY_SELF_TYPE)
 	return PartyProxyUnion{
-		Kind:  PartyProxyKind_PARTY_SELF,
+		Kind:  PARTY_PROXY_kind_PARTY_SELF,
 		Value: &partySelf,
 	}
 }
 
-func PartyProxyFromPartyIdentified(partyIdentified PARTY_IDENTIFIED) PartyProxyUnion {
+func PARTY_PROXY_from_PARTY_IDENTIFIED(partyIdentified PARTY_IDENTIFIED) PartyProxyUnion {
 	partyIdentified.Type_ = utils.Some(PARTY_IDENTIFIED_TYPE)
 	return PartyProxyUnion{
-		Kind:  PartyProxyKind_PARTY_IDENTIFIED,
+		Kind:  PARTY_PROXY_kind_PARTY_IDENTIFIED,
 		Value: &partyIdentified,
 	}
 }
 
-func PartyProxyFromPartyRelated(partyRelated PARTY_RELATED) PartyProxyUnion {
+func PARTY_PROXY_from_PARTY_RELATED(partyRelated PARTY_RELATED) PartyProxyUnion {
 	partyRelated.Type_ = utils.Some(PARTY_RELATED_TYPE)
 	return PartyProxyUnion{
-		Kind:  PartyProxyKind_PARTY_RELATED,
+		Kind:  PARTY_PROXY_kind_PARTY_RELATED,
 		Value: &partyRelated,
 	}
 }

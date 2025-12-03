@@ -196,12 +196,3 @@ func (a *GROUP) Validate(path string) util.ValidateError {
 
 	return validateErr
 }
-
-func (a *GROUP) ObjectVersionID() OBJECT_VERSION_ID {
-	if a.UID.E {
-		if objVerID, ok := a.UID.V.Value.(*OBJECT_VERSION_ID); ok {
-			return *objVerID
-		}
-	}
-	return OBJECT_VERSION_ID{}
-}

@@ -8,11 +8,11 @@ import (
 const PARTICIPATION_TYPE string = "PARTICIPATION"
 
 type PARTICIPATION struct {
-	Type_     utils.Optional[string]        `json:"_type,omitzero"`
-	Function  DvTextUnion                   `json:"function"`
-	Mode      utils.Optional[DV_CODED_TEXT] `json:"mode,omitzero"`
-	Performer PartyProxyUnion               `json:"performer"`
-	Time      utils.Optional[DV_INTERVAL]   `json:"time,omitzero"`
+	Type_     utils.Optional[string]                    `json:"_type,omitzero"`
+	Function  DvTextUnion                               `json:"function"`
+	Mode      utils.Optional[DV_CODED_TEXT]             `json:"mode,omitzero"`
+	Performer PartyProxyUnion                           `json:"performer"`
+	Time      utils.Optional[DV_INTERVAL[DV_DATE_TIME]] `json:"time,omitzero"`
 }
 
 func (p *PARTICIPATION) SetModelName() {

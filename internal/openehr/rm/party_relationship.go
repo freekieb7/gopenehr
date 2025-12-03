@@ -10,17 +10,17 @@ import (
 const PARTY_RELATIONSHIP_TYPE string = "PARTY_RELATIONSHIP"
 
 type PARTY_RELATIONSHIP struct {
-	Type_            utils.Optional[string]             `json:"_type,omitzero"`
-	Name             DvTextUnion                        `json:"name"`
-	ArchetypeNodeID  string                             `json:"archetype_node_id"`
-	UID              utils.Optional[PartyProxyUnion]    `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]             `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]         `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]       `json:"feeder_audit,omitzero"`
-	Details          utils.Optional[ItemStructureUnion] `json:"details,omitzero"`
-	Target           PARTY_REF                          `json:"target"`
-	TimeValidity     utils.Optional[DV_INTERVAL]        `json:"time_validity,omitzero"`
-	Source           PARTY_REF                          `json:"source"`
+	Type_            utils.Optional[string]                    `json:"_type,omitzero"`
+	Name             DvTextUnion                               `json:"name"`
+	ArchetypeNodeID  string                                    `json:"archetype_node_id"`
+	UID              utils.Optional[PartyProxyUnion]           `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]                    `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]                `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]              `json:"feeder_audit,omitzero"`
+	Details          utils.Optional[ItemStructureUnion]        `json:"details,omitzero"`
+	Target           PARTY_REF                                 `json:"target"`
+	TimeValidity     utils.Optional[DV_INTERVAL[DV_DATE_TIME]] `json:"time_validity,omitzero"`
+	Source           PARTY_REF                                 `json:"source"`
 }
 
 func (p *PARTY_RELATIONSHIP) SetModelName() {

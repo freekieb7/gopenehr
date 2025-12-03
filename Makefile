@@ -1,9 +1,11 @@
 DATABASE_URL := postgres://gopenehr:gopenehrpass@localhost:5432/gopenehr
 LOG_LEVEL := DEBUG
+KAFKA_BROKERS := localhost:9092
 
 APP_VARIABLES := \
 	DATABASE_URL=$(DATABASE_URL) \
 	LOG_LEVEL=$(LOG_LEVEL) \
+	KAFKA_BROKERS=$(KAFKA_BROKERS)
 
 .PHONY: up
 up:
@@ -11,7 +13,7 @@ up:
 
 .PHONY: down
 down:
-	docker compose down
+	docker compose down --remove-orphans
 
 .PHONY: lint
 lint:
@@ -29,6 +31,14 @@ migrate-down:
 .PHONY: serve
 serve:
 	$(APP_VARIABLES) go run -mod=vendor ./... serve
+
+.PHONY: seed
+seed:
+ifeq ($(count),)
+	$(APP_VARIABLES) go run -mod=vendor ./... seed
+else 
+	$(APP_VARIABLES) go run -mod=vendor ./... seed $(count) 
+endif
 
 .PHONY: aql-gen
 aql-gen:

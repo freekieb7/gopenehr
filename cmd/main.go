@@ -17,6 +17,7 @@ import (
 	"github.com/freekieb7/gopenehr/internal/health"
 	"github.com/freekieb7/gopenehr/internal/oauth"
 	"github.com/freekieb7/gopenehr/internal/openehr"
+	"github.com/freekieb7/gopenehr/internal/seed"
 	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/freekieb7/gopenehr/internal/webhook"
 	"github.com/gofiber/fiber/v2"
@@ -40,6 +41,7 @@ func run(ctx context.Context, args []string) error {
 		fmt.Println("Commands:")
 		fmt.Println("  serve          - Start the web server")
 		fmt.Println("  migrate [cmd]  - Run database migrations (up/down)")
+		fmt.Println("  seed [count]   - Seed the database with test data (default count: 1000)")
 		fmt.Println("  healthcheck    - Check if the server is healthy")
 		fmt.Println("  version        - Show version information")
 		return nil
@@ -50,6 +52,8 @@ func run(ctx context.Context, args []string) error {
 		return runServer(ctx)
 	case "migrate":
 		return runMigrate(ctx, args[1:])
+	case "seed":
+		return runSeed(ctx, args[1:])
 	case "healthcheck":
 		return runHealthcheck(ctx)
 	case "version":
@@ -116,18 +120,23 @@ func runServer(ctx context.Context) error {
 	}))
 
 	// Audit logger
-	auditSink := audit.NewSink(tel, &db)
-	webhookSink := webhook.NewSink(tel, &db)
-	webhookSender := webhook.NewSender(tel.Logger, &db, &http.Client{
+	auditSink := audit.NewSink(tel, db)
+	var webhookSink webhook.Sink
+	if len(settings.KafkaBrokers) == 0 {
+		webhookSink = webhook.NewInMemorySink(tel, db)
+	} else {
+		webhookSink = webhook.NewKafkaSink(tel.Logger, db, settings.KafkaBrokers)
+	}
+	webhookSender := webhook.NewSender(tel.Logger, db, &http.Client{
 		Timeout: 10 * time.Second,
 	})
 
 	// Services
-	healthChecker := health.NewChecker(settings.Version, config.TARGET_MIGRATION_VERSION, &db)
-	auditService := audit.NewService(tel.Logger, &db)
-	webhookService := webhook.NewService(tel.Logger, &db)
+	healthChecker := health.NewChecker(settings.Version, config.TARGET_MIGRATION_VERSION, db)
+	auditService := audit.NewService(tel.Logger, db)
+	webhookService := webhook.NewService(tel.Logger, db)
 	oauthService := oauth.NewService(tel.Logger, settings.OAuthTrustedIssuers, settings.OAuthAudience)
-	openEHRService := openehr.NewService(tel.Logger, &db)
+	openEHRService := openehr.NewService(tel.Logger, db)
 
 	// Routes
 	healthHandler := health.NewHandler(&healthChecker)
@@ -213,11 +222,8 @@ func runMigrate(ctx context.Context, args []string) error {
 	}
 	defer db.Close()
 
-	migrate := cli.Migrator{
-		DB:            &db,
-		Logger:        slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})),
-		MigrationsDir: "./migrations",
-	}
+	// Create migrator
+	migrate := cli.NewMigrator(db, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})), "./migrations")
 
 	return migrate.Run(ctx, args)
 }
@@ -258,5 +264,46 @@ func runHealthcheck(ctx context.Context) error {
 	}
 
 	fmt.Println("✓ Server is healthy")
+	return nil
+}
+
+func runSeed(ctx context.Context, args []string) error {
+	count := 1000
+	if len(args) >= 1 {
+		_, err := fmt.Sscanf(args[0], "%d", &count)
+		if err != nil {
+			return fmt.Errorf("invalid count: %w", err)
+		}
+	}
+
+	// Load config
+	settings := config.NewSettings()
+	if err := settings.Load(); err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Init database
+	db := database.New()
+	if err := db.Connect(ctx, settings.DatabaseURL); err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer db.Close()
+
+	// Init Telemetry
+	tel, err := telemetry.Init(ctx, settings)
+	if err != nil {
+		return fmt.Errorf("failed to initialize telemetry: %w", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tel.Shutdown(shutdownCtx); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to shutdown telemetry: %v\n", err)
+		}
+	}()
+
+	// Create seeder
+	seeder := seed.NewSeeder(tel.Logger, db, "./internal/seed/fixture")
+	seeder.Seed(count)
 	return nil
 }

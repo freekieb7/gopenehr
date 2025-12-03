@@ -1,0 +1,191 @@
+{
+    "_type": "COMPOSITION",
+    "archetype_node_id": "openEHR-EHR-COMPOSITION.rapportage.v1",
+    "name": {
+        "value": "Rapportage"
+    },
+    "archetype_details": {
+        "archetype_id": {
+            "value": "openEHR-EHR-COMPOSITION.rapportage.v1"
+        },
+        "template_id": {
+            "value": "T0016 Rapportage.v1::3c0daa76-f697-3949-92fb-f15bfa05bd49"
+        },
+        "rm_version": "1.0.2"
+    },
+    "language": {
+        "terminology_id": {
+            "value": "ISO_639-1"
+        },
+        "code_string": "nl"
+    },
+    "territory": {
+        "terminology_id": {
+            "value": "ISO_3166-1"
+        },
+        "code_string": "NL"
+    },
+    "category": {
+        "value": "event",
+        "defining_code": {
+            "terminology_id": {
+                "value": "openehr"
+            },
+            "code_string": "433"
+        }
+    },
+    "composer": {
+        "_type": "PARTY_SELF"
+    },
+    "context": {
+        "start_time": {
+            "value": "2025-12-01T08:12:52Z"
+        },
+        "setting": {
+            "value": "DV_CODED_TEXT-692ec1bc28fb2",
+            "defining_code": {
+                "terminology_id": {
+                    "value": "openehr"
+                },
+                "code_string": "433"
+            }
+        },
+        "other_context": {
+            "_type": "ITEM_TREE",
+            "archetype_node_id": "at0001",
+            "name": {
+                "value": "Tree"
+            },
+            "items": [
+                {
+                    "_type": "ELEMENT",
+                    "archetype_node_id": "at0010",
+                    "name": {
+                        "value": "Zorgvrager"
+                    },
+                    "value": {
+                        "_type": "DV_CODED_TEXT",
+                        "value": "Patient",
+                        "defining_code": {
+                            "terminology_id": {
+                                "value": "local"
+                            },
+                            "code_string": "at0011"
+                        }
+                    }
+                },
+                {
+                    "_type": "ELEMENT",
+                    "archetype_node_id": "at0020",
+                    "name": {
+                        "value": "Type contact"
+                    },
+                    "value": {
+                        "_type": "DV_CODED_TEXT",
+                        "value": "Geen",
+                        "defining_code": {
+                            "terminology_id": {
+                                "value": "local"
+                            },
+                            "code_string": "at0024"
+                        }
+                    }
+                },
+                {
+                    "_type": "ELEMENT",
+                    "archetype_node_id": "at0030",
+                    "name": {
+                        "value": "Type rapportage"
+                    },
+                    "value": {
+                        "_type": "DV_CODED_TEXT",
+                        "value": "Patientbespreking",
+                        "defining_code": {
+                            "terminology_id": {
+                                "value": "local"
+                            },
+                            "code_string": "at0034"
+                        }
+                    }
+                },
+                {
+                    "_type": "ELEMENT",
+                    "archetype_node_id": "at0040",
+                    "name": {
+                        "value": "Kenmerken"
+                    },
+                    "value": {
+                        "_type": "DV_CODED_TEXT",
+                        "value": "Crisisdienst",
+                        "defining_code": {
+                            "terminology_id": {
+                                "value": "local"
+                            },
+                            "code_string": "at0041"
+                        }
+                    }
+                },
+                {
+                    "_type": "ELEMENT",
+                    "archetype_node_id": "at0050",
+                    "name": {
+                        "value": "Referentie"
+                    },
+                    "value": {
+                        "_type": "DV_EHR_URI"
+                    }
+                }
+            ]
+        }
+    },
+    "content": [
+        {
+            "_type": "EVALUATION",
+            "archetype_node_id": "openEHR-EHR-EVALUATION.clinical_synopsis.v1",
+            "name": {
+                "value": "Clinical Synopsis"
+            },
+            "archetype_details": {
+                "archetype_id": {
+                    "value": "openEHR-EHR-EVALUATION.clinical_synopsis.v1"
+                },
+                "rm_version": "1.0.2"
+            },
+            "language": {
+                "terminology_id": {
+                    "value": "ISO_639-1"
+                },
+                "code_string": "nl"
+            },
+            "encoding": {
+                "terminology_id": {
+                    "value": "IANA_character-sets"
+                },
+                "code_string": "UTF-8"
+            },
+            "subject": {
+                "_type": "PARTY_SELF"
+            },
+            "data": {
+                "_type": "ITEM_TREE",
+                "archetype_node_id": "at0001",
+                "name": {
+                    "value": "List"
+                },
+                "items": [
+                    {
+                        "_type": "ELEMENT",
+                        "archetype_node_id": "at0002",
+                        "name": {
+                            "value": "Synopsis"
+                        },
+                        "value": {
+                            "_type": "DV_TEXT",
+                            "value": "value-692ec1bc29508"
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}

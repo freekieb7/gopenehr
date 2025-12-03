@@ -9,19 +9,19 @@ import (
 
 const REFERENCE_RANGE_TYPE string = "REFERENCE_RANGE"
 
-type REFERENCE_RANGE struct {
+type REFERENCE_RANGE[T any] struct {
 	Type_   utils.Optional[string] `json:"_type,omitzero"`
 	Meaning DvTextUnion            `json:"meaning"`
-	Range   DV_INTERVAL            `json:"range"`
+	Range   DV_INTERVAL[T]         `json:"range"`
 }
 
-func (r *REFERENCE_RANGE) SetModelName() {
+func (r *REFERENCE_RANGE[T]) SetModelName() {
 	r.Type_ = utils.Some(REFERENCE_RANGE_TYPE)
 	r.Meaning.SetModelName()
 	r.Range.SetModelName()
 }
 
-func (r *REFERENCE_RANGE) Validate(path string) util.ValidateError {
+func (r *REFERENCE_RANGE[T]) Validate(path string) util.ValidateError {
 	var validateErr util.ValidateError
 
 	// Validate _type

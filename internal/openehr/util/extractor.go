@@ -10,9 +10,6 @@ import (
 // 	Type_ string `json:"_type,omitzero"`
 // }
 
-var key []byte = []byte(`"_type":`)
-var keyLen = len(key)
-
 // Common type strings as byte slices for comparison
 var (
 	typeComposition     = []byte("COMPOSITION")
@@ -42,128 +39,279 @@ var (
 
 // DecoderTypeField extracts the _type field from the given JSON data
 // without fully unmarshaling the data.
-// _type must be the first field.
 // Returns a string using unsafe to avoid allocation for common types.
 func UnsafeTypeFieldExtraction(data []byte) string {
-	// Skip initial '{'
-	for i := 1; i <= len(data)-keyLen; i++ {
+	if len(data) == 0 || data[0] != '{' {
+		return ""
+	}
+
+	i := 1     // cursor
+	depth := 1 // object depth
+	inString := false
+	escape := false
+
+	for i < len(data) {
 		b := data[i]
 
-		if isSpace(b) {
+		// Handle string parsing (only for VALUES, never for root keys)
+		if inString {
+			if escape {
+				escape = false
+			} else {
+				switch b {
+				case '\\':
+					escape = true
+				case '"':
+					inString = false
+				}
+			}
+			i++
 			continue
 		}
 
-		if !bytes.Equal(data[i:i+keyLen], key) {
-			return ""
+		switch b {
+		case '"':
+			// Only enter string mode if not root key
+			if depth != 1 {
+				inString = true
+				i++
+				continue
+			}
+			// else: root-level key → parse below
+
+		case '{':
+			depth++
+			i++
+			continue
+
+		case '}':
+			depth--
+			i++
+			if depth == 0 {
+				return ""
+			}
+			continue
+
+		case '[':
+			// Arrays should not affect object depth
+			i++
+			continue
+
+		case ']':
+			i++
+			continue
+
+		default:
+			if isSpace(b) {
+				i++
+				continue
+			}
 		}
 
-		i += keyLen
+		// Only parse keys when we're at root object depth
+		if depth == 1 && b == '"' {
+			// Parse key
+			keyStart := i + 1
+			j := keyStart
 
-		// skip whitespace
-		for i < len(data) && isSpace(data[i]) {
-			i++
-		}
+			for j < len(data) {
+				c := data[j]
+				if c == '\\' {
+					j += 2
+					continue
+				}
+				if c == '"' {
+					break
+				}
+				j++
+			}
+			if j >= len(data) {
+				return ""
+			}
 
-		// must be quoted string
-		if i < len(data) && data[i] == '"' {
-			i++
-			start := i
-			for i < len(data) && data[i] != '"' {
+			key := data[keyStart:j]
+			i = j + 1 // skip closing quote
+
+			// Skip whitespace
+			for i < len(data) && isSpace(data[i]) {
 				i++
 			}
-			if i < len(data) {
-				typeBytes := data[start:i]
 
-				// Fast path: compare against common types to return string without allocation
+			if i >= len(data) || data[i] != ':' {
+				return ""
+			}
+			i++
+
+			if bytes.Equal(key, []byte("_type")) {
+				// Skip whitespace
+				for i < len(data) && isSpace(data[i]) {
+					i++
+				}
+
+				if i >= len(data) || data[i] != '"' {
+					return ""
+				}
+
+				i++
+				valStart := i
+
+				for i < len(data) {
+					c := data[i]
+					if c == '\\' {
+						i += 2
+						continue
+					}
+					if c == '"' {
+						break
+					}
+					i++
+				}
+				if i >= len(data) {
+					return ""
+				}
+
+				value := data[valStart:i]
+
+				// Fast-path matching
 				switch {
-				case bytes.Equal(typeBytes, typeComposition):
+				case bytes.Equal(value, typeComposition):
 					return "COMPOSITION"
-				case bytes.Equal(typeBytes, typeSection):
+				case bytes.Equal(value, typeSection):
 					return "SECTION"
-				case bytes.Equal(typeBytes, typeObservation):
+				case bytes.Equal(value, typeObservation):
 					return "OBSERVATION"
-				case bytes.Equal(typeBytes, typeEvaluation):
+				case bytes.Equal(value, typeEvaluation):
 					return "EVALUATION"
-				case bytes.Equal(typeBytes, typeInstruction):
+				case bytes.Equal(value, typeInstruction):
 					return "INSTRUCTION"
-				case bytes.Equal(typeBytes, typeAction):
+				case bytes.Equal(value, typeAction):
 					return "ACTION"
-				case bytes.Equal(typeBytes, typeActivity):
+				case bytes.Equal(value, typeActivity):
 					return "ACTIVITY"
-				case bytes.Equal(typeBytes, typeAdminEntry):
+				case bytes.Equal(value, typeAdminEntry):
 					return "ADMIN_ENTRY"
-				case bytes.Equal(typeBytes, typeGenericEntry):
+				case bytes.Equal(value, typeGenericEntry):
 					return "GENERIC_ENTRY"
-				case bytes.Equal(typeBytes, typeDvText):
+				case bytes.Equal(value, typeDvText):
 					return "DV_TEXT"
-				case bytes.Equal(typeBytes, typeDvCodedText):
+				case bytes.Equal(value, typeDvCodedText):
 					return "DV_CODED_TEXT"
-				case bytes.Equal(typeBytes, typeDvQuantity):
+				case bytes.Equal(value, typeDvQuantity):
 					return "DV_QUANTITY"
-				case bytes.Equal(typeBytes, typeDvCount):
+				case bytes.Equal(value, typeDvCount):
 					return "DV_COUNT"
-				case bytes.Equal(typeBytes, typeDvDateTime):
+				case bytes.Equal(value, typeDvDateTime):
 					return "DV_DATE_TIME"
-				case bytes.Equal(typeBytes, typeDvDate):
+				case bytes.Equal(value, typeDvDate):
 					return "DV_DATE"
-				case bytes.Equal(typeBytes, typeDvTime):
+				case bytes.Equal(value, typeDvTime):
 					return "DV_TIME"
-				case bytes.Equal(typeBytes, typeItemTree):
+				case bytes.Equal(value, typeItemTree):
 					return "ITEM_TREE"
-				case bytes.Equal(typeBytes, typeItemList):
+				case bytes.Equal(value, typeItemList):
 					return "ITEM_LIST"
-				case bytes.Equal(typeBytes, typeItemTable):
+				case bytes.Equal(value, typeItemTable):
 					return "ITEM_TABLE"
-				case bytes.Equal(typeBytes, typeItemSingle):
+				case bytes.Equal(value, typeItemSingle):
 					return "ITEM_SINGLE"
-				case bytes.Equal(typeBytes, typePartyIdentified):
+				case bytes.Equal(value, typePartyIdentified):
 					return "PARTY_IDENTIFIED"
-				case bytes.Equal(typeBytes, typePartyRelated):
+				case bytes.Equal(value, typePartyRelated):
 					return "PARTY_RELATED"
-				case bytes.Equal(typeBytes, typePartySelf):
+				case bytes.Equal(value, typePartySelf):
 					return "PARTY_SELF"
 				default:
-					// Fallback to unsafe string conversion for uncommon types
-					return unsafe.String(&typeBytes[0], len(typeBytes))
+					if len(value) == 0 {
+						return ""
+					}
+					return unsafe.String(unsafe.SliceData(value), len(value))
+				}
+			}
+
+			// Skip non-target value
+			for i < len(data) && isSpace(data[i]) {
+				i++
+			}
+			if i >= len(data) {
+				return ""
+			}
+
+			switch data[i] {
+			case '"':
+				inString = true
+				i++
+			case '{':
+				// Skip object
+				objDepth := 1
+				i++
+				for i < len(data) && objDepth > 0 {
+					switch data[i] {
+					case '"':
+						i++
+						for i < len(data) {
+							if data[i] == '\\' {
+								i += 2
+								continue
+							}
+							if data[i] == '"' {
+								i++
+								break
+							}
+							i++
+						}
+					case '{':
+						objDepth++
+						i++
+					case '}':
+						objDepth--
+						i++
+					default:
+						i++
+					}
+				}
+			case '[':
+				// Skip array
+				arrDepth := 1
+				i++
+				for i < len(data) && arrDepth > 0 {
+					switch data[i] {
+					case '"':
+						i++
+						for i < len(data) {
+							if data[i] == '\\' {
+								i += 2
+								continue
+							}
+							if data[i] == '"' {
+								i++
+								break
+							}
+							i++
+						}
+					case '[':
+						arrDepth++
+						i++
+					case ']':
+						arrDepth--
+						i++
+					default:
+						i++
+					}
+				}
+			default:
+				// true, false, number, null
+				for i < len(data) && data[i] != ',' && data[i] != '}' {
+					i++
 				}
 			}
 		}
-		return ""
+
+		i++
 	}
+
 	return ""
 }
 
 func isSpace(b byte) bool {
-	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
+	return b == ' ' || b == '\t' || b == '\r' || b == '\n'
 }
-
-// func DecoderTypeField(data []byte) string {
-// 	dec := json.NewDecoder(bytes.NewReader(data))
-
-// 	tok, err := dec.Token() // must be {
-// 	if err != nil || tok != json.Delim('{') {
-// 		return ""
-// 	}
-
-// 	for dec.More() {
-// 		t, err := dec.Token()
-// 		if err != nil {
-// 			return ""
-// 		}
-
-// 		key := t.(string)
-// 		if key == "_type" {
-// 			val, err := dec.Token()
-// 			if err != nil {
-// 				return ""
-// 			}
-// 			return val.(string)
-// 		}
-
-// 		// // skip value
-// 		// if err := dec.Skip(); err != nil {
-// 		// 	return "", err
-// 		// }
-// 	}
-// 	return ""
-// }

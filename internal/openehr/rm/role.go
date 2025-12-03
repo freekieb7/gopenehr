@@ -10,17 +10,17 @@ import (
 const ROLE_TYPE string = "ROLE"
 
 type ROLE struct {
-	Type_            utils.Optional[string]             `json:"_type,omitempty"`
-	Name             DvTextUnion                        `json:"name"`
-	ArchetypeNodeID  string                             `json:"archetype_node_id"`
-	UID              utils.Optional[UIDBasedIDUnion]    `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]             `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]         `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]       `json:"feeder_audit,omitzero"`
-	Details          utils.Optional[ItemStructureUnion] `json:"details,omitzero"`
-	Target           PARTY_REF                          `json:"target"`
-	TimeValidity     utils.Optional[DV_INTERVAL]        `json:"time_validity,omitzero"`
-	Source           PARTY_REF                          `json:"source"`
+	Type_            utils.Optional[string]               `json:"_type,omitempty"`
+	Name             DvTextUnion                          `json:"name"`
+	ArchetypeNodeID  string                               `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion]      `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]               `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]           `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]         `json:"feeder_audit,omitzero"`
+	Details          utils.Optional[ItemStructureUnion]   `json:"details,omitzero"`
+	Target           PARTY_REF                            `json:"target"`
+	TimeValidity     utils.Optional[DV_INTERVAL[DV_DATE]] `json:"time_validity,omitzero"`
+	Source           PARTY_REF                            `json:"source"`
 }
 
 func (a *ROLE) SetModelName() {

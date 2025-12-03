@@ -9,21 +9,21 @@ import (
 
 const DV_INTERVAL_TYPE string = "DV_INTERVAL"
 
-type DV_INTERVAL struct {
+type DV_INTERVAL[T any] struct {
 	Type_          utils.Optional[string] `json:"_type,omitzero"`
-	Lower          any                    `json:"lower"`
-	Upper          any                    `json:"upper"`
+	Lower          T                      `json:"lower"`
+	Upper          T                      `json:"upper"`
 	LowerUnbounded bool                   `json:"lower_unbounded"`
 	UpperUnbounded bool                   `json:"upper_unbounded"`
 	LowerIncluded  bool                   `json:"lower_included"`
 	UpperIncluded  bool                   `json:"upper_included"`
 }
 
-func (d *DV_INTERVAL) SetModelName() {
+func (d *DV_INTERVAL[T]) SetModelName() {
 	d.Type_ = utils.Some(DV_INTERVAL_TYPE)
 }
 
-func (d *DV_INTERVAL) Validate(path string) util.ValidateError {
+func (d *DV_INTERVAL[T]) Validate(path string) util.ValidateError {
 	var validateErr util.ValidateError
 	var attrPath string
 

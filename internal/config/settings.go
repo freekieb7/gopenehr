@@ -48,6 +48,7 @@ type Settings struct {
 	OAuthAudience       string
 	OtelEndpoint        string
 	OtelInsecure        bool
+	KafkaBrokers        []string
 }
 
 func NewSettings() Settings {
@@ -112,6 +113,12 @@ func (s *Settings) Load() error {
 		return err
 	}
 	s.OtelInsecure = otelInsecure
+
+	kafkaBrokers, err := getEnvString("KAFKA_BROKERS", "", false)
+	if err != nil {
+		return err
+	}
+	s.KafkaBrokers = strings.Split(kafkaBrokers, ",")
 
 	return nil
 }

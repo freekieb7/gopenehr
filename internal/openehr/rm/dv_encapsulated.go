@@ -11,9 +11,9 @@ const DV_ENCAPSULATED_TYPE string = "DV_ENCAPSULATED"
 type DvEncapsulatedKind int
 
 const (
-	DvEncapsulatedKind_Unknown DvEncapsulatedKind = iota
-	DvEncapsulatedKind_DV_MULTIMEDIA
-	DvEncapsulatedKind_DV_EHR_URI
+	DV_ENCAPSULATED_kind_unknown DvEncapsulatedKind = iota
+	DV_ENCAPSULATED_kind_DV_MULTIMEDIA
+	DV_ENCAPSULATED_kind_DV_EHR_URI
 )
 
 type DvEncapsulatedUnion struct {
@@ -23,18 +23,18 @@ type DvEncapsulatedUnion struct {
 
 func (x *DvEncapsulatedUnion) SetModelName() {
 	switch x.Kind {
-	case DvEncapsulatedKind_DV_MULTIMEDIA:
+	case DV_ENCAPSULATED_kind_DV_MULTIMEDIA:
 		x.Value.(*DV_MULTIMEDIA).SetModelName()
-	case DvEncapsulatedKind_DV_EHR_URI:
+	case DV_ENCAPSULATED_kind_DV_EHR_URI:
 		x.Value.(*DV_EHR_URI).SetModelName()
 	}
 }
 
 func (x *DvEncapsulatedUnion) Validate(path string) util.ValidateError {
 	switch x.Kind {
-	case DvEncapsulatedKind_DV_MULTIMEDIA:
+	case DV_ENCAPSULATED_kind_DV_MULTIMEDIA:
 		return x.Value.(*DV_MULTIMEDIA).Validate(path)
-	case DvEncapsulatedKind_DV_EHR_URI:
+	case DV_ENCAPSULATED_kind_DV_EHR_URI:
 		return x.Value.(*DV_EHR_URI).Validate(path)
 	default:
 		return util.ValidateError{
@@ -58,15 +58,29 @@ func (d *DvEncapsulatedUnion) UnmarshalJSON(data []byte) error {
 	t := util.UnsafeTypeFieldExtraction(data)
 	switch t {
 	case DV_MULTIMEDIA_TYPE:
-		d.Kind = DvEncapsulatedKind_DV_MULTIMEDIA
+		d.Kind = DV_ENCAPSULATED_kind_DV_MULTIMEDIA
 		d.Value = &DV_MULTIMEDIA{}
 	case DV_EHR_URI_TYPE:
-		d.Kind = DvEncapsulatedKind_DV_EHR_URI
+		d.Kind = DV_ENCAPSULATED_kind_DV_EHR_URI
 		d.Value = &DV_EHR_URI{}
 	default:
-		d.Kind = DvEncapsulatedKind_Unknown
+		d.Kind = DV_ENCAPSULATED_kind_unknown
 		return nil
 	}
 
 	return json.Unmarshal(data, d.Value)
+}
+
+func (d *DvEncapsulatedUnion) DV_MULTIMEDIA() *DV_MULTIMEDIA {
+	if d.Kind != DV_ENCAPSULATED_kind_DV_MULTIMEDIA {
+		return nil
+	}
+	return d.Value.(*DV_MULTIMEDIA)
+}
+
+func (d *DvEncapsulatedUnion) DV_EHR_URI() *DV_EHR_URI {
+	if d.Kind != DV_ENCAPSULATED_kind_DV_EHR_URI {
+		return nil
+	}
+	return d.Value.(*DV_EHR_URI)
 }

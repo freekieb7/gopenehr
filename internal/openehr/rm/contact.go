@@ -10,15 +10,15 @@ import (
 const CONTACT_TYPE string = "CONTACT"
 
 type CONTACT struct {
-	Type_            utils.Optional[string]          `json:"_type,omitzero"`
-	Name             DvTextUnion                     `json:"name"`
-	ArchetypeNodeID  string                          `json:"archetype_node_id"`
-	UID              utils.Optional[UIDBasedIDUnion] `json:"uid,omitzero"`
-	Links            utils.Optional[[]LINK]          `json:"links,omitzero"`
-	ArchetypeDetails utils.Optional[ARCHETYPED]      `json:"archetype_details,omitzero"`
-	FeederAudit      utils.Optional[FEEDER_AUDIT]    `json:"feeder_audit,omitzero"`
-	Addresses        []ADDRESS                       `json:"addresses"`
-	TimeValidity     utils.Optional[DV_INTERVAL]     `json:"time_validity,omitzero"`
+	Type_            utils.Optional[string]               `json:"_type,omitzero"`
+	Name             DvTextUnion                          `json:"name"`
+	ArchetypeNodeID  string                               `json:"archetype_node_id"`
+	UID              utils.Optional[UIDBasedIDUnion]      `json:"uid,omitzero"`
+	Links            utils.Optional[[]LINK]               `json:"links,omitzero"`
+	ArchetypeDetails utils.Optional[ARCHETYPED]           `json:"archetype_details,omitzero"`
+	FeederAudit      utils.Optional[FEEDER_AUDIT]         `json:"feeder_audit,omitzero"`
+	Addresses        []ADDRESS                            `json:"addresses"`
+	TimeValidity     utils.Optional[DV_INTERVAL[DV_DATE]] `json:"time_validity,omitzero"`
 }
 
 func (c *CONTACT) SetModelName() {

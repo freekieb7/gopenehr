@@ -156,9 +156,9 @@ func (d *DV_TEXT) Validate(path string) util.ValidateError {
 type DvTextKind int
 
 const (
-	DvTextKind_Unknown DvTextKind = iota
-	DvTextKind_DV_TEXT
-	DvTextKind_DV_CODED_TEXT
+	DV_TEXT_kind_unknown DvTextKind = iota
+	DV_TEXT_kind_DV_TEXT
+	DV_TEXT_kind_DV_CODED_TEXT
 )
 
 type DvTextUnion struct {
@@ -168,15 +168,15 @@ type DvTextUnion struct {
 
 func (d DvTextUnion) SetModelName() {
 	switch d.Kind {
-	case DvTextKind_DV_TEXT:
+	case DV_TEXT_kind_DV_TEXT:
 		d.Value.(*DV_TEXT).SetModelName()
-	case DvTextKind_DV_CODED_TEXT:
+	case DV_TEXT_kind_DV_CODED_TEXT:
 		d.Value.(*DV_CODED_TEXT).SetModelName()
 	}
 }
 
 func (d DvTextUnion) Validate(path string) util.ValidateError {
-	if d.Kind == DvTextKind_Unknown {
+	if d.Kind == DV_TEXT_kind_unknown {
 		return util.ValidateError{
 			Errs: []util.ValidationError{
 				{
@@ -190,9 +190,9 @@ func (d DvTextUnion) Validate(path string) util.ValidateError {
 	}
 
 	switch d.Kind {
-	case DvTextKind_DV_TEXT:
+	case DV_TEXT_kind_DV_TEXT:
 		return d.Value.(*DV_TEXT).Validate(path)
-	case DvTextKind_DV_CODED_TEXT:
+	case DV_TEXT_kind_DV_CODED_TEXT:
 		return d.Value.(*DV_CODED_TEXT).Validate(path)
 	default:
 		return util.ValidateError{}
@@ -207,47 +207,47 @@ func (d *DvTextUnion) UnmarshalJSON(data []byte) error {
 	t := util.UnsafeTypeFieldExtraction(data)
 	switch t {
 	case DV_TEXT_TYPE, "":
-		d.Kind = DvTextKind_DV_TEXT
+		d.Kind = DV_TEXT_kind_DV_TEXT
 		d.Value = &DV_TEXT{}
 	case DV_CODED_TEXT_TYPE:
-		d.Kind = DvTextKind_DV_CODED_TEXT
+		d.Kind = DV_TEXT_kind_DV_CODED_TEXT
 		d.Value = &DV_CODED_TEXT{}
 	default:
-		d.Kind = DvTextKind_Unknown
+		d.Kind = DV_TEXT_kind_unknown
 		return nil
 	}
 
 	return json.Unmarshal(data, d.Value)
 }
 
-func (d *DvTextUnion) DvText() *DV_TEXT {
-	if d.Kind == DvTextKind_DV_TEXT {
+func (d *DvTextUnion) DV_TEXT() *DV_TEXT {
+	if d.Kind == DV_TEXT_kind_DV_TEXT {
 		return d.Value.(*DV_TEXT)
 	}
 	return nil
 }
 
-func (d *DvTextUnion) DvCodedText() *DV_CODED_TEXT {
-	if d.Kind == DvTextKind_DV_CODED_TEXT {
+func (d *DvTextUnion) DV_CODED_TEXT() *DV_CODED_TEXT {
+	if d.Kind == DV_TEXT_kind_DV_CODED_TEXT {
 		return d.Value.(*DV_CODED_TEXT)
 	}
 	return nil
 }
 
-func DvTextFromDvText(dvText DV_TEXT) DvTextUnion {
+func DV_TEXT_from_DV_TEXT(dvText DV_TEXT) DvTextUnion {
 	dvText.Type_ = utils.Some(DV_TEXT_TYPE)
 
 	return DvTextUnion{
-		Kind:  DvTextKind_DV_TEXT,
+		Kind:  DV_TEXT_kind_DV_TEXT,
 		Value: &dvText,
 	}
 }
 
-func DvTextFromDvCodedText(dvCodedText DV_CODED_TEXT) DvTextUnion {
+func DV_TEXT_from_DV_CODED_TEXT(dvCodedText DV_CODED_TEXT) DvTextUnion {
 	dvCodedText.Type_ = utils.Some(DV_CODED_TEXT_TYPE)
 
 	return DvTextUnion{
-		Kind:  DvTextKind_DV_CODED_TEXT,
+		Kind:  DV_TEXT_kind_DV_CODED_TEXT,
 		Value: &dvCodedText,
 	}
 }

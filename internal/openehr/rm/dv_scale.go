@@ -10,12 +10,12 @@ import (
 const DV_SCALE_TYPE string = "DV_SCALE"
 
 type DV_SCALE struct {
-	Type_                utils.Optional[string]            `json:"_type,omitzero"`
-	NormalStatus         utils.Optional[CODE_PHRASE]       `json:"normal_status,omitzero"`
-	NormalRange          utils.Optional[DV_INTERVAL]       `json:"normal_range,omitzero"`
-	OtherReferenceRanges utils.Optional[[]REFERENCE_RANGE] `json:"other_reference_ranges,omitzero"`
-	Symbol               DV_CODED_TEXT                     `json:"symbol"`
-	Value                float64                           `json:"value"`
+	Type_                utils.Optional[string]                       `json:"_type,omitzero"`
+	NormalStatus         utils.Optional[CODE_PHRASE]                  `json:"normal_status,omitzero"`
+	NormalRange          utils.Optional[DV_INTERVAL[*DV_SCALE]]       `json:"normal_range,omitzero"`
+	OtherReferenceRanges utils.Optional[[]REFERENCE_RANGE[*DV_SCALE]] `json:"other_reference_ranges,omitzero"`
+	Symbol               DV_CODED_TEXT                                `json:"symbol"`
+	Value                float64                                      `json:"value"`
 }
 
 func (d *DV_SCALE) SetModelName() {

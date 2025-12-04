@@ -145,6 +145,49 @@ func (v VersionTreeID) String() string {
 	return fmt.Sprintf("%d.%d.%d", v.Major, v.Minor, v.Patch)
 }
 
+func (v VersionTreeID) Int() int32 {
+	return int32(v.Major)<<16 | int32(v.Minor)<<8 | int32(v.Patch)
+}
+
+func VersionTreeIDFromString(s string) VersionTreeID {
+	parts := strings.Split(s, ".")
+	var major, minor, patch uint8
+
+	if len(parts) > 0 {
+		if val, err := strconv.ParseUint(parts[0], 10, 8); err == nil {
+			major = uint8(val)
+		}
+	}
+	if len(parts) > 1 {
+		if val, err := strconv.ParseUint(parts[1], 10, 8); err == nil {
+			minor = uint8(val)
+		}
+	}
+	if len(parts) > 2 {
+		if val, err := strconv.ParseUint(parts[2], 10, 8); err == nil {
+			patch = uint8(val)
+		}
+	}
+
+	return VersionTreeID{
+		Major: major,
+		Minor: minor,
+		Patch: patch,
+	}
+}
+
+func VersionTreeIDFromInt(i int32) VersionTreeID {
+	major := uint8((i >> 16) & 0xFF)
+	minor := uint8((i >> 8) & 0xFF)
+	patch := uint8(i & 0xFF)
+
+	return VersionTreeID{
+		Major: major,
+		Minor: minor,
+		Patch: patch,
+	}
+}
+
 func (v VersionTreeID) CompareTo(other VersionTreeID) int8 {
 	if v == other {
 		return 0

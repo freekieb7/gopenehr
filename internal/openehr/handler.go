@@ -83,9 +83,9 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	v1.Post("/ehr/:ehr_id/contribution", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceContribution, audit.ActionCreate), h.CreateContribution)
 	v1.Get("/ehr/:ehr_id/contribution/:contribution_uid", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceContribution, audit.ActionRead), h.GetContribution)
 
-	// v1.Get("/ehr/:ehr_id/tags", h.GetEHRTags)
-	// v1.Get("/ehr/:ehr_id/composition/:uid_based_id/tags", h.GetCompositionTags)
-	// v1.Put("/ehr/:ehr_id/composition/:uid_based_id/tags", h.UpdateCompositionTags)
+	v1.Get("/ehr/:ehr_id/tags", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceItemTag, audit.ActionRead), h.GetEHRTags)
+	v1.Get("/ehr/:ehr_id/composition/:uid_based_id/tags", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceItemTag, audit.ActionRead), h.GetCompositionTags)
+	v1.Put("/ehr/:ehr_id/composition/:uid_based_id/tags", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceItemTag, audit.ActionUpdate), h.UpdateCompositionTags)
 	// v1.Delete("/ehr/:ehr_id/composition/:uid_based_id/tags", h.DeleteCompositionTagByKey)
 	// v1.Get("/ehr/:ehr_id/ehr_status/tags", h.GetEHRStatusTags)
 	// v1.Get("/ehr/:ehr_id/ehr_status/:version_uid/tags", h.GetEHRStatusVersionTags)
@@ -112,15 +112,15 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	v1.Put("/demographic/organisation/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceOrganisation, audit.ActionUpdate), h.UpdateOrganisation)
 	v1.Delete("/demographic/organisation/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceOrganisation, audit.ActionDelete), h.DeleteOrganisation)
 
-	v1.Post("/demographic/role", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceRole, audit.ActionCreate), h.CreateRole)
-	v1.Get("/demographic/role/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceRole, audit.ActionRead), h.GetRole)
-	v1.Put("/demographic/role/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceRole, audit.ActionUpdate), h.UpdateRole)
-	v1.Delete("/demographic/role/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceRole, audit.ActionDelete), h.DeleteRole)
+	// v1.Post("/demographic/role", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceRole, audit.ActionCreate), h.CreateRole)
+	// v1.Get("/demographic/role/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceRole, audit.ActionRead), h.GetRole)
+	// v1.Put("/demographic/role/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceRole, audit.ActionUpdate), h.UpdateRole)
+	// v1.Delete("/demographic/role/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceRole, audit.ActionDelete), h.DeleteRole)
 
-	v1.Get("/demographic/versioned_party/:versioned_object_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedParty, audit.ActionRead), h.GetVersionedParty)
-	v1.Get("/demographic/versioned_party/:versioned_object_id/revision_history", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedParty, audit.ActionRead), h.GetVersionedPartyRevisionHistory)
-	v1.Get("/demographic/versioned_party/:versioned_object_id/version", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedPartyVersion, audit.ActionRead), h.GetVersionedPartyVersionAtTime)
-	v1.Get("/demographic/versioned_party/:versioned_object_id/version/:version_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedPartyVersion, audit.ActionRead), h.GetVersionedPartyVersion)
+	// v1.Get("/demographic/versioned_party/:versioned_object_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedParty, audit.ActionRead), h.GetVersionedParty)
+	// v1.Get("/demographic/versioned_party/:versioned_object_id/revision_history", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedParty, audit.ActionRead), h.GetVersionedPartyRevisionHistory)
+	// v1.Get("/demographic/versioned_party/:versioned_object_id/version", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedPartyVersion, audit.ActionRead), h.GetVersionedPartyVersionAtTime)
+	// v1.Get("/demographic/versioned_party/:versioned_object_id/version/:version_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedPartyVersion, audit.ActionRead), h.GetVersionedPartyVersion)
 
 	v1.Post("/demographic/contribution", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceContribution, audit.ActionCreate), h.CreateDemographicContribution)
 	v1.Get("/demographic/contribution/:contribution_uid", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceContribution, audit.ActionRead), h.GetDemographicContribution)
@@ -208,7 +208,7 @@ func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 		})
 	}
 
-	ehr, err := h.OpenEHRService.GetEHRBySubject(ctx, subjectID, subjectNamespace)
+	ehrJSON, err := h.OpenEHRService.GetEHRBySubjectRawJSON(ctx, subjectID, subjectNamespace)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -229,7 +229,8 @@ func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	return c.Status(fiber.StatusOK).JSON(ehr)
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(ehrJSON)
 }
 
 func (h *Handler) CreateEHR(c *fiber.Ctx) error {
@@ -310,7 +311,7 @@ func (h *Handler) GetEHR(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	ehr, err := h.OpenEHRService.GetEHR(ctx, ehrID)
+	ehrJSON, err := h.OpenEHRService.GetEHRRawJSON(ctx, ehrID)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -330,7 +331,8 @@ func (h *Handler) GetEHR(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	return c.Status(fiber.StatusOK).JSON(ehr)
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(ehrJSON)
 }
 
 func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
@@ -438,7 +440,7 @@ func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
 		filterAtTime = parsedTime
 	}
 
-	ehrStatus, err := h.OpenEHRService.GetEHRStatus(ctx, ehrID, filterAtTime, "")
+	ehrStatusJSON, err := h.OpenEHRService.GetEHRStatusAtTimeRawJSON(ctx, ehrID, filterAtTime)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -458,7 +460,8 @@ func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	return c.Status(fiber.StatusOK).JSON(ehrStatus)
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(ehrStatusJSON)
 }
 
 func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
@@ -492,7 +495,7 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 	}
 
 	// Check collision using If-Match header
-	currentEHRStatus, err := h.OpenEHRService.GetEHRStatus(ctx, ehrID, time.Time{}, "")
+	currentEHRStatusID, err := h.OpenEHRService.GetEHRStatusID(ctx, ehrID)
 	if err != nil {
 		if err == ErrEHRStatusNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -509,7 +512,7 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentEHRStatus.UID.V.OBJECT_VERSION_ID().Value != ifMatch {
+	if currentEHRStatusID.Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "EHR Status has been modified since the provided version",
@@ -517,7 +520,7 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 		})
 	}
 
-	updatedEHRStatus, err := h.OpenEHRService.UpdateEHRStatus(ctx, ehrID, currentEHRStatus, ehrStatus)
+	updatedEHRStatus, err := h.OpenEHRService.UpdateEHRStatus(ctx, ehrID, currentEHRStatusID, ehrStatus)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -569,7 +572,7 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 
 	h.WebhookSink.Enqueue(webhook.EventTypeEHRStatusUpdated, map[string]any{
 		"ehr_id":              ehrID,
-		"prev_ehr_status_uid": currentEHRStatus.UID.V.OBJECT_VERSION_ID().Value,
+		"prev_ehr_status_uid": currentEHRStatusID.Value,
 		"curr_ehr_status_uid": updatedEHRStatusID,
 	})
 
@@ -609,7 +612,12 @@ func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 		})
 	}
 
-	ehrStatus, err := h.OpenEHRService.GetEHRStatus(ctx, ehrID, time.Time{}, versionUID)
+	var ehrStatusJSON []byte
+	if uuid.Validate(versionUID) == nil {
+		ehrStatusJSON, err = h.OpenEHRService.GetEHRStatusByVersionedEHRStatusIDRawJSON(ctx, ehrID, uuid.MustParse(versionUID))
+	} else {
+		ehrStatusJSON, err = h.OpenEHRService.GetEHRStatusByIDRawJSON(ctx, ehrID, versionUID)
+	}
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -629,7 +637,8 @@ func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	return c.Status(fiber.StatusOK).JSON(ehrStatus)
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(ehrStatusJSON)
 }
 
 func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
@@ -642,7 +651,7 @@ func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	versionedStatus, err := h.OpenEHRService.GetVersionedEHRStatus(ctx, ehrID)
+	versionedEHRStatusJSON, err := h.OpenEHRService.GetVersionedEHRStatusRawJSON(ctx, ehrID)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -662,7 +671,8 @@ func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	return c.Status(fiber.StatusOK).JSON(versionedStatus)
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(versionedEHRStatusJSON)
 }
 
 func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
@@ -675,7 +685,7 @@ func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	revisionHistory, err := h.OpenEHRService.GetVersionedEHRStatusRevisionHistory(ctx, ehrID)
+	revisionHistoryJSON, err := h.OpenEHRService.GetVersionedEHRStatusRevisionHistoryRawJSON(ctx, ehrID)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -695,7 +705,8 @@ func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	return c.Status(fiber.StatusOK).JSON(revisionHistory)
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(revisionHistoryJSON)
 }
 
 func (h *Handler) GetVersionedEHRStatusVersion(c *fiber.Ctx) error {
@@ -722,7 +733,7 @@ func (h *Handler) GetVersionedEHRStatusVersion(c *fiber.Ctx) error {
 		filterAtTime = parsedTime
 	}
 
-	ehrStatusVersionJSON, err := h.OpenEHRService.GetVersionedEHRStatusVersionAsJSON(ctx, ehrID, filterAtTime, "")
+	ehrStatusVersionJSON, err := h.OpenEHRService.GetEHRStatusAtTimeRawJSON(ctx, ehrID, filterAtTime)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -765,7 +776,7 @@ func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
 		})
 	}
 
-	ehrStatusVersionJSON, err := h.OpenEHRService.GetVersionedEHRStatusVersionAsJSON(ctx, ehrID, time.Time{}, versionUID)
+	ehrStatusVersionJSON, err := h.OpenEHRService.GetEHRStatusByIDRawJSON(ctx, ehrID, versionUID)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -905,19 +916,11 @@ func (h *Handler) GetComposition(c *fiber.Ctx) error {
 		return err
 	}
 
-	var composition rm.COMPOSITION
-	if strings.Count(uidBasedID, "::") == 2 {
-		composition, err = h.OpenEHRService.GetComposition(ctx, ehrID, uidBasedID)
+	var compositionJSON []byte
+	if uuid.Validate(uidBasedID) == nil {
+		compositionJSON, err = h.OpenEHRService.GetCompositionByVersionedCompositionIDRawJSON(ctx, ehrID, uuid.MustParse(uidBasedID))
 	} else {
-		versionedCompositionID, parseErr := uuid.Parse(strings.Split(uidBasedID, "::")[0])
-		if parseErr != nil {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Invalid UID format",
-				Status:  "bad_request",
-			})
-		}
-		composition, err = h.OpenEHRService.GetCurrentCompositionByVersionedCompositionID(ctx, ehrID, versionedCompositionID)
+		compositionJSON, err = h.OpenEHRService.GetCompositionRawJSON(ctx, ehrID, uidBasedID)
 	}
 	if err != nil {
 		if err == ErrEHRNotFound {
@@ -945,7 +948,8 @@ func (h *Handler) GetComposition(c *fiber.Ctx) error {
 
 	auditCtx.Success()
 
-	return c.Status(fiber.StatusOK).JSON(composition)
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(compositionJSON)
 }
 
 func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
@@ -988,7 +992,7 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 		})
 	}
 
-	currentComposition, err := h.OpenEHRService.GetCurrentCompositionByVersionedCompositionID(ctx, ehrID, versionedCompositionID)
+	currentCompositionID, err := h.OpenEHRService.GetCompositionID(ctx, ehrID, versionedCompositionID)
 	if err != nil {
 		if err == ErrCompositionNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1005,7 +1009,7 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentComposition.UID.V.OBJECT_VERSION_ID().Value != ifMatch {
+	if currentCompositionID.Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Composition has been modified since the provided version",
@@ -1024,7 +1028,7 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 		}))
 	}
 
-	updatedComposition, err := h.OpenEHRService.UpdateComposition(ctx, ehrID, currentComposition, composition)
+	updatedComposition, err := h.OpenEHRService.UpdateComposition(ctx, ehrID, currentCompositionID, composition)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1085,7 +1089,7 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 
 	h.WebhookSink.Enqueue(webhook.EventTypeCompositionUpdated, map[string]any{
 		"ehr_id":               ehrID,
-		"prev_composition_uid": currentComposition.UID.V.OBJECT_VERSION_ID().Value,
+		"prev_composition_uid": currentCompositionID,
 		"curr_composition_uid": updatedCompositionID,
 	})
 
@@ -1132,7 +1136,7 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 	}
 
 	// Check matching latest composition version
-	currentComposition, err := h.OpenEHRService.GetCurrentCompositionByVersionedCompositionID(ctx, ehrID, versionedCompositionID)
+	currentCompositionID, err := h.OpenEHRService.GetCompositionID(ctx, ehrID, versionedCompositionID)
 	if err != nil {
 		if err == ErrCompositionNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1149,7 +1153,7 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentComposition.UID.V.OBJECT_VERSION_ID().Value != uidBasedID {
+	if currentCompositionID.Value != uidBasedID {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Composition has been modified since the provided version",
@@ -1157,7 +1161,7 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.OpenEHRService.DeleteComposition(ctx, ehrID, versionedCompositionID); err != nil {
+	if err := h.OpenEHRService.DeleteVersionedComposition(ctx, ehrID, versionedCompositionID); err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
@@ -1186,7 +1190,7 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 
 	h.WebhookSink.Enqueue(webhook.EventTypeCompositionDeleted, map[string]any{
 		"ehr_id":          ehrID,
-		"composition_uid": currentComposition.UID.V.OBJECT_VERSION_ID().Value,
+		"composition_uid": currentCompositionID.Value,
 	})
 
 	c.Status(fiber.StatusNoContent)
@@ -1209,7 +1213,7 @@ func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["versioned_composition_uid"] = versionedCompositionID
 
-	versionedComposition, err := h.OpenEHRService.GetVersionedComposition(ctx, ehrID, versionedCompositionID)
+	versionedCompositionJSON, err := h.OpenEHRService.GetVersionedCompositionRawJSON(ctx, ehrID, versionedCompositionID)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1236,7 +1240,9 @@ func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
 	}
 
 	auditCtx.Success()
-	return c.Status(fiber.StatusOK).JSON(versionedComposition)
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(versionedCompositionJSON)
 }
 
 func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
@@ -1256,7 +1262,7 @@ func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["versioned_composition_uid"] = versionedCompositionID
 
-	revisionHistory, err := h.OpenEHRService.GetVersionedCompositionRevisionHistory(ctx, ehrID, versionedCompositionID)
+	revisionHistoryJSON, err := h.OpenEHRService.GetVersionedCompositionRevisionHistoryRawJSON(ctx, ehrID, versionedCompositionID)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1283,7 +1289,9 @@ func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
 	}
 
 	auditCtx.Success()
-	return c.Status(fiber.StatusOK).JSON(revisionHistory)
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(revisionHistoryJSON)
 }
 
 func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
@@ -1296,7 +1304,7 @@ func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	versionedCompositionID, err := StringFromPath(c, auditCtx, "versioned_object_id")
+	versionedCompositionID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
 	if err != nil {
 		return err
 	}
@@ -1312,7 +1320,7 @@ func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 		auditCtx.Event.Details["version_at_time"] = filterAtTime.String()
 	}
 
-	versionJSON, err := h.OpenEHRService.GetVersionedCompositionVersionJSON(ctx, ehrID, versionedCompositionID, filterAtTime, "")
+	compositionJSON, err := h.OpenEHRService.GetCompositionAtTimeRawJSON(ctx, ehrID, versionedCompositionID, filterAtTime)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1341,7 +1349,7 @@ func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 	auditCtx.Success()
 
 	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(versionJSON)
+	return c.Status(fiber.StatusOK).Send(compositionJSON)
 }
 
 func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
@@ -1354,7 +1362,7 @@ func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	versionedCompositionID, err := StringFromPath(c, auditCtx, "versioned_object_id")
+	versionedCompositionID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
 	if err != nil {
 		return err
 	}
@@ -1366,15 +1374,7 @@ func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["version_uid"] = versionID
 
-	if versionedCompositionID != strings.Split(versionID, "::")[0] {
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "version_uid does not match the versioned_object_id",
-			Status:  "bad_request",
-		})
-	}
-
-	versionJSON, err := h.OpenEHRService.GetVersionedCompositionVersionJSON(ctx, ehrID, versionedCompositionID, time.Time{}, versionID)
+	versionJSON, err := h.OpenEHRService.GetCompositionByIDRawJSON(ctx, ehrID, versionedCompositionID, versionID)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1519,7 +1519,7 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 		return err
 	}
 
-	currentDirectory, err := h.OpenEHRService.GetDirectory(ctx, ehrID)
+	currentDirectoryID, err := h.OpenEHRService.GetDirectoryID(ctx, ehrID)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1544,7 +1544,7 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentDirectory.UID.V.OBJECT_VERSION_ID().Value != ifMatch {
+	if currentDirectoryID.Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Directory has been modified since the provided version",
@@ -1552,7 +1552,7 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 		})
 	}
 
-	updatedDirectory, err := h.OpenEHRService.UpdateDirectory(ctx, ehrID, currentDirectory, directory)
+	updatedDirectory, err := h.OpenEHRService.UpdateDirectory(ctx, ehrID, currentDirectoryID, directory)
 	if err != nil {
 		if err == ErrDirectoryNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1599,7 +1599,7 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeDirectoryUpdated, map[string]any{
-		"prev_directory_id": currentDirectory.UID.V.OBJECT_VERSION_ID().Value,
+		"prev_directory_id": currentDirectoryID.Value,
 		"curr_directory_id": updatedDirectoryID,
 	})
 
@@ -1635,7 +1635,7 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 		return err
 	}
 
-	currentDirectory, err := h.OpenEHRService.GetDirectory(ctx, ehrID)
+	currentDirectoryID, err := h.OpenEHRService.GetDirectoryID(ctx, ehrID)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1660,7 +1660,7 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentDirectory.UID.V.OBJECT_VERSION_ID().Value != ifMatch {
+	if currentDirectoryID.Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Directory has been modified since the provided version",
@@ -1668,7 +1668,7 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.OpenEHRService.DeleteDirectory(ctx, ehrID, uuid.MustParse(currentDirectory.UID.V.Value.(*rm.OBJECT_VERSION_ID).Value)); err != nil {
+	if err := h.OpenEHRService.DeleteDirectory(ctx, ehrID, uuid.MustParse(currentDirectoryID.Value)); err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
@@ -1696,7 +1696,7 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeDirectoryDeleted, map[string]any{
-		"directory_id": currentDirectory.UID.V.OBJECT_VERSION_ID().Value,
+		"directory_id": currentDirectoryID.UID(),
 	})
 
 	c.Status(fiber.StatusNoContent)
@@ -1725,14 +1725,8 @@ func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
 	}
 
 	path := c.Query("path")
-	var pathParts []string
-	if path != "" {
-		for part := range strings.SplitSeq(path, "/") {
-			pathParts = append(pathParts, strings.TrimSpace(part))
-		}
-	}
 
-	folder, err := h.OpenEHRService.GetFolderInDirectoryVersion(ctx, ehrID, filterAtTime, "", pathParts)
+	folderJSON, err := h.OpenEHRService.GetFolderAtTimeRawJSON(ctx, ehrID, filterAtTime, path)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1766,7 +1760,9 @@ func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
 	}
 
 	auditCtx.Success()
-	return c.Status(fiber.StatusOK).JSON(folder)
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(folderJSON)
 }
 
 func (h *Handler) GetFolderInDirectoryVersion(c *fiber.Ctx) error {
@@ -1779,21 +1775,15 @@ func (h *Handler) GetFolderInDirectoryVersion(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	versionUID, err := StringFromPath(c, auditCtx, "version_uid")
+	versionUID, err := UUIDFromPath(c, auditCtx, "version_uid")
 	if err != nil {
 		return err
 	}
 	auditCtx.Event.Details["version_uid"] = versionUID
 
 	path := c.Query("path")
-	var pathParts []string
-	if path != "" {
-		for part := range strings.SplitSeq(path, "/") {
-			pathParts = append(pathParts, strings.TrimSpace(part))
-		}
-	}
 
-	folder, err := h.OpenEHRService.GetFolderInDirectoryVersion(ctx, ehrID, time.Time{}, versionUID, pathParts)
+	folderJSON, err := h.OpenEHRService.GetFolderInDirectoryByIDRawJSON(ctx, ehrID, versionUID, path)
 	if err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1827,7 +1817,9 @@ func (h *Handler) GetFolderInDirectoryVersion(c *fiber.Ctx) error {
 	}
 
 	auditCtx.Success()
-	return c.Status(fiber.StatusOK).JSON(folder)
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(folderJSON)
 }
 
 func (h *Handler) CreateContribution(c *fiber.Ctx) error {
@@ -1856,7 +1848,7 @@ func (h *Handler) GetContribution(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["contribution_uid"] = contributionUID
 
-	contribution, err := h.OpenEHRService.GetContribution(ctx, contributionUID, utils.Some(ehrID))
+	contributionJSON, err := h.OpenEHRService.GetContributionRawJSON(ctx, contributionUID, utils.Some(ehrID))
 	if err != nil {
 		if err == ErrContributionNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -1876,19 +1868,144 @@ func (h *Handler) GetContribution(c *fiber.Ctx) error {
 	}
 
 	auditCtx.Success()
-	return c.Status(fiber.StatusOK).JSON(contribution)
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(contributionJSON)
 }
 
 func (h *Handler) GetEHRTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("Get EHR Tags not implemented yet")
+	ctx := c.Context()
+	auditCtx := audit.From(c)
+
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
+	}
+
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
+
+	tagsJSON, err := h.OpenEHRService.GetEHRTagsRawJSON(ctx, ehrID)
+	if err != nil {
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get EHR Tags", "error", err)
+
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusInternalServerError,
+			Message: "Failed to get EHR Tags",
+			Status:  "error",
+		})
+	}
+
+	auditCtx.Success()
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(tagsJSON)
 }
 
 func (h *Handler) GetCompositionTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("Get Composition Tags not implemented yet")
+	ctx := c.Context()
+	auditCtx := audit.From(c)
+
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
+	}
+
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
+
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["uid_based_id"] = uidBasedID
+
+	var tagsJSON []byte
+	if uuid.Validate(uidBasedID) == nil {
+		tagsJSON, err = h.OpenEHRService.GetVersionedCompositionTagsRawJSON(ctx, ehrID, uuid.MustParse(uidBasedID))
+	} else {
+		tagsJSON, err = h.OpenEHRService.GetCompositionTagsRawJSON(ctx, ehrID, uidBasedID)
+	}
+	if err != nil {
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Composition Tags", "error", err)
+
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusInternalServerError,
+			Message: "Failed to get Composition Tags",
+			Status:  "error",
+		})
+	}
+
+	auditCtx.Success()
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(tagsJSON)
 }
 
 func (h *Handler) UpdateCompositionTags(c *fiber.Ctx) error {
-	return c.Status(fiber.StatusNotImplemented).SendString("Update Composition Tags not implemented yet")
+	ctx := c.Context()
+	auditCtx := audit.From(c)
+
+	err := Accepts(c, auditCtx, "application/json")
+	if err != nil {
+		return err
+	}
+
+	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["ehr_id"] = ehrID
+
+	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+	if err != nil {
+		return err
+	}
+	auditCtx.Event.Details["uid_based_id"] = uidBasedID
+
+	var tags []rm.ITEM_TAG
+	err = c.BodyParser(&tags)
+	if err != nil {
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusBadRequest,
+			Message: "Failed to parse request body",
+			Status:  "bad_request",
+		})
+	}
+
+	if uuid.Validate(uidBasedID) == nil {
+		versionedCompositionID := uuid.MustParse(uidBasedID)
+		tags, err = h.OpenEHRService.ReplaceVersionedCompositionTags(ctx, ehrID, versionedCompositionID, tags)
+	} else {
+		tags, err = h.OpenEHRService.ReplaceCompositionTags(ctx, ehrID, uidBasedID, tags)
+	}
+	if err != nil {
+		if err, ok := err.(util.ValidateError); ok {
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
+				Code:    fiber.StatusBadRequest,
+				Message: "Validation error in request body",
+				Status:  "bad_request",
+				Details: err,
+			})
+		}
+
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to update Composition Tags", "error", err)
+
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusInternalServerError,
+			Message: "Failed to update Composition Tags",
+			Status:  "error",
+		})
+	}
+
+	auditCtx.Success()
+	return c.Status(fiber.StatusOK).JSON(tags)
 }
 
 func (h *Handler) DeleteCompositionTagByKey(c *fiber.Ctx) error {
@@ -1991,40 +2108,12 @@ func (h *Handler) GetAgent(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["uid_based_id"] = uidBasedID
 
-	if strings.Count(uidBasedID, "::") == 2 {
-		agent, err := h.OpenEHRService.GetAgentAtVersion(ctx, uidBasedID)
-		if err != nil {
-			if err == ErrAgentNotFound {
-				return SendErrorResponse(c, auditCtx, ErrorResponse{
-					Code:    fiber.StatusNotFound,
-					Message: "Agent not found for the given agent ID",
-					Status:  "not_found",
-				})
-			}
-
-			h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
-
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusInternalServerError,
-				Message: "Failed to get Agent by ID",
-				Status:  "error",
-			})
-		}
-
-		auditCtx.Success()
-		return c.Status(fiber.StatusOK).JSON(agent)
+	var agentJSON []byte
+	if uuid.Validate(uidBasedID) == nil {
+		agentJSON, err = h.OpenEHRService.GetAgentByVersionedPartyIDRawJSON(ctx, uuid.MustParse(uidBasedID))
+	} else {
+		agentJSON, err = h.OpenEHRService.GetAgentAtVersionRawJSON(ctx, uidBasedID)
 	}
-
-	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
-	if err != nil {
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid uid_based_id format",
-			Status:  "bad_request",
-		})
-	}
-
-	agent, err := h.OpenEHRService.GetCurrentAgentVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrAgentNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -2044,7 +2133,9 @@ func (h *Handler) GetAgent(c *fiber.Ctx) error {
 	}
 
 	auditCtx.Success()
-	return c.Status(fiber.StatusOK).JSON(agent)
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(agentJSON)
 }
 
 func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
@@ -2086,7 +2177,7 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 		return err
 	}
 
-	currentAgent, err := h.OpenEHRService.GetCurrentAgentVersionByVersionedPartyID(ctx, versionedPartyID)
+	currentAgentID, err := h.OpenEHRService.GetAgentID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrAgentNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -2104,7 +2195,7 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentAgent.UID.V.OBJECT_VERSION_ID().Value != ifMatch {
+	if currentAgentID.Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Agent has been modified since the provided version",
@@ -2112,7 +2203,7 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 		})
 	}
 
-	updatedAgent, err := h.OpenEHRService.UpdateAgent(ctx, currentAgent, agent)
+	updatedAgent, err := h.OpenEHRService.UpdateAgent(ctx, currentAgentID, agent)
 	if err != nil {
 		if err == ErrAgentNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -2157,7 +2248,7 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeAgentUpdated, map[string]any{
-		"prev_agent_uid": currentAgent.UID.V.OBJECT_VERSION_ID().Value,
+		"prev_agent_uid": currentAgentID.Value,
 		"curr_agent_uid": updatedAgentID,
 	})
 
@@ -2205,7 +2296,7 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 		})
 	}
 
-	currentAgent, err := h.OpenEHRService.GetCurrentAgentVersionByVersionedPartyID(ctx, versionedPartyID)
+	currentAgentID, err := h.OpenEHRService.GetAgentID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrAgentNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -2223,7 +2314,7 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentAgent.UID.V.OBJECT_VERSION_ID().Value != uidBasedID {
+	if currentAgentID.Value != uidBasedID {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Agent has been modified since the provided version",
@@ -2231,7 +2322,7 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.OpenEHRService.DeleteAgent(ctx, uidBasedID); err != nil {
+	if err := h.OpenEHRService.DeleteAgent(ctx, uuid.MustParse(currentAgentID.UID())); err != nil {
 		if err == ErrAgentNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,
@@ -2334,40 +2425,12 @@ func (h *Handler) GetGroup(c *fiber.Ctx) error {
 	}
 	auditCtx.Event.Details["uid_based_id"] = uidBasedID
 
-	if strings.Count(uidBasedID, "::") == 2 {
-		group, err := h.OpenEHRService.GetGroupAtVersion(ctx, uidBasedID)
-		if err != nil {
-			if err == ErrGroupNotFound {
-				return SendErrorResponse(c, auditCtx, ErrorResponse{
-					Code:    fiber.StatusNotFound,
-					Message: "Group not found for the given group ID",
-					Status:  "not_found",
-				})
-			}
-
-			h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Group by ID", "error", err)
-
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusInternalServerError,
-				Message: "Failed to get Group by ID",
-				Status:  "error",
-			})
-		}
-
-		auditCtx.Success()
-		return c.Status(fiber.StatusOK).JSON(group)
+	var groupJSON []byte
+	if uuid.Validate(uidBasedID) == nil {
+		groupJSON, err = h.OpenEHRService.GetGroupByVersionedPartyIDRawJSON(ctx, uuid.MustParse(uidBasedID))
+	} else {
+		groupJSON, err = h.OpenEHRService.GetGroupRawJSON(ctx, uidBasedID)
 	}
-
-	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
-	if err != nil {
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid uid_based_id format",
-			Status:  "bad_request",
-		})
-	}
-
-	group, err := h.OpenEHRService.GetCurrentGroupVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrGroupNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -2387,7 +2450,9 @@ func (h *Handler) GetGroup(c *fiber.Ctx) error {
 	}
 
 	auditCtx.Success()
-	return c.Status(fiber.StatusOK).JSON(group)
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(groupJSON)
 }
 
 func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
@@ -2428,7 +2493,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 		return err
 	}
 
-	currentGroup, err := h.OpenEHRService.GetCurrentGroupVersionByVersionedPartyID(ctx, versionedPartyID)
+	currentGroupID, err := h.OpenEHRService.GetGroupID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrGroupNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -2446,7 +2511,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentGroup.UID.V.OBJECT_VERSION_ID().Value != ifMatch {
+	if currentGroupID.Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Group has been modified since the provided version",
@@ -2454,7 +2519,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 		})
 	}
 
-	updatedGroup, err := h.OpenEHRService.UpdateGroup(ctx, currentGroup, group)
+	updatedGroup, err := h.OpenEHRService.UpdateGroup(ctx, currentGroupID, group)
 	if err != nil {
 		if err == ErrGroupNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -2499,7 +2564,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeGroupUpdated, map[string]any{
-		"prev_group_uid": currentGroup.UID.V.OBJECT_VERSION_ID().Value,
+		"prev_group_uid": currentGroupID.Value,
 		"curr_group_uid": updatedGroupID,
 	})
 
@@ -2546,7 +2611,7 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 		})
 	}
 
-	currentGroup, err := h.OpenEHRService.GetCurrentGroupVersionByVersionedPartyID(ctx, versionedPartyID)
+	currentGroupID, err := h.OpenEHRService.GetGroupID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrGroupNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -2564,7 +2629,7 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentGroup.UID.V.OBJECT_VERSION_ID().Value != versionUID {
+	if currentGroupID.Value != versionUID {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Group has been modified since the provided version",
@@ -2679,40 +2744,12 @@ func (h *Handler) GetPerson(c *fiber.Ctx) error {
 		return err
 	}
 
-	if strings.Count(uidBasedID, "::") == 2 {
-		person, err := h.OpenEHRService.GetPersonAtVersion(ctx, uidBasedID)
-		if err != nil {
-			if err == ErrPersonNotFound {
-				return SendErrorResponse(c, auditCtx, ErrorResponse{
-					Code:    fiber.StatusNotFound,
-					Message: "Person not found for the given person ID",
-					Status:  "not_found",
-				})
-			}
-
-			h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
-
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusInternalServerError,
-				Message: "Failed to get Person",
-				Status:  "error",
-			})
-		}
-
-		auditCtx.Success()
-		return c.Status(fiber.StatusOK).JSON(person)
+	var personJSON []byte
+	if uuid.Validate(uidBasedID) == nil {
+		personJSON, err = h.OpenEHRService.GetPersonByVersionedPartyIDRawJSON(ctx, uuid.MustParse(uidBasedID))
+	} else {
+		personJSON, err = h.OpenEHRService.GetPersonByIDRawJSON(ctx, uidBasedID)
 	}
-
-	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
-	if err != nil {
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid uid_based_id format",
-			Status:  "bad_request",
-		})
-	}
-
-	person, err := h.OpenEHRService.GetCurrentPersonVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrPersonNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -2722,17 +2759,19 @@ func (h *Handler) GetPerson(c *fiber.Ctx) error {
 			})
 		}
 
-		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Agent by ID", "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Person by ID", "error", err)
 
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
-			Message: "Failed to get Person",
+			Message: "Failed to get Person by ID",
 			Status:  "error",
 		})
 	}
 
 	auditCtx.Success()
-	return c.Status(fiber.StatusOK).JSON(person)
+
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(personJSON)
 }
 
 func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
@@ -2773,7 +2812,7 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 		return err
 	}
 
-	currentPerson, err := h.OpenEHRService.GetCurrentPersonVersionByVersionedPartyID(ctx, versionedPartyID)
+	currentPersonID, err := h.OpenEHRService.GetCurrentPersonID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrPersonNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -2791,7 +2830,7 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentPerson.UID.V.OBJECT_VERSION_ID().Value != ifMatch {
+	if currentPersonID.Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Person has been modified since the provided version",
@@ -2799,7 +2838,7 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 		})
 	}
 
-	updatedPerson, err := h.OpenEHRService.UpdatePerson(ctx, currentPerson, person)
+	updatedPerson, err := h.OpenEHRService.UpdatePerson(ctx, currentPersonID, person)
 	if err != nil {
 		if err == ErrPersonNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -2844,7 +2883,7 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypePersonUpdated, map[string]any{
-		"prev_person_uid": currentPerson.UID.V.OBJECT_VERSION_ID().Value,
+		"prev_person_uid": currentPersonID.Value,
 		"curr_person_uid": updatedPersonID,
 	})
 
@@ -2890,7 +2929,7 @@ func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 			Status:  "bad_request",
 		})
 	}
-	currentPerson, err := h.OpenEHRService.GetCurrentPersonVersionByVersionedPartyID(ctx, versionedPartyID)
+	currentPersonID, err := h.OpenEHRService.GetCurrentPersonID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrPersonNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -2908,7 +2947,7 @@ func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentPerson.UID.V.OBJECT_VERSION_ID().Value != versionID {
+	if currentPersonID.Value != versionID {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Person has been modified since the provided version",
@@ -3023,40 +3062,12 @@ func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 		return err
 	}
 
-	if strings.Count(uidBasedID, "::") == 2 {
-		organisation, err := h.OpenEHRService.GetOrganisationAtVersion(ctx, uidBasedID)
-		if err != nil {
-			if err == ErrOrganisationNotFound {
-				return SendErrorResponse(c, auditCtx, ErrorResponse{
-					Code:    fiber.StatusNotFound,
-					Message: "Organisation not found for the given organisation ID",
-					Status:  "not_found",
-				})
-			}
-
-			h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Organisation by ID", "error", err)
-
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusInternalServerError,
-				Message: "Failed to get Organisation by ID",
-				Status:  "error",
-			})
-		}
-
-		auditCtx.Success()
-		return c.Status(fiber.StatusOK).JSON(organisation)
+	var organisationJSON []byte
+	if uuid.Validate(uidBasedID) == nil {
+		organisationJSON, err = h.OpenEHRService.GetOrganisationByVersionedPartyIDRawJSON(ctx, uuid.MustParse(uidBasedID))
+	} else {
+		organisationJSON, err = h.OpenEHRService.GetOrganisationByIDRawJSON(ctx, uidBasedID)
 	}
-
-	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
-	if err != nil {
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid uid_based_id format",
-			Status:  "bad_request",
-		})
-	}
-
-	organisation, err := h.OpenEHRService.GetCurrentOrganisationVersionByVersionedPartyID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrOrganisationNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -3075,9 +3086,8 @@ func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 		})
 	}
 
-	auditCtx.Success()
-
-	return c.Status(fiber.StatusOK).JSON(organisation)
+	c.Set("Content-Type", "application/json")
+	return c.Status(fiber.StatusOK).Send(organisationJSON)
 }
 
 func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
@@ -3118,7 +3128,7 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 		return err
 	}
 
-	currentOrganisation, err := h.OpenEHRService.GetCurrentOrganisationVersionByVersionedPartyID(ctx, versionedPartyID)
+	currentOrganisationID, err := h.OpenEHRService.GetCurrentOrganisationID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrOrganisationNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -3136,7 +3146,7 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentOrganisation.UID.V.OBJECT_VERSION_ID().Value != ifMatch {
+	if currentOrganisationID.Value != ifMatch {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Organisation has been modified since the provided version",
@@ -3144,7 +3154,7 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 		})
 	}
 
-	updatedOrganisation, err := h.OpenEHRService.UpdateOrganisation(ctx, currentOrganisation, organisation)
+	updatedOrganisation, err := h.OpenEHRService.UpdateOrganisation(ctx, currentOrganisationID, organisation)
 	if err != nil {
 		if err == ErrOrganisationNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -3189,7 +3199,7 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 	auditCtx.Success()
 
 	h.WebhookSink.Enqueue(webhook.EventTypeOrganisationUpdated, map[string]any{
-		"prev_organisation_uid": currentOrganisation.UID.V.OBJECT_VERSION_ID().Value,
+		"prev_organisation_uid": currentOrganisationID.Value,
 		"curr_organisation_uid": updatedOrganisationID,
 	})
 
@@ -3236,7 +3246,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 		})
 	}
 
-	currentOrganisation, err := h.OpenEHRService.GetCurrentOrganisationVersionByVersionedPartyID(ctx, versionedPartyID)
+	currentOrganisationID, err := h.OpenEHRService.GetCurrentOrganisationID(ctx, versionedPartyID)
 	if err != nil {
 		if err == ErrOrganisationNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -3254,7 +3264,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 			Status:  "error",
 		})
 	}
-	if currentOrganisation.UID.V.OBJECT_VERSION_ID().Value != uidBasedID {
+	if currentOrganisationID.Value != uidBasedID {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusPreconditionFailed,
 			Message: "Organisation has been modified since the provided version",
@@ -3290,498 +3300,498 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 	return nil
 }
 
-func (h *Handler) CreateRole(c *fiber.Ctx) error {
-	ctx := c.Context()
-	auditCtx := audit.From(c)
-
-	err := Accepts(c, auditCtx, "application/json")
-	if err != nil {
-		return err
-	}
-
-	returnType, err := ReturnTypeFromHeader(c, auditCtx)
-	if err != nil {
-		return err
-	}
-
-	var role rm.ROLE
-	if err := ParseBody(c, auditCtx, &role); err != nil {
-		return err
-	}
-
-	createdRole, err := h.OpenEHRService.CreateRole(ctx, role)
-	if err != nil {
-		if err == ErrRoleAlreadyExists {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusConflict,
-				Message: "Role with the given UID already exists",
-				Status:  "conflict",
-			})
-		}
-		if err, ok := err.(util.ValidateError); ok {
-			return c.Status(fiber.StatusBadRequest).JSON(err)
-		}
-
-		h.Telemetry.Logger.ErrorContext(ctx, "Failed to create Role", "error", err)
-
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusInternalServerError,
-			Message: "Failed to create Role",
-			Status:  "error",
-		})
-	}
-	createdRoleID := createdRole.UID.V.OBJECT_VERSION_ID().Value
-
-	auditCtx.Success()
-
-	h.WebhookSink.Enqueue(webhook.EventTypeRoleCreated, map[string]any{
-		"role_uid": createdRoleID,
-	})
-
-	c.Set("ETag", "\""+createdRoleID+"\"")
-	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/role/"+createdRoleID)
-
-	switch returnType {
-	case ReturnTypeMinimal:
-		c.Status(fiber.StatusCreated)
-		return nil
-	case ReturnTypeRepresentation:
-		return c.Status(fiber.StatusCreated).JSON(role)
-	case ReturnTypeIdentifier:
-		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + createdRoleID + `"}`)
-	default:
-		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.Status(fiber.StatusCreated).JSON(role)
-	}
-}
-
-func (h *Handler) GetRole(c *fiber.Ctx) error {
-	ctx := c.Context()
-	auditCtx := audit.From(c)
-
-	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
-	if err != nil {
-		return err
-	}
-
-	if strings.Count(uidBasedID, "::") == 2 {
-		role, err := h.OpenEHRService.GetRoleAtVersion(ctx, uidBasedID)
-		if err != nil {
-			if err == ErrRoleNotFound {
-				return SendErrorResponse(c, auditCtx, ErrorResponse{
-					Code:    fiber.StatusNotFound,
-					Message: "Role not found for the given role ID",
-					Status:  "not_found",
-				})
-			}
-
-			h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Role by ID", "error", err)
-
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusInternalServerError,
-				Message: "Failed to get Role by ID",
-				Status:  "error",
-			})
-		}
-
-		auditCtx.Success()
-		return c.Status(fiber.StatusOK).JSON(role)
-	}
-
-	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
-	if err != nil {
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid uid_based_id format",
-			Status:  "bad_request",
-		})
-	}
-
-	role, err := h.OpenEHRService.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
-	if err != nil {
-		if err == ErrRoleNotFound {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusNotFound,
-				Message: "Role not found for the given role ID",
-				Status:  "not_found",
-			})
-		}
-
-		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Role by ID", "error", err)
-
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusInternalServerError,
-			Message: "Failed to get Role by ID",
-			Status:  "error",
-		})
-	}
-
-	auditCtx.Success()
-	return c.Status(fiber.StatusOK).JSON(role)
-}
-
-func (h *Handler) UpdateRole(c *fiber.Ctx) error {
-	ctx := c.Context()
-	auditCtx := audit.From(c)
-
-	err := Accepts(c, auditCtx, "application/json")
-	if err != nil {
-		return err
-	}
-
-	versionID, err := StringFromPath(c, auditCtx, "uid_based_id")
-	if err != nil {
-		return err
-	}
-
-	ifMatch, err := StringFromHeader(c, auditCtx, "If-Match")
-	if err != nil {
-		return err
-	}
-
-	returnType, err := ReturnTypeFromHeader(c, auditCtx)
-	if err != nil {
-		return err
-	}
-
-	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
-	if err != nil {
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid uid_based_id format",
-			Status:  "bad_request",
-		})
-	}
-
-	var role rm.ROLE
-	if err := ParseBody(c, auditCtx, &role); err != nil {
-		return err
-	}
-
-	currentRole, err := h.OpenEHRService.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
-	if err != nil {
-		if err == ErrRoleNotFound {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusNotFound,
-				Message: "Role not found for the given role ID",
-				Status:  "not_found",
-			})
-		}
-		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get current Role by ID", "error", err)
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusInternalServerError,
-			Message: "Failed to get current Role by ID",
-			Status:  "error",
-		})
-	}
-
-	if currentRole.UID.V.OBJECT_VERSION_ID().Value != ifMatch {
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusPreconditionFailed,
-			Message: "Role has been modified since the provided version",
-			Status:  "precondition_failed",
-		})
-	}
-
-	updatedRole, err := h.OpenEHRService.UpdateRole(ctx, versionedPartyID, role)
-	if err != nil {
-		if err == ErrRoleNotFound {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusNotFound,
-				Message: "Role not found for the given role ID",
-				Status:  "not_found",
-			})
-		}
-		if err == ErrRoleVersionLowerOrEqualToCurrent {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusConflict,
-				Message: "Role version is lower than or equal to the current version",
-				Status:  "conflict",
-			})
-		}
-		if err == ErrInvalidRoleUIDMismatch {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusBadRequest,
-				Message: "Role UID HIER_OBJECT_ID in request body does not match current Role UID",
-				Status:  "bad_request",
-			})
-		}
-		if validationErrs, ok := err.(util.ValidateError); ok {
-			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
-		}
-
-		h.Telemetry.Logger.ErrorContext(ctx, "Failed to update Role", "error", err)
-
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusInternalServerError,
-			Message: "Failed to update Role",
-			Status:  "error",
-		})
-	}
-	updatedRoleID := updatedRole.UID.V.OBJECT_VERSION_ID().Value
-
-	auditCtx.Success()
-
-	h.WebhookSink.Enqueue(webhook.EventTypeRoleUpdated, map[string]any{
-		"prev_role_uid": currentRole.UID.V.OBJECT_VERSION_ID().Value,
-		"curr_role_uid": updatedRoleID,
-	})
-
-	c.Set("ETag", "\""+updatedRoleID+"\"")
-	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/role/"+updatedRoleID)
-
-	switch returnType {
-	case ReturnTypeMinimal:
-		c.Status(fiber.StatusNoContent)
-		return nil
-	case ReturnTypeRepresentation:
-		return c.Status(fiber.StatusOK).JSON(updatedRole)
-	case ReturnTypeIdentifier:
-		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + updatedRoleID + `"}`)
-	default:
-		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
-		return c.Status(fiber.StatusOK).JSON(updatedRole)
-	}
-}
-
-func (h *Handler) DeleteRole(c *fiber.Ctx) error {
-	ctx := c.Context()
-
-	auditCtx := audit.From(c)
-
-	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
-	if err != nil {
-		return err
-	}
-
-	if !strings.Contains(uidBasedID, "::") {
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Cannot delete Role by versioned object ID. Please provide the object version ID.",
-			Status:  "bad_request",
-		})
-	}
-
-	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
-	if err != nil {
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusBadRequest,
-			Message: "Invalid uid_based_id format",
-			Status:  "bad_request",
-		})
-	}
-
-	currentRole, err := h.OpenEHRService.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
-	if err != nil {
-		if err == ErrRoleNotFound {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusNotFound,
-				Message: "Role not found for the given role ID",
-				Status:  "not_found",
-			})
-		}
-
-		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Role by ID before deletion", "error", err)
-
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusInternalServerError,
-			Message: "Failed to get Role by ID before deletion",
-			Status:  "error",
-		})
-	}
-	if currentRole.UID.V.OBJECT_VERSION_ID().Value != uidBasedID {
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusPreconditionFailed,
-			Message: "Role has been modified since the provided version",
-			Status:  "precondition_failed",
-		})
-	}
-
-	if err := h.OpenEHRService.DeleteRole(ctx, versionedPartyID); err != nil {
-		if err == ErrRoleNotFound {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusNotFound,
-				Message: "Role not found for the given role ID",
-				Status:  "not_found",
-			})
-		}
-
-		h.Telemetry.Logger.ErrorContext(ctx, "Failed to delete Role by ID", "error", err)
-
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusInternalServerError,
-			Message: "Failed to delete Role by ID",
-			Status:  "error",
-		})
-	}
-
-	auditCtx.Success()
-
-	h.WebhookSink.Enqueue(webhook.EventTypeRoleDeleted, map[string]any{
-		"versioned_party_id": versionedPartyID,
-	})
-
-	c.Status(fiber.StatusNoContent)
-	return nil
-}
-
-func (h *Handler) GetVersionedParty(c *fiber.Ctx) error {
-	ctx := c.Context()
-	auditCtx := audit.From(c)
-
-	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
-	if err != nil {
-		return err
-	}
-
-	party, err := h.OpenEHRService.GetVersionedParty(ctx, versionedObjectID)
-	if err != nil {
-		if err == ErrVersionedPartyNotFound {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusNotFound,
-				Message: "Versioned Party not found for the given ID",
-				Status:  "not_found",
-			})
-		}
-
-		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Party by ID", "error", err)
-
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusInternalServerError,
-			Message: "Failed to get Versioned Party by ID",
-			Status:  "error",
-		})
-	}
-
-	auditCtx.Success()
-	return c.Status(fiber.StatusOK).JSON(party)
-}
-
-func (h *Handler) GetVersionedPartyRevisionHistory(c *fiber.Ctx) error {
-	ctx := c.Context()
-	auditCtx := audit.From(c)
-
-	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
-	if err != nil {
-		return err
-	}
-
-	revisionHistory, err := h.OpenEHRService.GetVersionedPartyRevisionHistory(ctx, versionedObjectID)
-	if err != nil {
-		if err == ErrRevisionHistoryNotFound {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusNotFound,
-				Message: "Versioned Party not found for the given ID",
-				Status:  "not_found",
-			})
-		}
-
-		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Party Revision History by ID", "error", err)
-
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusInternalServerError,
-			Message: "Failed to get Versioned Party Revision History by ID",
-			Status:  "error",
-		})
-	}
-
-	auditCtx.Success()
-	return c.Status(fiber.StatusOK).JSON(revisionHistory)
-}
-
-func (h *Handler) GetVersionedPartyVersionAtTime(c *fiber.Ctx) error {
-	ctx := c.Context()
-	auditCtx := audit.From(c)
-
-	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
-	if err != nil {
-		return err
-	}
-
-	var filterAtTime time.Time
-	if c.Query("version_at_time") != "" {
-		versionAtTime, err := TimeFromQuery(c, auditCtx, "version_at_time")
-		if err != nil {
-			return err
-		}
-		filterAtTime = versionAtTime
-	}
-
-	partyVersionJSON, err := h.OpenEHRService.GetVersionedPartyVersionJSON(ctx, versionedObjectID, filterAtTime, "")
-	if err != nil {
-		if err == ErrVersionedPartyNotFound {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusNotFound,
-				Message: "Versioned Party not found for the given ID",
-				Status:  "not_found",
-			})
-		}
-		if err == ErrVersionedPartyVersionNotFound {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusNotFound,
-				Message: "Versioned Party version not found for the given time",
-				Status:  "not_found",
-			})
-		}
-
-		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Party Version at Time by ID", "error", err)
-
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusInternalServerError,
-			Message: "Failed to get Versioned Party Version at Time by ID",
-			Status:  "error",
-		})
-	}
-
-	auditCtx.Success()
-
-	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(partyVersionJSON)
-}
-
-func (h *Handler) GetVersionedPartyVersion(c *fiber.Ctx) error {
-	ctx := c.Context()
-	auditCtx := audit.From(c)
-
-	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
-	if err != nil {
-		return err
-	}
-
-	versionID, err := StringFromPath(c, auditCtx, "version_id")
-	if err != nil {
-		return err
-	}
-
-	partyVersionJSON, err := h.OpenEHRService.GetVersionedPartyVersionJSON(ctx, versionedObjectID, time.Time{}, versionID)
-	if err != nil {
-		if err == ErrVersionedPartyNotFound {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusNotFound,
-				Message: "Versioned Party not found for the given ID",
-				Status:  "not_found",
-			})
-		}
-		if err == ErrVersionedPartyVersionNotFound {
-			return SendErrorResponse(c, auditCtx, ErrorResponse{
-				Code:    fiber.StatusNotFound,
-				Message: "Versioned Party version not found for the given version ID",
-				Status:  "not_found",
-			})
-		}
-		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Party Version by ID", "error", err)
-		return SendErrorResponse(c, auditCtx, ErrorResponse{
-			Code:    fiber.StatusInternalServerError,
-			Message: "Failed to get Versioned Party Version by ID",
-			Status:  "error",
-		})
-	}
-
-	auditCtx.Success()
-
-	c.Set("Content-Type", "application/json")
-	return c.Status(fiber.StatusOK).Send(partyVersionJSON)
-}
+// func (h *Handler) CreateRole(c *fiber.Ctx) error {
+// 	ctx := c.Context()
+// 	auditCtx := audit.From(c)
+
+// 	err := Accepts(c, auditCtx, "application/json")
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	var role rm.ROLE
+// 	if err := ParseBody(c, auditCtx, &role); err != nil {
+// 		return err
+// 	}
+
+// 	createdRole, err := h.OpenEHRService.CreateRole(ctx, role)
+// 	if err != nil {
+// 		if err == ErrRoleAlreadyExists {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusConflict,
+// 				Message: "Role with the given UID already exists",
+// 				Status:  "conflict",
+// 			})
+// 		}
+// 		if err, ok := err.(util.ValidateError); ok {
+// 			return c.Status(fiber.StatusBadRequest).JSON(err)
+// 		}
+
+// 		h.Telemetry.Logger.ErrorContext(ctx, "Failed to create Role", "error", err)
+
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusInternalServerError,
+// 			Message: "Failed to create Role",
+// 			Status:  "error",
+// 		})
+// 	}
+// 	createdRoleID := createdRole.UID.V.OBJECT_VERSION_ID().Value
+
+// 	auditCtx.Success()
+
+// 	h.WebhookSink.Enqueue(webhook.EventTypeRoleCreated, map[string]any{
+// 		"role_uid": createdRoleID,
+// 	})
+
+// 	c.Set("ETag", "\""+createdRoleID+"\"")
+// 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/role/"+createdRoleID)
+
+// 	switch returnType {
+// 	case ReturnTypeMinimal:
+// 		c.Status(fiber.StatusCreated)
+// 		return nil
+// 	case ReturnTypeRepresentation:
+// 		return c.Status(fiber.StatusCreated).JSON(role)
+// 	case ReturnTypeIdentifier:
+// 		return c.Status(fiber.StatusCreated).JSON(`{"uid":"` + createdRoleID + `"}`)
+// 	default:
+// 		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+// 		return c.Status(fiber.StatusCreated).JSON(role)
+// 	}
+// }
+
+// func (h *Handler) GetRole(c *fiber.Ctx) error {
+// 	ctx := c.Context()
+// 	auditCtx := audit.From(c)
+
+// 	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	if strings.Count(uidBasedID, "::") == 2 {
+// 		role, err := h.OpenEHRService.GetRoleAtVersion(ctx, uidBasedID)
+// 		if err != nil {
+// 			if err == ErrRoleNotFound {
+// 				return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 					Code:    fiber.StatusNotFound,
+// 					Message: "Role not found for the given role ID",
+// 					Status:  "not_found",
+// 				})
+// 			}
+
+// 			h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Role by ID", "error", err)
+
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusInternalServerError,
+// 				Message: "Failed to get Role by ID",
+// 				Status:  "error",
+// 			})
+// 		}
+
+// 		auditCtx.Success()
+// 		return c.Status(fiber.StatusOK).JSON(role)
+// 	}
+
+// 	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+// 	if err != nil {
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusBadRequest,
+// 			Message: "Invalid uid_based_id format",
+// 			Status:  "bad_request",
+// 		})
+// 	}
+
+// 	role, err := h.OpenEHRService.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
+// 	if err != nil {
+// 		if err == ErrRoleNotFound {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusNotFound,
+// 				Message: "Role not found for the given role ID",
+// 				Status:  "not_found",
+// 			})
+// 		}
+
+// 		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Role by ID", "error", err)
+
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusInternalServerError,
+// 			Message: "Failed to get Role by ID",
+// 			Status:  "error",
+// 		})
+// 	}
+
+// 	auditCtx.Success()
+// 	return c.Status(fiber.StatusOK).JSON(role)
+// }
+
+// func (h *Handler) UpdateRole(c *fiber.Ctx) error {
+// 	ctx := c.Context()
+// 	auditCtx := audit.From(c)
+
+// 	err := Accepts(c, auditCtx, "application/json")
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	versionID, err := StringFromPath(c, auditCtx, "uid_based_id")
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	ifMatch, err := StringFromHeader(c, auditCtx, "If-Match")
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	returnType, err := ReturnTypeFromHeader(c, auditCtx)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	versionedPartyID, err := uuid.Parse(strings.Split(versionID, "::")[0])
+// 	if err != nil {
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusBadRequest,
+// 			Message: "Invalid uid_based_id format",
+// 			Status:  "bad_request",
+// 		})
+// 	}
+
+// 	var role rm.ROLE
+// 	if err := ParseBody(c, auditCtx, &role); err != nil {
+// 		return err
+// 	}
+
+// 	currentRole, err := h.OpenEHRService.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
+// 	if err != nil {
+// 		if err == ErrRoleNotFound {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusNotFound,
+// 				Message: "Role not found for the given role ID",
+// 				Status:  "not_found",
+// 			})
+// 		}
+// 		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get current Role by ID", "error", err)
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusInternalServerError,
+// 			Message: "Failed to get current Role by ID",
+// 			Status:  "error",
+// 		})
+// 	}
+
+// 	if currentRole.UID.V.OBJECT_VERSION_ID().Value != ifMatch {
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusPreconditionFailed,
+// 			Message: "Role has been modified since the provided version",
+// 			Status:  "precondition_failed",
+// 		})
+// 	}
+
+// 	updatedRole, err := h.OpenEHRService.UpdateRole(ctx, versionedPartyID, role)
+// 	if err != nil {
+// 		if err == ErrRoleNotFound {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusNotFound,
+// 				Message: "Role not found for the given role ID",
+// 				Status:  "not_found",
+// 			})
+// 		}
+// 		if err == ErrRoleVersionLowerOrEqualToCurrent {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusConflict,
+// 				Message: "Role version is lower than or equal to the current version",
+// 				Status:  "conflict",
+// 			})
+// 		}
+// 		if err == ErrInvalidRoleUIDMismatch {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusBadRequest,
+// 				Message: "Role UID HIER_OBJECT_ID in request body does not match current Role UID",
+// 				Status:  "bad_request",
+// 			})
+// 		}
+// 		if validationErrs, ok := err.(util.ValidateError); ok {
+// 			return c.Status(fiber.StatusBadRequest).JSON(validationErrs)
+// 		}
+
+// 		h.Telemetry.Logger.ErrorContext(ctx, "Failed to update Role", "error", err)
+
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusInternalServerError,
+// 			Message: "Failed to update Role",
+// 			Status:  "error",
+// 		})
+// 	}
+// 	updatedRoleID := updatedRole.UID.V.OBJECT_VERSION_ID().Value
+
+// 	auditCtx.Success()
+
+// 	h.WebhookSink.Enqueue(webhook.EventTypeRoleUpdated, map[string]any{
+// 		"prev_role_uid": currentRole.UID.V.OBJECT_VERSION_ID().Value,
+// 		"curr_role_uid": updatedRoleID,
+// 	})
+
+// 	c.Set("ETag", "\""+updatedRoleID+"\"")
+// 	c.Set("Location", c.Protocol()+"://"+c.Hostname()+"/openehr/v1/role/"+updatedRoleID)
+
+// 	switch returnType {
+// 	case ReturnTypeMinimal:
+// 		c.Status(fiber.StatusNoContent)
+// 		return nil
+// 	case ReturnTypeRepresentation:
+// 		return c.Status(fiber.StatusOK).JSON(updatedRole)
+// 	case ReturnTypeIdentifier:
+// 		return c.Status(fiber.StatusOK).JSON(`{"uid":"` + updatedRoleID + `"}`)
+// 	default:
+// 		h.Telemetry.Logger.WarnContext(ctx, "Unhandled Prefer header value", "value", returnType)
+// 		return c.Status(fiber.StatusOK).JSON(updatedRole)
+// 	}
+// }
+
+// func (h *Handler) DeleteRole(c *fiber.Ctx) error {
+// 	ctx := c.Context()
+
+// 	auditCtx := audit.From(c)
+
+// 	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	if !strings.Contains(uidBasedID, "::") {
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusBadRequest,
+// 			Message: "Cannot delete Role by versioned object ID. Please provide the object version ID.",
+// 			Status:  "bad_request",
+// 		})
+// 	}
+
+// 	versionedPartyID, err := uuid.Parse(strings.Split(uidBasedID, "::")[0])
+// 	if err != nil {
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusBadRequest,
+// 			Message: "Invalid uid_based_id format",
+// 			Status:  "bad_request",
+// 		})
+// 	}
+
+// 	currentRole, err := h.OpenEHRService.GetCurrentRoleVersionByVersionedPartyID(ctx, versionedPartyID)
+// 	if err != nil {
+// 		if err == ErrRoleNotFound {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusNotFound,
+// 				Message: "Role not found for the given role ID",
+// 				Status:  "not_found",
+// 			})
+// 		}
+
+// 		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Role by ID before deletion", "error", err)
+
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusInternalServerError,
+// 			Message: "Failed to get Role by ID before deletion",
+// 			Status:  "error",
+// 		})
+// 	}
+// 	if currentRole.UID.V.OBJECT_VERSION_ID().Value != uidBasedID {
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusPreconditionFailed,
+// 			Message: "Role has been modified since the provided version",
+// 			Status:  "precondition_failed",
+// 		})
+// 	}
+
+// 	if err := h.OpenEHRService.DeleteRole(ctx, versionedPartyID); err != nil {
+// 		if err == ErrRoleNotFound {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusNotFound,
+// 				Message: "Role not found for the given role ID",
+// 				Status:  "not_found",
+// 			})
+// 		}
+
+// 		h.Telemetry.Logger.ErrorContext(ctx, "Failed to delete Role by ID", "error", err)
+
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusInternalServerError,
+// 			Message: "Failed to delete Role by ID",
+// 			Status:  "error",
+// 		})
+// 	}
+
+// 	auditCtx.Success()
+
+// 	h.WebhookSink.Enqueue(webhook.EventTypeRoleDeleted, map[string]any{
+// 		"versioned_party_id": versionedPartyID,
+// 	})
+
+// 	c.Status(fiber.StatusNoContent)
+// 	return nil
+// }
+
+// func (h *Handler) GetVersionedParty(c *fiber.Ctx) error {
+// 	ctx := c.Context()
+// 	auditCtx := audit.From(c)
+
+// 	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	party, err := h.OpenEHRService.GetVersionedParty(ctx, versionedObjectID)
+// 	if err != nil {
+// 		if err == ErrVersionedPartyNotFound {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusNotFound,
+// 				Message: "Versioned Party not found for the given ID",
+// 				Status:  "not_found",
+// 			})
+// 		}
+
+// 		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Party by ID", "error", err)
+
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusInternalServerError,
+// 			Message: "Failed to get Versioned Party by ID",
+// 			Status:  "error",
+// 		})
+// 	}
+
+// 	auditCtx.Success()
+// 	return c.Status(fiber.StatusOK).JSON(party)
+// }
+
+// func (h *Handler) GetVersionedPartyRevisionHistory(c *fiber.Ctx) error {
+// 	ctx := c.Context()
+// 	auditCtx := audit.From(c)
+
+// 	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	revisionHistory, err := h.OpenEHRService.GetVersionedPartyRevisionHistory(ctx, versionedObjectID)
+// 	if err != nil {
+// 		if err == ErrRevisionHistoryNotFound {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusNotFound,
+// 				Message: "Versioned Party not found for the given ID",
+// 				Status:  "not_found",
+// 			})
+// 		}
+
+// 		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Party Revision History by ID", "error", err)
+
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusInternalServerError,
+// 			Message: "Failed to get Versioned Party Revision History by ID",
+// 			Status:  "error",
+// 		})
+// 	}
+
+// 	auditCtx.Success()
+// 	return c.Status(fiber.StatusOK).JSON(revisionHistory)
+// }
+
+// func (h *Handler) GetVersionedPartyVersionAtTime(c *fiber.Ctx) error {
+// 	ctx := c.Context()
+// 	auditCtx := audit.From(c)
+
+// 	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	var filterAtTime time.Time
+// 	if c.Query("version_at_time") != "" {
+// 		versionAtTime, err := TimeFromQuery(c, auditCtx, "version_at_time")
+// 		if err != nil {
+// 			return err
+// 		}
+// 		filterAtTime = versionAtTime
+// 	}
+
+// 	partyVersionJSON, err := h.OpenEHRService.GetVersionedPartyVersionJSON(ctx, versionedObjectID, filterAtTime, "")
+// 	if err != nil {
+// 		if err == ErrVersionedPartyNotFound {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusNotFound,
+// 				Message: "Versioned Party not found for the given ID",
+// 				Status:  "not_found",
+// 			})
+// 		}
+// 		if err == ErrVersionedPartyVersionNotFound {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusNotFound,
+// 				Message: "Versioned Party version not found for the given time",
+// 				Status:  "not_found",
+// 			})
+// 		}
+
+// 		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Party Version at Time by ID", "error", err)
+
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusInternalServerError,
+// 			Message: "Failed to get Versioned Party Version at Time by ID",
+// 			Status:  "error",
+// 		})
+// 	}
+
+// 	auditCtx.Success()
+
+// 	c.Set("Content-Type", "application/json")
+// 	return c.Status(fiber.StatusOK).Send(partyVersionJSON)
+// }
+
+// func (h *Handler) GetVersionedPartyVersion(c *fiber.Ctx) error {
+// 	ctx := c.Context()
+// 	auditCtx := audit.From(c)
+
+// 	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	versionID, err := StringFromPath(c, auditCtx, "version_id")
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	partyVersionJSON, err := h.OpenEHRService.GetVersionedPartyVersionJSON(ctx, versionedObjectID, time.Time{}, versionID)
+// 	if err != nil {
+// 		if err == ErrVersionedPartyNotFound {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusNotFound,
+// 				Message: "Versioned Party not found for the given ID",
+// 				Status:  "not_found",
+// 			})
+// 		}
+// 		if err == ErrVersionedPartyVersionNotFound {
+// 			return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 				Code:    fiber.StatusNotFound,
+// 				Message: "Versioned Party version not found for the given version ID",
+// 				Status:  "not_found",
+// 			})
+// 		}
+// 		h.Telemetry.Logger.ErrorContext(ctx, "Failed to get Versioned Party Version by ID", "error", err)
+// 		return SendErrorResponse(c, auditCtx, ErrorResponse{
+// 			Code:    fiber.StatusInternalServerError,
+// 			Message: "Failed to get Versioned Party Version by ID",
+// 			Status:  "error",
+// 		})
+// 	}
+
+// 	auditCtx.Success()
+
+// 	c.Set("Content-Type", "application/json")
+// 	return c.Status(fiber.StatusOK).Send(partyVersionJSON)
+// }
 
 func (h *Handler) CreateDemographicContribution(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusNotImplemented).SendString("Create Demographic Contribution not implemented yet")

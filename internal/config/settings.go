@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const SYSTEM_ID_GOPENEHR = "gopenehr"
+const SYSTEM_ID_GOPENEHR = "e6d14bbd-2a0c-474a-9964-11f0bfbe36bd"
 const NAMESPACE_LOCAL = "local"
 const API_KEY_HEADER = "X-API-Key"
 const TARGET_MIGRATION_VERSION uint64 = 20251113195000
@@ -118,7 +118,13 @@ func (s *Settings) Load() error {
 	if err != nil {
 		return err
 	}
-	s.KafkaBrokers = strings.Split(kafkaBrokers, ",")
+	for broker := range strings.SplitSeq(kafkaBrokers, ",") {
+		broker = strings.TrimSpace(broker)
+		if broker == "" {
+			continue
+		}
+		s.KafkaBrokers = append(s.KafkaBrokers, broker)
+	}
 
 	return nil
 }

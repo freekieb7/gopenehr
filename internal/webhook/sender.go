@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/freekieb7/gopenehr/internal/database"
@@ -36,21 +37,26 @@ type Sender struct {
 	Logger *telemetry.Logger
 	DB     *database.Database
 	Client *http.Client
+
+	jobs   []DeliveryJob
+	jobIds []string
 }
 
-func NewSender(logger *telemetry.Logger, db *database.Database, client *http.Client) Sender {
+func NewSender(logger *telemetry.Logger, db *database.Database, client *http.Client) *Sender {
 	if client.Timeout == 0 {
 		client.Timeout = 10 * time.Second
 	}
 
-	return Sender{
+	return &Sender{
 		Logger: logger,
 		DB:     db,
 		Client: client,
+		jobs:   make([]DeliveryJob, BatchSize),
+		jobIds: make([]string, BatchSize),
 	}
 }
 
-func (s *Sender) Run(ctx context.Context) error {
+func (s *Sender) Start(ctx context.Context) error {
 	ticker := time.NewTicker(PollInterval)
 	defer ticker.Stop()
 
@@ -106,29 +112,24 @@ func (s *Sender) processBatch(ctx context.Context) error {
 	}
 	defer rows.Close()
 
-	var jobs []DeliveryJob
+	var n int = 0
 	for rows.Next() {
-		var j DeliveryJob
-		if err := rows.Scan(&j.ID, &j.EventID, &j.EventType, &j.Payload, &j.URL, &j.Secret, &j.AttemptCount); err != nil {
+		if err := rows.Scan(&s.jobs[n].ID, &s.jobs[n].EventID, &s.jobs[n].EventType, &s.jobs[n].Payload, &s.jobs[n].URL, &s.jobs[n].Secret, &s.jobs[n].AttemptCount); err != nil {
 			return err
 		}
-		jobs = append(jobs, j)
+		s.jobIds[n] = s.jobs[n].ID
+		n++
 	}
 
-	if len(jobs) == 0 {
+	if n == 0 {
 		return nil
-	}
-
-	ids := make([]string, len(jobs))
-	for i := range jobs {
-		ids[i] = jobs[i].ID
 	}
 
 	_, err = tx.Exec(ctx, `
 		UPDATE webhook.tbl_delivery
 		SET status = 'processing', updated_at = NOW()
 		WHERE id = ANY($1) 
-	`, ids)
+	`, s.jobIds[:n])
 	if err != nil {
 		return err
 	}
@@ -137,11 +138,20 @@ func (s *Sender) processBatch(ctx context.Context) error {
 		return err
 	}
 
-	for _, job := range jobs {
-		if err := s.handleJob(ctx, job); err != nil {
-			s.Logger.ErrorContext(ctx, "Job failed", "jobID", job.ID, "error", err)
-		}
+	var wg sync.WaitGroup
+	timeout := 30 * time.Second
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	for idx := range n {
+		wg.Go(func() {
+			if err := s.handleJob(ctx, s.jobs[idx]); err != nil {
+				s.Logger.ErrorContext(ctx, "Job failed", "jobID", s.jobs[idx].ID, "error", err)
+			}
+		})
 	}
+
+	wg.Wait()
 
 	return nil
 }

@@ -20,6 +20,23 @@ const (
 	OBJECT_ID_kind_GENERIC_ID
 )
 
+func (o ObjectIDKind) String() string {
+	switch o {
+	case OBJECT_ID_kind_HIER_OBJECT_ID:
+		return HIER_OBJECT_ID_TYPE
+	case OBJECT_ID_kind_OBJECT_VERSION_ID:
+		return OBJECT_VERSION_ID_TYPE
+	case OBJECT_ID_kind_ARCHETYPE_ID:
+		return ARCHETYPE_ID_TYPE
+	case OBJECT_ID_kind_TEMPLATE_ID:
+		return TEMPLATE_ID_TYPE
+	case OBJECT_ID_kind_GENERIC_ID:
+		return GENERIC_ID_TYPE
+	default:
+		return "unknown"
+	}
+}
+
 type ObjectIDUnion struct {
 	Kind  ObjectIDKind
 	Value any

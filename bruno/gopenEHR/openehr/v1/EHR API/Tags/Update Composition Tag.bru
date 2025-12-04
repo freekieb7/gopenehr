@@ -1,0 +1,43 @@
+meta {
+  name: Update Composition Tag
+  type: http
+  seq: 2
+}
+
+put {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id/composition/:uid_based_id/tags
+  body: json
+  auth: inherit
+}
+
+params:path {
+  uid_based_id: 87261421-dbb3-401f-8fae-e720a5941e86::e6d14bbd-2a0c-474a-9964-11f0bfbe36bd::1
+  ehr_id: 169b0cab-5895-4c51-bc44-5efdf77a4267
+}
+
+body:json {
+  [
+    {
+      "key": "flag",
+      "value": "follow-up",
+      "target_path": "/context/start_time/value",
+      "target": {
+        "_type": "OBJECT_VERSION_ID",
+        "value": "87261421-dbb3-401f-8fae-e720a5941e86::e6d14bbd-2a0c-474a-9964-11f0bfbe36bd::1"
+      },
+      "owner_id": {
+        "type": "EHR",
+        "namespace": "local",
+        "id": {
+          "_type": "HIER_OBJECT_ID",
+          "value": "169b0cab-5895-4c51-bc44-5efdf77a4267"
+        }
+      }
+    }
+  ]
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

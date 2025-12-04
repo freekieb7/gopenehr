@@ -4,16 +4,19 @@ import (
 	"context"
 	"time"
 
+	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/freekieb7/gopenehr/pkg/web/middleware"
 	"github.com/gofiber/fiber/v2"
 )
 
 type Handler struct {
+	Logger        *telemetry.Logger
 	HealthChecker *Checker
 }
 
-func NewHandler(healthChecker *Checker) Handler {
+func NewHandler(logger *telemetry.Logger, healthChecker *Checker) Handler {
 	return Handler{
+		Logger:        logger,
 		HealthChecker: healthChecker,
 	}
 }
@@ -39,6 +42,7 @@ func (h *Handler) HandleReadiness(c *fiber.Ctx) error {
 
 	status := h.HealthChecker.CheckHealth(ctx)
 	if status.Status != ServiceStatusHealthy {
+		h.Logger.Warn("readiness check failed", "status", status)
 		return c.SendStatus(fiber.StatusServiceUnavailable)
 	}
 	return c.SendStatus(fiber.StatusOK)

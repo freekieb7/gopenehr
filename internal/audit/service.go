@@ -19,54 +19,12 @@ type Service struct {
 	DB     *database.Database
 }
 
-func NewService(logger *telemetry.Logger, db *database.Database) Service {
-	return Service{
+func NewService(logger *telemetry.Logger, db *database.Database) *Service {
+	return &Service{
 		Logger: logger,
 		DB:     db,
 	}
 }
-
-// type LogEventRequest struct {
-// 	ActorID   uuid.UUID
-// 	ActorType string
-// 	Resource  Resource
-// 	Action    Action
-// 	Success   bool
-// 	IPAddress string
-// 	UserAgent string
-// 	Details   map[string]any
-// }
-
-// func (s *Service) LogEvent(ctx context.Context, req LogEventRequest) error {
-// 	id, err := uuid.NewV7()
-// 	if err != nil {
-// 		s.Logger.Error("Failed to generate UUID for audit log", "error", err, "actor_id", req.ActorID, "actor_type", req.ActorType)
-// 		return err
-// 	}
-
-// 	event := Event{
-// 		ID:        id,
-// 		ActorID:   req.ActorID,
-// 		ActorType: req.ActorType,
-// 		Resource:  string(req.Resource),
-// 		Action:    string(req.Action),
-// 		Success:   req.Success,
-// 		IPAddress: net.ParseIP(req.IPAddress),
-// 		UserAgent: req.UserAgent,
-// 		Details:   req.Details,
-// 		CreatedAt: time.Now(),
-// 	}
-
-// 	_, err = s.DB.Exec(ctx, `
-// 		INSERT INTO audit.tbl_audit_log (id, actor_id, actor_type, resource, action, success, ip_address, user_agent, details, created_at)
-// 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-// 	`, event.ID, event.ActorID, event.ActorType, event.Resource, event.Action, event.Success, event.IPAddress, event.UserAgent, event.Details, event.CreatedAt)
-// 	if err != nil {
-// 		s.Logger.Error("Failed to create audit log", "error", err, "entry", event)
-// 	}
-
-// 	return nil
-// }
 
 // Pagination types for audit log listing
 type ListEventsRequest struct {

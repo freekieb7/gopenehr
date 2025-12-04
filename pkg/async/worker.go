@@ -10,11 +10,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// Event represents a generic unit of work
-type Event any
-
 // FlushFunc is a callback to persist a batch of events
-type FlushFunc func(ctx context.Context, batch []Event) error
+type FlushFunc[T any] func(ctx context.Context, batch []T) error
 
 // WorkerConfig defines the behavior of the async worker
 type WorkerConfig struct {
@@ -35,24 +32,24 @@ type WorkerMetrics struct {
 }
 
 // Worker is a reusable async batch worker
-type Worker struct {
+type Worker[T any] struct {
 	cfg     WorkerConfig
-	queue   chan Event
+	queue   chan T
 	dropped atomic.Uint64
-	flushFn FlushFunc
+	flushFn FlushFunc[T]
 }
 
 // NewWorker creates a new async batch worker
-func NewWorker(cfg WorkerConfig, flushFn FlushFunc) *Worker {
-	return &Worker{
+func NewWorker[T any](cfg WorkerConfig, flushFn FlushFunc[T]) *Worker[T] {
+	return &Worker[T]{
 		cfg:     cfg,
-		queue:   make(chan Event, cfg.QueueSize),
+		queue:   make(chan T, cfg.QueueSize),
 		flushFn: flushFn,
 	}
 }
 
 // Enqueue adds an event to the worker queue
-func (w *Worker) Enqueue(ev Event) {
+func (w *Worker[T]) Enqueue(ev T) {
 	select {
 	case w.queue <- ev:
 		if w.cfg.Metrics != nil {
@@ -68,12 +65,12 @@ func (w *Worker) Enqueue(ev Event) {
 }
 
 // Start launches the background worker
-func (w *Worker) Start(ctx context.Context) {
+func (w *Worker[T]) Start(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(w.cfg.FlushEvery)
 		defer ticker.Stop()
 
-		batch := make([]Event, 0, w.cfg.BatchSize)
+		batch := make([]T, 0, w.cfg.BatchSize)
 
 		flush := func() {
 			if len(batch) == 0 {
@@ -125,7 +122,7 @@ func (w *Worker) Start(ctx context.Context) {
 }
 
 // flushWithRetry retries the flush function up to 3 times with exponential backoff
-func (w *Worker) flushWithRetry(ctx context.Context, batch []Event) {
+func (w *Worker[T]) flushWithRetry(ctx context.Context, batch []T) {
 	backoff := 150 * time.Millisecond
 	for i := 0; i < 3; i++ {
 		if err := w.flushFn(ctx, batch); err == nil {
@@ -148,7 +145,7 @@ func (w *Worker) flushWithRetry(ctx context.Context, batch []Event) {
 }
 
 // drainAndFlush drains the queue and flushes remaining events
-func (w *Worker) drainAndFlush(ctx context.Context, batch []Event) {
+func (w *Worker[T]) drainAndFlush(ctx context.Context, batch []T) {
 	for {
 		select {
 		case ev := <-w.queue:

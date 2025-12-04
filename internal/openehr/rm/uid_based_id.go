@@ -17,6 +17,17 @@ const (
 	UID_BASED_ID_kind_OBJECT_VERSION_ID
 )
 
+func (k UIDBasedIDKind) String() string {
+	switch k {
+	case UID_BASED_ID_kind_HIER_OBJECT_ID:
+		return HIER_OBJECT_ID_TYPE
+	case UID_BASED_ID_kind_OBJECT_VERSION_ID:
+		return OBJECT_VERSION_ID_TYPE
+	default:
+		return "unknown"
+	}
+}
+
 type UIDBasedIDUnion struct {
 	Kind  UIDBasedIDKind
 	Value any
@@ -60,10 +71,10 @@ func (u *UIDBasedIDUnion) UnmarshalJSON(data []byte) error {
 	switch t {
 	case HIER_OBJECT_ID_TYPE:
 		u.Kind = UID_BASED_ID_kind_HIER_OBJECT_ID
-		u.Value = new(HIER_OBJECT_ID)
+		u.Value = &HIER_OBJECT_ID{}
 	case OBJECT_VERSION_ID_TYPE:
 		u.Kind = UID_BASED_ID_kind_OBJECT_VERSION_ID
-		u.Value = new(OBJECT_VERSION_ID)
+		u.Value = &OBJECT_VERSION_ID{}
 	default:
 		u.Kind = UID_BASED_ID_kind_unknown
 		return nil
@@ -72,18 +83,18 @@ func (u *UIDBasedIDUnion) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, u.Value)
 }
 
-func (u *UIDBasedIDUnion) HIER_OBJECT_ID() *HIER_OBJECT_ID {
+func (u *UIDBasedIDUnion) HIER_OBJECT_ID() HIER_OBJECT_ID {
 	if u.Kind == UID_BASED_ID_kind_HIER_OBJECT_ID {
-		return u.Value.(*HIER_OBJECT_ID)
+		return *u.Value.(*HIER_OBJECT_ID)
 	}
-	return nil
+	return HIER_OBJECT_ID{}
 }
 
-func (u *UIDBasedIDUnion) OBJECT_VERSION_ID() *OBJECT_VERSION_ID {
+func (u *UIDBasedIDUnion) OBJECT_VERSION_ID() OBJECT_VERSION_ID {
 	if u.Kind == UID_BASED_ID_kind_OBJECT_VERSION_ID {
-		return u.Value.(*OBJECT_VERSION_ID)
+		return *u.Value.(*OBJECT_VERSION_ID)
 	}
-	return nil
+	return OBJECT_VERSION_ID{}
 }
 
 func UID_BASED_ID_from_HIER_OBJECT_ID(id *HIER_OBJECT_ID) UIDBasedIDUnion {

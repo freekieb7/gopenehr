@@ -85,8 +85,8 @@ type Service struct {
 	DB     *database.Database
 }
 
-func NewService(logger *telemetry.Logger, db *database.Database) Service {
-	return Service{
+func NewService(logger *telemetry.Logger, db *database.Database) *Service {
+	return &Service{
 		Logger: logger,
 		DB:     db,
 	}
@@ -139,15 +139,51 @@ func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus rm.E
 			{
 				Type:      rm.VERSIONED_EHR_STATUS_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*ehrStatus.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(ehrStatus.UID.V.OBJECT_VERSION_ID()),
 			},
 			{
 				Type:      rm.VERSIONED_EHR_ACCESS_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*ehrAccess.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(ehrAccess.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
+	ehr := rm.EHR{
+		SystemID: rm.HIER_OBJECT_ID{
+			Value: config.SYSTEM_ID_GOPENEHR,
+		},
+		EHRID: rm.HIER_OBJECT_ID{
+			Value: ehrID.String(),
+		},
+		EHRStatus: rm.OBJECT_REF{
+			Type:      rm.VERSIONED_EHR_STATUS_TYPE,
+			Namespace: rm.Namespace_local,
+			ID: rm.OBJECT_ID_from_HIER_OBJECT_ID(rm.HIER_OBJECT_ID{
+				Value: ehrStatus.UID.V.OBJECT_VERSION_ID().UID(),
+			}),
+		},
+		EHRAccess: rm.OBJECT_REF{
+			Type:      rm.VERSIONED_EHR_ACCESS_TYPE,
+			Namespace: rm.Namespace_local,
+			ID: rm.OBJECT_ID_from_HIER_OBJECT_ID(rm.HIER_OBJECT_ID{
+				Value: ehrAccess.UID.V.OBJECT_VERSION_ID().UID(),
+			}),
+		},
+		Contributions: utils.Some([]rm.OBJECT_REF{
+			{
+				Type:      rm.CONTRIBUTION_TYPE,
+				Namespace: rm.Namespace_local,
+				ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+			},
+		}),
+		Compositions: utils.Some([]rm.OBJECT_REF{}),
+		Directory:    utils.None[rm.OBJECT_REF](),
+		Folders:      utils.Some([]rm.OBJECT_REF{}),
+		Tags:         utils.Some([]rm.OBJECT_REF{}),
+		TimeCreated: rm.DV_DATE_TIME{
+			Value: time.Now().Format(time.RFC3339),
+		},
+	}
 
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -159,38 +195,47 @@ func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus rm.E
 		}
 	}()
 
-	err = s.SaveEHRWithTx(ctx, tx, ehrID)
+	batch := &pgx.Batch{}
+
+	// Insert EHR
+	batch.Queue(`INSERT INTO openehr.tbl_ehr (id) VALUES ($1)`, ehr.EHRID.Value)
+
+	ehr.SetModelName()
+	batch.Queue(`INSERT INTO openehr.tbl_ehr_data (id, data) VALUES ($1, $2)`, ehr.EHRID.Value, ehr)
+	// Insert CONTRIBUTION
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
+	contribution.SetModelName()
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
+	// Insert VERSIONED_EHR_STATUS
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id) VALUES ($1, $2, $3)`, versionedEHRStatus.UID.Value, rm.VERSIONED_EHR_STATUS_TYPE, ehrID)
+	versionedEHRStatus.SetModelName()
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_ehr_status (id, data) VALUES ($1, $2)`, versionedEHRStatus.UID.Value, versionedEHRStatus)
+	// Insert EHR_STATUS
+	batch.Queue(`INSERT INTO openehr.tbl_ehr_status (id, version_int, versioned_ehr_status_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, ehrStatusVersion.UID.Value, ehrStatusVersion.UID.VersionTreeID().Int(), ehrStatusVersion.UID.UID(), ehrID, contribution.UID.Value)
+	ehrStatusVersion.SetModelName()
+	batch.Queue(`INSERT INTO openehr.tbl_ehr_status_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, ehrStatusVersion.UID.Value, ehrStatusVersion)
+	// Insert VERSIONED_EHR_ACCESS
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id) VALUES ($1, $2, $3)`, versionedEHRAccess.UID.Value, rm.VERSIONED_EHR_ACCESS_TYPE, ehrID)
+	versionedEHRAccess.SetModelName()
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_ehr_access (id, data) VALUES ($1, $2)`, versionedEHRAccess.UID.Value, versionedEHRAccess)
+	// Insert EHR_ACCESS
+	batch.Queue(`INSERT INTO openehr.tbl_ehr_access (id, version_int, versioned_ehr_access_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, ehrAccessVersion.UID.Value, ehrAccessVersion.UID.VersionTreeID().Int(), ehrAccessVersion.UID.UID(), ehrID, contribution.UID.Value)
+	ehrAccessVersion.SetModelName()
+	batch.Queue(`INSERT INTO openehr.tbl_ehr_access_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, ehrAccessVersion.UID.Value, ehrAccessVersion)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.EHR{}, fmt.Errorf("failed to save EHR: %w", err)
+		return rm.EHR{}, fmt.Errorf("failed to execute batch insert for EHR creation: %w", err)
 	}
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.Some(ehrID))
+	err = br.Close()
 	if err != nil {
-		return rm.EHR{}, fmt.Errorf("failed to save contribution: %w", err)
-	}
-	err = s.SaveVersionedObjectWithTx(ctx, tx, versionedEHRStatus, utils.Some(ehrID))
-	if err != nil {
-		return rm.EHR{}, fmt.Errorf("failed to save VERSIONED_EHR_STATUS: %w", err)
-	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, ehrStatusVersion, contribution.UID.Value, utils.Some(ehrID))
-	if err != nil {
-		return rm.EHR{}, fmt.Errorf("failed to save EHR_STATUS: %w", err)
-	}
-	err = s.SaveVersionedObjectWithTx(ctx, tx, versionedEHRAccess, utils.Some(ehrID))
-	if err != nil {
-		return rm.EHR{}, fmt.Errorf("failed to save VERSIONED_EHR_ACCESS: %w", err)
-	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, ehrAccessVersion, contribution.UID.Value, utils.Some(ehrID))
-	if err != nil {
-		return rm.EHR{}, fmt.Errorf("failed to save EHR_ACCESS: %w", err)
+		return rm.EHR{}, fmt.Errorf("failed to close batch result for EHR creation: %w", err)
 	}
 
-	if err = tx.Commit(ctx); err != nil {
+	err = tx.Commit(ctx)
+	if err != nil {
 		return rm.EHR{}, fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	ehr, err := s.GetEHR(ctx, ehrID)
-	if err != nil {
-		return rm.EHR{}, fmt.Errorf("failed to get EHR after creation: %w", err)
 	}
 
 	return ehr, nil
@@ -214,49 +259,48 @@ func (s *Service) ExistsEHR(ctx context.Context, id uuid.UUID) (bool, error) {
 	return true, nil
 }
 
-func (s *Service) GetEHR(ctx context.Context, id uuid.UUID) (rm.EHR, error) {
-	query := `SELECT data FROM openehr.vw_ehr WHERE id = $1 LIMIT 1`
+func (s *Service) GetEHRRawJSON(ctx context.Context, id uuid.UUID) ([]byte, error) {
+	query := `SELECT ed.data FROM openehr.tbl_ehr e JOIN tbl_ehr_data ed ON e.id = ed.id WHERE e.id = $1 LIMIT 1`
 	args := []any{id}
 
 	row := s.DB.QueryRow(ctx, query, args...)
 
-	var ehr rm.EHR
-	err := row.Scan(&ehr)
+	var data []byte
+	err := row.Scan(&data)
 	if err != nil {
 		if err == database.ErrNoRows {
-			return rm.EHR{}, ErrEHRNotFound
+			return nil, ErrEHRNotFound
 		}
-		return rm.EHR{}, fmt.Errorf("failed to fetch EHR from database: %w", err)
+		return nil, fmt.Errorf("failed to fetch EHR from database: %w", err)
 	}
 
-	return ehr, nil
+	return data, nil
 }
 
-func (s *Service) GetEHRBySubject(ctx context.Context, subjectID, subjectNamespace string) (rm.EHR, error) {
+func (s *Service) GetEHRBySubjectRawJSON(ctx context.Context, subjectID, subjectNamespace string) ([]byte, error) {
 	query := `
-        SELECT ehr_id
-        FROM openehr.tbl_object_version_data
-        WHERE ov.type = $1
-          AND object_data->'subject'->'external_ref'->>'namespace' = $2
-		  AND object_data->'subject'->'external_ref'->'id'->>'value' = $3
-        ORDER BY created_at DESC
+        SELECT ed.data
+        FROM openehr.tbl_ehr e
+		JOIN openehr.tbl_ehr_data ed ON e.id = ed.id
+		JOIN openehr.tbl_ehr_status es ON e.id = es.ehr_id
+        WHERE es.data->'subject'->'external_ref'->>'namespace' = $1
+		  AND es.data->'subject'->'external_ref'->'id'->>'value' = $2
         LIMIT 1
     `
-	args := []any{rm.EHR_STATUS_TYPE, subjectNamespace, subjectID}
+	args := []any{subjectNamespace, subjectID}
 
 	row := s.DB.QueryRow(ctx, query, args...)
 
-	var ehrID uuid.UUID
-	err := row.Scan(&ehrID)
+	var data []byte
+	err := row.Scan(&data)
 	if err != nil {
 		if err == database.ErrNoRows {
-			return rm.EHR{}, ErrEHRNotFound
+			return nil, ErrEHRNotFound
 		}
-		return rm.EHR{}, fmt.Errorf("failed to fetch EHR by subject from database: %w", err)
+		return nil, fmt.Errorf("failed to fetch EHR by subject from database: %w", err)
 	}
 
-	// We could get the EHR directory from the database, but this is cache friendly
-	return s.GetEHR(ctx, ehrID)
+	return data, nil
 }
 
 func (s *Service) DeleteEHR(ctx context.Context, id uuid.UUID) error {
@@ -370,50 +414,104 @@ func (s *Service) ValidateEHRStatus(ctx context.Context, ehrStatus rm.EHR_STATUS
 	return nil
 }
 
-func (s *Service) GetEHRStatus(ctx context.Context, ehrID uuid.UUID, filterOnTime time.Time, filterOnVersionID string) (rm.EHR_STATUS, error) {
-	// Build query
-	var query strings.Builder
-	var args []any
-	argNum := 1
+func (s *Service) GetEHRStatusID(ctx context.Context, ehrID uuid.UUID) (rm.OBJECT_VERSION_ID, error) {
+	query := `SELECT id FROM openehr.tbl_ehr_status WHERE ehr_id = $1 ORDER BY version_int DESC LIMIT 1`
+	args := []any{ehrID}
 
-	query.WriteString(`
-		SELECT ovd.object_data
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id
-		WHERE ov.type = $1
-		  AND ov.ehr_id = $2 
-	`)
-	args = []any{rm.EHR_STATUS_TYPE, ehrID}
-	argNum += 2
+	row := s.DB.QueryRow(ctx, query, args...)
 
-	if !filterOnTime.IsZero() {
-		query.WriteString(fmt.Sprintf(`AND ov.created_at <= $%d `, argNum))
-		args = append(args, filterOnTime)
-		argNum++
-	}
-
-	if filterOnVersionID != "" {
-		query.WriteString(fmt.Sprintf(`AND ov.id = $%d `, argNum))
-		args = append(args, filterOnVersionID)
-	}
-
-	query.WriteString(`ORDER BY ov.created_at DESC LIMIT 1`)
-
-	row := s.DB.QueryRow(ctx, query.String(), args...)
-
-	var ehrStatus rm.EHR_STATUS
-	err := row.Scan(&ehrStatus)
+	var id string
+	err := row.Scan(&id)
 	if err != nil {
 		if err == database.ErrNoRows {
-			return rm.EHR_STATUS{}, ErrEHRStatusNotFound
+			return rm.OBJECT_VERSION_ID{}, ErrEHRStatusNotFound
 		}
-		return rm.EHR_STATUS{}, fmt.Errorf("failed to fetch EHR Status from database: %w", err)
+		return rm.OBJECT_VERSION_ID{}, fmt.Errorf("failed to fetch EHR Status ID from database: %w", err)
 	}
 
-	return ehrStatus, nil
+	return rm.OBJECT_VERSION_ID{Value: id}, nil
 }
 
-func (s *Service) UpdateEHRStatus(ctx context.Context, ehrID uuid.UUID, previousEHRStatus, nextEHRStatus rm.EHR_STATUS) (rm.EHR_STATUS, error) {
+func (s *Service) GetEHRStatusByVersionedEHRStatusIDRawJSON(ctx context.Context, ehrID uuid.UUID, versionedEHRStatusID uuid.UUID) ([]byte, error) {
+	query := `
+		SELECT esd.data 
+		FROM openehr.tbl_ehr_status es 
+		JOIN openehr.tbl_ehr_status_data esd ON es.id = esd.id 
+		WHERE es.ehr_id = $1 
+		  AND es.versioned_ehr_status_id = $2 
+		ORDER BY es.version_int DESC
+		LIMIT 1
+	`
+	args := []any{ehrID, versionedEHRStatusID}
+
+	row := s.DB.QueryRow(ctx, query, args...)
+
+	var data []byte
+	err := row.Scan(&data)
+	if err != nil {
+		if err == database.ErrNoRows {
+			return nil, ErrEHRStatusNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch EHR Status from database: %w", err)
+	}
+
+	return data, nil
+}
+
+func (s *Service) GetEHRStatusByIDRawJSON(ctx context.Context, ehrID uuid.UUID, ehrStatusID string) ([]byte, error) {
+	query := `
+		SELECT esd.data 
+		FROM openehr.tbl_ehr_status es 
+		JOIN openehr.tbl_ehr_status_data esd ON es.id = esd.id 
+		WHERE es.ehr_id = $1 
+		  AND es.id = $2 
+		LIMIT 1
+	`
+	args := []any{ehrID, ehrStatusID}
+
+	row := s.DB.QueryRow(ctx, query, args...)
+
+	var data []byte
+	err := row.Scan(&data)
+	if err != nil {
+		if err == database.ErrNoRows {
+			return nil, ErrEHRStatusNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch EHR Status from database: %w", err)
+	}
+
+	return data, nil
+}
+
+func (s *Service) GetEHRStatusAtTimeRawJSON(ctx context.Context, ehrID uuid.UUID, filterOnTime time.Time) ([]byte, error) {
+	query := `
+		SELECT esd.data 
+		FROM openehr.tbl_ehr_status es 
+		JOIN openehr.tbl_ehr_status_data esd ON es.id = esd.id 
+		WHERE es.ehr_id = $1 
+	`
+	args := []any{ehrID}
+	if !filterOnTime.IsZero() {
+		query += `AND es.created_at <= $2 `
+		args = append(args, filterOnTime)
+	}
+	query += `ORDER BY es.created_at DESC LIMIT 1`
+
+	row := s.DB.QueryRow(ctx, query, args...)
+
+	var data []byte
+	err := row.Scan(&data)
+	if err != nil {
+		if err == database.ErrNoRows {
+			return nil, ErrEHRStatusNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch EHR Status from database: %w", err)
+	}
+
+	return data, nil
+}
+
+func (s *Service) UpdateEHRStatus(ctx context.Context, ehrID uuid.UUID, currentEHRStatusID rm.OBJECT_VERSION_ID, nextEHRStatus rm.EHR_STATUS) (rm.EHR_STATUS, error) {
 	if err := s.ValidateEHRStatus(ctx, nextEHRStatus); err != nil {
 		return rm.EHR_STATUS{}, err
 	}
@@ -421,26 +519,51 @@ func (s *Service) UpdateEHRStatus(ctx context.Context, ehrID uuid.UUID, previous
 	// Ensure EHR Status contains a UID to check/upgrade
 	if !nextEHRStatus.UID.E {
 		nextEHRStatus.UID = utils.Some(rm.UID_BASED_ID_from_HIER_OBJECT_ID(&rm.HIER_OBJECT_ID{
-			Value: previousEHRStatus.UID.V.OBJECT_VERSION_ID().UID(),
+			Value: currentEHRStatusID.UID(),
 		}))
 	}
 
-	updatedID, err := UpgradeObjectVersionID(nextEHRStatus.UID.V, *previousEHRStatus.UID.V.OBJECT_VERSION_ID())
+	updatedID, err := UpgradeObjectVersionID(nextEHRStatus.UID.V, currentEHRStatusID)
 	if err != nil {
 		return rm.EHR_STATUS{}, fmt.Errorf("failed to upgrade current EHR Status UID: %w", err)
 	}
 	nextEHRStatus.UID = utils.Some(rm.UID_BASED_ID_from_OBJECT_VERSION_ID(&updatedID))
 
-	ehrStatusVersion := NewOriginalVersion(nextEHRStatus.ObjectVersionID(), rm.ORIGINAL_VERSION_DATA_from_EHR_STATUS(nextEHRStatus), utils.Some(*previousEHRStatus.UID.V.OBJECT_VERSION_ID()))
-	contribution := NewContribution("EHR Status updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
-		[]rm.OBJECT_REF{
+	ehrStatusVersion := rm.ORIGINAL_VERSION{
+		UID:                 nextEHRStatus.UID.V.OBJECT_VERSION_ID(),
+		PrecedingVersionUID: utils.Some(currentEHRStatusID),
+		LifecycleState: rm.DV_CODED_TEXT{
+			Value: terminology.VersionLifecycleStateNames[terminology.VERSION_LIFECYCLE_STATE_CODE_COMPLETE],
+			DefiningCode: rm.CODE_PHRASE{
+				CodeString: terminology.VERSION_LIFECYCLE_STATE_CODE_COMPLETE,
+				TerminologyID: rm.TERMINOLOGY_ID{
+					Value: terminology.VERSION_LIFECYCLE_STATE_TERMINOLOGY_ID_OPENEHR,
+				},
+			},
+		},
+		Data: rm.ORIGINAL_VERSION_DATA_from_EHR_STATUS(nextEHRStatus),
+	}
+
+	contribution := rm.CONTRIBUTION{
+		UID: rm.HIER_OBJECT_ID{
+			Value: uuid.NewString(),
+		},
+		Versions: []rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_EHR_STATUS_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*nextEHRStatus.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(nextEHRStatus.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
-	)
+		Audit: rm.AUDIT_DETAILS{
+			SystemID:      config.SYSTEM_ID_GOPENEHR,
+			TimeCommitted: rm.DV_DATE_TIME{Value: time.Now().UTC().Format(time.RFC3339)},
+			Description:   utils.Some(rm.DV_TEXT{Value: "EHR Status updated"}),
+			Committer: rm.PARTY_PROXY_from_PARTY_SELF(rm.PARTY_SELF{
+				Type_: utils.Some(rm.PARTY_SELF_TYPE),
+			}),
+		},
+	}
 
 	// Start transaction
 	tx, err := s.DB.Begin(ctx)
@@ -453,13 +576,40 @@ func (s *Service) UpdateEHRStatus(ctx context.Context, ehrID uuid.UUID, previous
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.Some(ehrID))
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	if err != nil {
-		return rm.EHR_STATUS{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.EHR_STATUS{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, ehrStatusVersion, contribution.UID.Value, utils.Some(ehrID))
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.EHR_STATUS{}, fmt.Errorf("failed to save ehr status version: %w", err)
+		return rm.EHR_STATUS{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Insert EHR_STATUS
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_ehr_status (id, version_int, versioned_ehr_status_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, nextEHRStatus.UID.V.OBJECT_VERSION_ID().Value, nextEHRStatus.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), nextEHRStatus.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
+	if err != nil {
+		return rm.EHR_STATUS{}, fmt.Errorf("failed to insert EHR status: %w", err)
+	}
+	nextEHRStatus.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_ehr_status_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, nextEHRStatus.UID.V.OBJECT_VERSION_ID().Value, ehrStatusVersion)
+	if err != nil {
+		return rm.EHR_STATUS{}, fmt.Errorf("failed to insert EHR status data: %w", err)
+	}
+
+	// Update EHR with new contribution reference
+	_, err = s.DB.Exec(ctx, `
+		UPDATE openehr.tbl_ehr_data
+		SET data = jsonb_insert(data, '{contributions,-1}', $1::jsonb, true)
+		WHERE id = $2
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, ehrID)
+	if err != nil {
+		return rm.EHR_STATUS{}, fmt.Errorf("failed to update EHR with new contribution: %w", err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
@@ -469,11 +619,11 @@ func (s *Service) UpdateEHRStatus(ctx context.Context, ehrID uuid.UUID, previous
 	return nextEHRStatus, nil
 }
 
-func (s *Service) GetVersionedEHRStatus(ctx context.Context, ehrID uuid.UUID) (rm.VERSIONED_EHR_STATUS, error) {
+func (s *Service) GetVersionedEHRStatusRawJSON(ctx context.Context, ehrID uuid.UUID) ([]byte, error) {
 	query := `
 		SELECT vod.data 
 		FROM openehr.tbl_versioned_object vo
-		JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id
+		JOIN openehr.tbl_versioned_ehr_status vod ON vo.id = vod.id
 		WHERE vo.type = $1 
 		  AND vo.ehr_id = $2
 		LIMIT 1
@@ -482,19 +632,19 @@ func (s *Service) GetVersionedEHRStatus(ctx context.Context, ehrID uuid.UUID) (r
 
 	row := s.DB.QueryRow(ctx, query, args...)
 
-	var versionedEHRStatus rm.VERSIONED_EHR_STATUS
-	err := row.Scan(&versionedEHRStatus)
+	var data []byte
+	err := row.Scan(&data)
 	if err != nil {
 		if err == database.ErrNoRows {
-			return rm.VERSIONED_EHR_STATUS{}, ErrEHRNotFound
+			return nil, ErrEHRNotFound
 		}
-		return rm.VERSIONED_EHR_STATUS{}, fmt.Errorf("failed to fetch Versioned EHR Status from database: %w", err)
+		return nil, fmt.Errorf("failed to fetch Versioned EHR Status from database: %w", err)
 	}
 
-	return versionedEHRStatus, nil
+	return data, nil
 }
 
-func (s *Service) GetVersionedEHRStatusRevisionHistory(ctx context.Context, ehrID uuid.UUID) (rm.REVISION_HISTORY, error) {
+func (s *Service) GetVersionedEHRStatusRevisionHistoryRawJSON(ctx context.Context, ehrID uuid.UUID) ([]byte, error) {
 	query := `
         SELECT jsonb_build_object(
 			'items', jsonb_agg(
@@ -521,59 +671,17 @@ func (s *Service) GetVersionedEHRStatusRevisionHistory(ctx context.Context, ehrI
     `
 	args := []any{ehrID}
 
+	var data []byte
 	row := s.DB.QueryRow(ctx, query, args...)
-
-	var revisionHistory rm.REVISION_HISTORY
-	err := row.Scan(&revisionHistory)
-	if err != nil {
-		if err == database.ErrNoRows {
-			return rm.REVISION_HISTORY{}, ErrEHRNotFound
-		}
-		return rm.REVISION_HISTORY{}, fmt.Errorf("failed to fetch Revision History from database: %w", err)
-	}
-
-	return revisionHistory, nil
-}
-
-func (s *Service) GetVersionedEHRStatusVersionAsJSON(ctx context.Context, ehrID uuid.UUID, filterAtTime time.Time, filterVersionID string) ([]byte, error) {
-	var query strings.Builder
-	var args []any
-	argNum := 1
-
-	query.WriteString(`
-		SELECT ovd.data 
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id
-		WHERE ov.type = $1
-		  AND ov.ehr_id = $2 
-	`)
-	args = []any{rm.EHR_STATUS_TYPE, ehrID}
-	argNum += 2
-
-	if !filterAtTime.IsZero() {
-		query.WriteString(fmt.Sprintf(`AND ov.created_at <= $%d `, argNum))
-		args = append(args, filterAtTime)
-		argNum++
-	}
-
-	if filterVersionID != "" {
-		query.WriteString(fmt.Sprintf(`AND ov.id = $%d `, argNum))
-		args = append(args, filterVersionID)
-	}
-
-	query.WriteString(`ORDER BY ov.created_at DESC LIMIT 1`)
-	row := s.DB.QueryRow(ctx, query.String(), args...)
-
-	var rawEhrStatusJSON []byte
-	err := row.Scan(&rawEhrStatusJSON)
+	err := row.Scan(&data)
 	if err != nil {
 		if err == database.ErrNoRows {
 			return nil, ErrEHRNotFound
 		}
-		return nil, fmt.Errorf("failed to fetch EHR Status at time from database: %w", err)
+		return nil, fmt.Errorf("failed to fetch Revision History from database: %w", err)
 	}
 
-	return rawEhrStatusJSON, nil
+	return data, nil
 }
 
 func (s *Service) ValidateComposition(ctx context.Context, composition rm.COMPOSITION) error {
@@ -644,13 +752,13 @@ func (s *Service) CreateComposition(ctx context.Context, ehrID uuid.UUID, compos
 	}
 
 	versionedComposition := NewVersionedComposition(uuid.MustParse(composition.UID.V.OBJECT_VERSION_ID().UID()), ehrID)
-	compositionVersion := NewOriginalVersion(*composition.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_COMPOSITION(composition), utils.None[rm.OBJECT_VERSION_ID]())
+	compositionVersion := NewOriginalVersion(composition.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_COMPOSITION(composition), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Composition created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_COMPOSITION_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*composition.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(composition.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -666,22 +774,57 @@ func (s *Service) CreateComposition(ctx context.Context, ehrID uuid.UUID, compos
 		}
 	}()
 
-	// Insert Contribution
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.Some(ehrID))
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.COMPOSITION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
+	}
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
 	}
 
-	// Insert Versioned Composition
-	err = s.SaveVersionedObjectWithTx(ctx, tx, versionedComposition, utils.Some(ehrID))
+	// Insert VERSIONED_COMPOSITION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id) VALUES ($1, $2, $3)`, versionedComposition.UID.Value, rm.VERSIONED_COMPOSITION_TYPE, ehrID)
 	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to save versioned composition: %w", err)
+		return rm.COMPOSITION{}, fmt.Errorf("failed to insert versioned composition into the database: %w", err)
+	}
+	versionedComposition.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_composition (id, data) VALUES ($1, $2)`, versionedComposition.UID.Value, versionedComposition)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to insert versioned composition data into the database: %w", err)
 	}
 
-	// Insert Composition Version
-	err = s.SaveObjectVersionWithTx(ctx, tx, compositionVersion, contribution.UID.Value, utils.Some(ehrID))
+	// Insert COMPOSITION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_composition (id, version_int, versioned_composition_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, composition.UID.V.OBJECT_VERSION_ID().Value, composition.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), composition.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
 	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to save composition version: %w", err)
+		return rm.COMPOSITION{}, fmt.Errorf("failed to insert composition into the database: %w", err)
+	}
+	compositionVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_composition_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, composition.UID.V.OBJECT_VERSION_ID().Value, compositionVersion)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to insert composition data into the database: %w", err)
+	}
+
+	// Update EHR, add contribution ref to list
+	_, err = s.DB.Exec(ctx, `
+		UPDATE openehr.tbl_ehr_data
+		SET data = jsonb_insert(
+			jsonb_insert(data, '{compositions, -1}', $2::jsonb, true)
+			, '{contributions, -1}', $1::jsonb, true)
+		WHERE id = $3
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, rm.OBJECT_REF{
+		Type:      rm.VERSIONED_COMPOSITION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(versionedComposition.UID),
+	}, ehrID)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to update EHR with new composition: %w", err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
@@ -691,49 +834,64 @@ func (s *Service) CreateComposition(ctx context.Context, ehrID uuid.UUID, compos
 	return composition, nil
 }
 
-func (s *Service) GetComposition(ctx context.Context, ehrID uuid.UUID, objectVersionID string) (rm.COMPOSITION, error) {
-	query := `
-		SELECT ovd.object_data 
-		FROM openehr.tbl_object_version ov 
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.type = $1 AND ov.ehr_id = $2 AND ov.id = $3 LIMIT 1
-	`
-	args := []any{rm.COMPOSITION_TYPE, ehrID, objectVersionID}
+func (s *Service) GetCompositionID(ctx context.Context, ehrID uuid.UUID, versionedCompositionID uuid.UUID) (rm.OBJECT_VERSION_ID, error) {
+	query := `SELECT id FROM openehr.tbl_composition WHERE ehr_id = $1 AND versioned_composition_id = $2 ORDER BY version_int DESC LIMIT 1`
+	args := []any{ehrID, versionedCompositionID}
 
-	var composition rm.COMPOSITION
-	if err := s.DB.QueryRow(ctx, query, args...).Scan(&composition); err != nil {
+	var id string
+	if err := s.DB.QueryRow(ctx, query, args...).Scan(&id); err != nil {
 		if err == database.ErrNoRows {
-			return rm.COMPOSITION{}, ErrCompositionNotFound
+			return rm.OBJECT_VERSION_ID{}, ErrCompositionNotFound
 		}
-		return rm.COMPOSITION{}, fmt.Errorf("failed to fetch Composition by ID from database: %w", err)
+		return rm.OBJECT_VERSION_ID{}, fmt.Errorf("failed to fetch Composition ID from database: %w", err)
 	}
 
-	return composition, nil
+	return rm.OBJECT_VERSION_ID{Value: id}, nil
 }
 
-func (s *Service) GetCurrentCompositionByVersionedCompositionID(ctx context.Context, ehrID uuid.UUID, versionedCompositionID uuid.UUID) (rm.COMPOSITION, error) {
+func (s *Service) GetCompositionRawJSON(ctx context.Context, ehrID uuid.UUID, objectVersionID string) ([]byte, error) {
 	query := `
-		SELECT ovd.object_data 
-		FROM openehr.tbl_object_version ov 
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.type = $1 AND ov.ehr_id = $2 AND ov.versioned_object_id = $3 
-		ORDER BY ov.created_at DESC
+		SELECT cd.data 
+		FROM openehr.tbl_composition c 
+		JOIN openehr.tbl_composition_data cd ON c.id = cd.id 
+		WHERE c.ehr_id = $1 AND c.id = $2 LIMIT 1
+	`
+	args := []any{ehrID, objectVersionID}
+
+	var data []byte
+	if err := s.DB.QueryRow(ctx, query, args...).Scan(&data); err != nil {
+		if err == database.ErrNoRows {
+			return nil, ErrCompositionNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch Composition by ID from database: %w", err)
+	}
+
+	return data, nil
+}
+
+func (s *Service) GetCompositionByVersionedCompositionIDRawJSON(ctx context.Context, ehrID uuid.UUID, versionedCompositionID uuid.UUID) ([]byte, error) {
+	query := `
+		SELECT cd.data
+		FROM openehr.tbl_composition c 
+		JOIN openehr.tbl_composition_data cd ON cd.id = c.id 
+		WHERE c.ehr_id = $1 AND c.versioned_composition_id = $2
+		ORDER BY c.version_int DESC
 		LIMIT 1
 	`
-	args := []any{rm.COMPOSITION_TYPE, ehrID, versionedCompositionID}
+	args := []any{ehrID, versionedCompositionID}
 
-	var composition rm.COMPOSITION
-	if err := s.DB.QueryRow(ctx, query, args...).Scan(&composition); err != nil {
+	var data []byte
+	if err := s.DB.QueryRow(ctx, query, args...).Scan(&data); err != nil {
 		if err == database.ErrNoRows {
-			return rm.COMPOSITION{}, ErrCompositionNotFound
+			return nil, ErrCompositionNotFound
 		}
-		return rm.COMPOSITION{}, fmt.Errorf("failed to fetch Composition by ID from database: %w", err)
+		return nil, fmt.Errorf("failed to fetch Composition by ID from database: %w", err)
 	}
 
-	return composition, nil
+	return data, nil
 }
 
-func (s *Service) UpdateComposition(ctx context.Context, ehrID uuid.UUID, previousComposition, nextComposition rm.COMPOSITION) (rm.COMPOSITION, error) {
+func (s *Service) UpdateComposition(ctx context.Context, ehrID uuid.UUID, currentCompositionID rm.OBJECT_VERSION_ID, nextComposition rm.COMPOSITION) (rm.COMPOSITION, error) {
 	err := s.ValidateComposition(ctx, nextComposition)
 	if err != nil {
 		return rm.COMPOSITION{}, err
@@ -742,23 +900,23 @@ func (s *Service) UpdateComposition(ctx context.Context, ehrID uuid.UUID, previo
 	// Ensure Composition contains a UID to check/upgrade
 	if !nextComposition.UID.E {
 		nextComposition.UID = utils.Some(rm.UID_BASED_ID_from_HIER_OBJECT_ID(&rm.HIER_OBJECT_ID{
-			Value: previousComposition.UID.V.OBJECT_VERSION_ID().UID(),
+			Value: currentCompositionID.UID(),
 		}))
 	}
 
-	updatedID, err := UpgradeObjectVersionID(nextComposition.UID.V, *previousComposition.UID.V.OBJECT_VERSION_ID())
+	updatedID, err := UpgradeObjectVersionID(nextComposition.UID.V, currentCompositionID)
 	if err != nil {
 		return rm.COMPOSITION{}, fmt.Errorf("failed to upgrade current Composition UID: %w", err)
 	}
 	nextComposition.UID = utils.Some(rm.UID_BASED_ID_from_OBJECT_VERSION_ID(&updatedID))
 
-	compositionVersion := NewOriginalVersion(*nextComposition.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_COMPOSITION(nextComposition), utils.Some(*previousComposition.UID.V.OBJECT_VERSION_ID()))
+	compositionVersion := NewOriginalVersion(nextComposition.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_COMPOSITION(nextComposition), utils.Some(currentCompositionID))
 	contribution := NewContribution("Composition updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_COMPOSITION_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*nextComposition.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(nextComposition.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -773,13 +931,40 @@ func (s *Service) UpdateComposition(ctx context.Context, ehrID uuid.UUID, previo
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.COMPOSITION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, compositionVersion, contribution.UID.Value, utils.Some(ehrID))
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to save composition: %w", err)
+		return rm.COMPOSITION{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Insert COMPOSITION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_composition (id, versioned_composition_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4)`, nextComposition.UID.V.OBJECT_VERSION_ID().Value, nextComposition.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to insert composition into the database: %w", err)
+	}
+	nextComposition.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_composition_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, nextComposition.UID.V.OBJECT_VERSION_ID().Value, compositionVersion)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to insert composition data into the database: %w", err)
+	}
+
+	// Update EHR with contribution ref
+	_, err = s.DB.Exec(ctx, `
+		UPDATE openehr.tbl_ehr_data
+		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true)
+		WHERE id = $2
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, ehrID)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to update EHR with new contribution: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -789,14 +974,14 @@ func (s *Service) UpdateComposition(ctx context.Context, ehrID uuid.UUID, previo
 	return nextComposition, nil
 }
 
-func (s *Service) DeleteComposition(ctx context.Context, ehrID uuid.UUID, versionedObjectID uuid.UUID) error {
+func (s *Service) DeleteVersionedComposition(ctx context.Context, ehrID uuid.UUID, versionedCompositionID uuid.UUID) error {
 	contribution := NewContribution("Composition deleted", terminology.AUDIT_CHANGE_TYPE_CODE_DELETED,
 		[]rm.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
 				Type:      rm.COMPOSITION_TYPE,
 				ID: rm.OBJECT_ID_from_HIER_OBJECT_ID(rm.HIER_OBJECT_ID{
-					Value: versionedObjectID.String(),
+					Value: versionedCompositionID.String(),
 				}),
 			},
 		},
@@ -812,13 +997,42 @@ func (s *Service) DeleteComposition(ctx context.Context, ehrID uuid.UUID, versio
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.Some(ehrID))
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	if err != nil {
-		return fmt.Errorf("failed to save contribution: %w", err)
+		return fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.DeleteVersionedObjectWithTx(ctx, tx, versionedObjectID)
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, contribution.UID.Value, contribution)
 	if err != nil {
-		return fmt.Errorf("failed to delete composition version: %w", err)
+		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Delete COMPOSITION (todo return 1 and check if deleted?)
+	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_object WHERE ehr_id = $1 AND versioned_composition_id = $2`, ehrID, versionedCompositionID)
+	if err != nil {
+		return fmt.Errorf("failed to delete composition from the database: %w", err)
+	}
+
+	// Update EHR, add contribution and remove composition ref from list
+	_, err = s.DB.Exec(ctx, `
+		UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true) #- (
+			SELECT ARRAY['compositions', (idx-1)::text]
+			FROM jsonb_array_elements(data->'compositions') WITH ORDINALITY arr(item, idx)
+			WHERE item->'id'->>'value' = $2::text
+			LIMIT 1
+		)
+		WHERE id = $3
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, versionedCompositionID.String(),
+		ehrID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update EHR with new contribution: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -828,31 +1042,31 @@ func (s *Service) DeleteComposition(ctx context.Context, ehrID uuid.UUID, versio
 	return nil
 }
 
-func (s *Service) GetVersionedComposition(ctx context.Context, ehrID uuid.UUID, versionedObjectID string) (rm.VERSIONED_COMPOSITION, error) {
+func (s *Service) GetVersionedCompositionRawJSON(ctx context.Context, ehrID uuid.UUID, versionedCompositionID string) ([]byte, error) {
 	query := `
-		SELECT vod.data 
+		SELECT voc.data 
 		FROM openehr.tbl_versioned_object vo
-		JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id
-		WHERE vo.type = $1
-		  AND vo.ehr_id = $2 
-		  AND vo.id = $3
+		JOIN openehr.tbl_versioned_composition voc ON voc.id = vo.id
+		WHERE vo.ehr_id = $1
+		  AND vo.id = $2
 		LIMIT 1
 	`
-	args := []any{rm.VERSIONED_COMPOSITION_TYPE, ehrID, versionedObjectID}
+	args := []any{ehrID, versionedCompositionID}
+
 	row := s.DB.QueryRow(ctx, query, args...)
 
-	var versionedComposition rm.VERSIONED_COMPOSITION
-	if err := row.Scan(&versionedComposition); err != nil {
+	var data []byte
+	if err := row.Scan(&data); err != nil {
 		if err == database.ErrNoRows {
-			return rm.VERSIONED_COMPOSITION{}, ErrCompositionNotFound
+			return nil, ErrCompositionNotFound
 		}
-		return rm.VERSIONED_COMPOSITION{}, fmt.Errorf("failed to fetch Versioned Composition by ID from database: %w", err)
+		return nil, fmt.Errorf("failed to fetch Versioned Composition by ID from database: %w", err)
 	}
 
-	return versionedComposition, nil
+	return data, nil
 }
 
-func (s *Service) GetVersionedCompositionRevisionHistory(ctx context.Context, ehrID uuid.UUID, versionedObjectID string) (rm.REVISION_HISTORY, error) {
+func (s *Service) GetVersionedCompositionRevisionHistoryRawJSON(ctx context.Context, ehrID uuid.UUID, versionedCompositionID string) ([]byte, error) {
 	query := `
 		SELECT jsonb_build_object(
 			'items', jsonb_agg(
@@ -878,61 +1092,71 @@ func (s *Service) GetVersionedCompositionRevisionHistory(ctx context.Context, eh
 			GROUP BY version->'id'->>'value'
 		) grouped
 	`
-	args := []any{ehrID, versionedObjectID}
+	args := []any{ehrID, versionedCompositionID}
 
 	row := s.DB.QueryRow(ctx, query, args...)
 
-	var revisionHistory rm.REVISION_HISTORY
-	err := row.Scan(&revisionHistory)
+	var data []byte
+	err := row.Scan(&data)
 	if err != nil {
 		if err == database.ErrNoRows {
-			return rm.REVISION_HISTORY{}, ErrCompositionNotFound
+			return nil, ErrCompositionNotFound
 		}
-		return rm.REVISION_HISTORY{}, fmt.Errorf("failed to fetch Revision History from database: %w", err)
+		return nil, fmt.Errorf("failed to fetch Revision History from database: %w", err)
 	}
 
-	return revisionHistory, nil
+	return data, nil
 }
 
-func (s *Service) GetVersionedCompositionVersionJSON(ctx context.Context, ehrID uuid.UUID, versionedObjectID string, filterAtTime time.Time, filterVersionID string) ([]byte, error) {
-	var query strings.Builder
-	var args []any
-	argNum := 1
-
-	query.WriteString(`
-		SELECT ovd.data 
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id
-		WHERE ov.type = $1
-		  AND ov.ehr_id = $2
-		  AND ov.versioned_object_id = $3
-	`)
-	args = []any{rm.COMPOSITION_TYPE, ehrID, versionedObjectID}
-	argNum += 3
+func (s *Service) GetCompositionAtTimeRawJSON(ctx context.Context, ehrID uuid.UUID, versionedCompositionID uuid.UUID, filterAtTime time.Time) ([]byte, error) {
+	query := `
+		SELECT cd.data 
+		FROM openehr.tbl_composition c
+		JOIN openehr.tbl_composition_data cd ON cd.id = c.id
+		WHERE c.ehr_id = $1 AND c.versioned_composition_id = $2
+	`
+	args := []any{ehrID, versionedCompositionID}
 
 	if !filterAtTime.IsZero() {
-		query.WriteString(fmt.Sprintf(`AND ov.created_at <= $%d `, argNum))
+		query += `AND c.created_at <= $3 `
 		args = append(args, filterAtTime)
-		argNum++
 	}
 
-	if filterVersionID != "" {
-		query.WriteString(fmt.Sprintf(`AND ov.id = $%d `, argNum))
-		args = append(args, filterVersionID)
-	}
+	query += `ORDER BY c.created_at DESC LIMIT 1`
+	row := s.DB.QueryRow(ctx, query, args...)
 
-	query.WriteString(`ORDER BY ov.created_at DESC LIMIT 1`)
-	row := s.DB.QueryRow(ctx, query.String(), args...)
-
-	var compositionVersionJSON []byte
-	if err := row.Scan(&compositionVersionJSON); err != nil {
+	var data []byte
+	if err := row.Scan(&data); err != nil {
 		if err == database.ErrNoRows {
 			return nil, ErrCompositionNotFound
 		}
 		return nil, fmt.Errorf("failed to fetch Composition version at time from database: %w", err)
 	}
 
-	return compositionVersionJSON, nil
+	return data, nil
+}
+
+func (s *Service) GetCompositionByIDRawJSON(ctx context.Context, ehrID uuid.UUID, versionedCompositionID uuid.UUID, compositionID string) ([]byte, error) {
+	query := `
+		SELECT cd.data 
+		FROM openehr.tbl_composition c
+		JOIN openehr.tbl_composition_data cd ON cd.id = c.id
+		WHERE c.ehr_id = $1 AND c.versioned_composition_id = $2 AND c.id = $3
+		LIMIT 1
+	`
+	args := []any{ehrID, versionedCompositionID, compositionID}
+
+	row := s.DB.QueryRow(ctx, query, args...)
+
+	var data []byte
+	if err := row.Scan(&data); err != nil {
+		if err == database.ErrNoRows {
+			return nil, ErrCompositionNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch Composition by ID from database: %w", err)
+	}
+
+	return data, nil
 }
 
 func (s *Service) ValidateDirectory(ctx context.Context, ehrID uuid.UUID, directory rm.FOLDER) error {
@@ -1078,13 +1302,13 @@ func (s *Service) CreateDirectory(ctx context.Context, ehrID uuid.UUID, director
 	}
 
 	versionedFolder := NewVersionedFolder(uuid.MustParse(directory.UID.V.OBJECT_VERSION_ID().UID()), ehrID)
-	folderVersion := NewOriginalVersion(*directory.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_FOLDER(directory), utils.None[rm.OBJECT_VERSION_ID]())
+	folderVersion := NewOriginalVersion(directory.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_FOLDER(directory), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Directory created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_FOLDER_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*directory.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(directory.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -1099,17 +1323,58 @@ func (s *Service) CreateDirectory(ctx context.Context, ehrID uuid.UUID, director
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.Some(ehrID))
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.FOLDER{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveVersionedObjectWithTx(ctx, tx, versionedFolder, utils.Some(ehrID))
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to save versioned folder: %w", err)
+		return rm.FOLDER{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, folderVersion, contribution.UID.Value, utils.Some(ehrID))
+
+	// Insert VERSIONED_FOLDER
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id) VALUES ($1, $2, $3)`, versionedFolder.UID.Value, rm.VERSIONED_FOLDER_TYPE, ehrID)
 	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to save folder version: %w", err)
+		return rm.FOLDER{}, fmt.Errorf("failed to insert versioned folder into the database: %w", err)
+	}
+	versionedFolder.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_folder (id, data) VALUES ($1, $2)`, versionedFolder.UID.Value, versionedFolder)
+	if err != nil {
+		return rm.FOLDER{}, fmt.Errorf("failed to insert versioned folder data into the database: %w", err)
+	}
+
+	// Insert FOLDER
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_folder (id, version_int, version_object_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, folderVersion.UID.Value, directory.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), directory.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
+	if err != nil {
+		return rm.FOLDER{}, fmt.Errorf("failed to insert folder version into the database: %w", err)
+	}
+	folderVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_folder_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, folderVersion.UID.Value, folderVersion)
+	if err != nil {
+		return rm.FOLDER{}, fmt.Errorf("failed to insert folder version data into the database: %w", err)
+	}
+
+	// Update EHR, add contribution ref to list
+	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(
+			jsonb_insert(
+				jsonb_set(data, '{directory}', $2::jsonb)
+			, '{folders, 0}', $2::jsonb)
+		, '{contributions, -1}', $1::jsonb, true)
+		WHERE id = $3
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, rm.OBJECT_REF{
+		Type:      rm.VERSIONED_FOLDER_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(versionedFolder.UID),
+	}, ehrID)
+	if err != nil {
+		return rm.FOLDER{}, fmt.Errorf("failed to update EHR with new contribution: %w", err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
@@ -1120,8 +1385,8 @@ func (s *Service) CreateDirectory(ctx context.Context, ehrID uuid.UUID, director
 }
 
 func (s *Service) ExistsDirectory(ctx context.Context, ehrID uuid.UUID) (bool, error) {
-	query := `SELECT 1 FROM openehr.tbl_object_version ov WHERE ov.ehr_id = $1 AND ov.type = $2 LIMIT 1`
-	args := []any{ehrID, rm.FOLDER_TYPE}
+	query := `SELECT 1 FROM openehr.tbl_versioned_object vo WHERE vo.ehr_id = $1 AND vo.type = $2 LIMIT 1`
+	args := []any{ehrID, rm.VERSIONED_FOLDER_TYPE}
 
 	var exists int
 	if err := s.DB.QueryRow(ctx, query, args...).Scan(&exists); err != nil {
@@ -1134,31 +1399,46 @@ func (s *Service) ExistsDirectory(ctx context.Context, ehrID uuid.UUID) (bool, e
 	return true, nil
 }
 
-func (s *Service) GetDirectory(ctx context.Context, ehrID uuid.UUID) (rm.FOLDER, error) {
+func (s *Service) GetDirectoryID(ctx context.Context, ehrID uuid.UUID) (rm.OBJECT_VERSION_ID, error) {
+	query := `SELECT id FROM openehr.tbl_folder WHERE ehr_id = $1 ORDER BY version_int DESC LIMIT 1`
+	args := []any{ehrID}
+
+	var id string
+	if err := s.DB.QueryRow(ctx, query, args...).Scan(&id); err != nil {
+		if err == database.ErrNoRows {
+			return rm.OBJECT_VERSION_ID{}, ErrDirectoryNotFound
+		}
+		return rm.OBJECT_VERSION_ID{}, fmt.Errorf("failed to fetch Directory ID from database: %w", err)
+	}
+
+	return rm.OBJECT_VERSION_ID{Value: id}, nil
+}
+
+func (s *Service) GetDirectoryRawJSON(ctx context.Context, ehrID uuid.UUID) ([]byte, error) {
 	query := `
-		SELECT ovd.object_data
-        FROM openehr.tbl_object_version ov
-        JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id
-        WHERE ov.type = $1
-          AND ov.ehr_id = $2
-        ORDER BY ov.created_at DESC
+		SELECT fd.data
+        FROM openehr.tbl_folder f
+        JOIN openehr.tbl_folder_data fd ON fd.id = f.id
+        WHERE f.ehr_id = $2
+        ORDER BY f.created_at DESC
         LIMIT 1
 	`
 	args := []any{rm.FOLDER_TYPE, ehrID}
+
 	row := s.DB.QueryRow(ctx, query, args...)
 
-	var directory rm.FOLDER
-	if err := row.Scan(&directory); err != nil {
+	var data []byte
+	if err := row.Scan(&data); err != nil {
 		if err == database.ErrNoRows {
-			return rm.FOLDER{}, ErrDirectoryNotFound
+			return nil, ErrDirectoryNotFound
 		}
-		return rm.FOLDER{}, fmt.Errorf("failed to fetch Directory by EHR ID from database: %w", err)
+		return nil, fmt.Errorf("failed to fetch Directory by EHR ID from database: %w", err)
 	}
 
-	return directory, nil
+	return data, nil
 }
 
-func (s *Service) UpdateDirectory(ctx context.Context, ehrID uuid.UUID, previousDirectory, nextDirectory rm.FOLDER) (rm.FOLDER, error) {
+func (s *Service) UpdateDirectory(ctx context.Context, ehrID uuid.UUID, currentDirectoryID rm.OBJECT_VERSION_ID, nextDirectory rm.FOLDER) (rm.FOLDER, error) {
 	err := s.ValidateDirectory(ctx, ehrID, nextDirectory)
 	if err != nil {
 		return rm.FOLDER{}, err
@@ -1166,23 +1446,23 @@ func (s *Service) UpdateDirectory(ctx context.Context, ehrID uuid.UUID, previous
 
 	if !nextDirectory.UID.E {
 		nextDirectory.UID = utils.Some(rm.UID_BASED_ID_from_HIER_OBJECT_ID(&rm.HIER_OBJECT_ID{
-			Value: previousDirectory.UID.V.OBJECT_VERSION_ID().UID(),
+			Value: currentDirectoryID.UID(),
 		}))
 	}
 
-	updatedID, err := UpgradeObjectVersionID(previousDirectory.UID.V, *previousDirectory.UID.V.OBJECT_VERSION_ID())
+	updatedID, err := UpgradeObjectVersionID(nextDirectory.UID.V, currentDirectoryID)
 	if err != nil {
 		return rm.FOLDER{}, fmt.Errorf("failed to upgrade current Directory UID: %w", err)
 	}
 	nextDirectory.UID = utils.Some(rm.UID_BASED_ID_from_OBJECT_VERSION_ID(&updatedID))
 
-	folderVersion := NewOriginalVersion(*nextDirectory.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_FOLDER(nextDirectory), utils.Some(*previousDirectory.UID.V.OBJECT_VERSION_ID()))
+	folderVersion := NewOriginalVersion(nextDirectory.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_FOLDER(nextDirectory), utils.Some(currentDirectoryID))
 	contribution := NewContribution("Directory updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_FOLDER_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*nextDirectory.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(nextDirectory.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -1197,13 +1477,39 @@ func (s *Service) UpdateDirectory(ctx context.Context, ehrID uuid.UUID, previous
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.Some(ehrID))
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.FOLDER{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, folderVersion, contribution.UID.Value, utils.Some(ehrID))
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to save folder version: %w", err)
+		return rm.FOLDER{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Insert FOLDER
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_folder (id, version_int, version_object_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, folderVersion.UID.Value, nextDirectory.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), nextDirectory.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
+	if err != nil {
+		return rm.FOLDER{}, fmt.Errorf("failed to insert folder version into the database: %w", err)
+	}
+	folderVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_folder_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, folderVersion.UID.Value, folderVersion)
+	if err != nil {
+		return rm.FOLDER{}, fmt.Errorf("failed to insert folder version data into the database: %w", err)
+	}
+
+	// Update EHR with contribution ref
+	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true)
+		WHERE id = $2
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, ehrID)
+	if err != nil {
+		return rm.FOLDER{}, fmt.Errorf("failed to update EHR with new contribution: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1213,14 +1519,14 @@ func (s *Service) UpdateDirectory(ctx context.Context, ehrID uuid.UUID, previous
 	return nextDirectory, nil
 }
 
-func (s *Service) DeleteDirectory(ctx context.Context, ehrID uuid.UUID, versionedObjectID uuid.UUID) error {
+func (s *Service) DeleteDirectory(ctx context.Context, ehrID uuid.UUID, versionedFolderID uuid.UUID) error {
 	contribution := NewContribution("Directory deleted", terminology.AUDIT_CHANGE_TYPE_CODE_DELETED,
 		[]rm.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
 				Type:      rm.FOLDER_TYPE,
 				ID: rm.OBJECT_ID_from_HIER_OBJECT_ID(rm.HIER_OBJECT_ID{
-					Value: versionedObjectID.String(),
+					Value: versionedFolderID.String(),
 				}),
 			},
 		},
@@ -1236,13 +1542,36 @@ func (s *Service) DeleteDirectory(ctx context.Context, ehrID uuid.UUID, versione
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.Some(ehrID))
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	if err != nil {
-		return fmt.Errorf("failed to save contribution: %w", err)
+		return fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.DeleteVersionedObjectWithTx(ctx, tx, versionedObjectID)
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return fmt.Errorf("failed to delete directory version: %w", err)
+		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Delete FOLDER (todo return 1 and check if deleted?)
+	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_object WHERE ehr_id = $1 AND id = $2`, ehrID, versionedFolderID)
+	if err != nil {
+		return fmt.Errorf("failed to delete directory from the database: %w", err)
+	}
+
+	// Update EHR, add contribution ref to list and remove directory reference
+	// Folder reference is deleted as just the first entry, like the openehr docs specify
+	_, err = s.DB.Exec(ctx, `
+		UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true) #- '{directory}' #- '{folders, 0}'
+		WHERE id = $2
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, ehrID)
+	if err != nil {
+		return fmt.Errorf("failed to update EHR with new contribution: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1252,53 +1581,429 @@ func (s *Service) DeleteDirectory(ctx context.Context, ehrID uuid.UUID, versione
 	return nil
 }
 
-func (s *Service) GetFolderInDirectoryVersion(ctx context.Context, ehrID uuid.UUID, filterAtTime time.Time, filterVersionID string, filterPathParts []string) (rm.FOLDER, error) {
-	var queryBuilder strings.Builder
-	var args []any
-	argNum := 1
-
+func (s *Service) GetFolderAtTimeRawJSON(ctx context.Context, ehrID uuid.UUID, filterAtTime time.Time, path string) ([]byte, error) {
 	jsonPath := "$"
-	for _, part := range filterPathParts {
+	for part := range strings.SplitSeq(path, "/") {
 		jsonPath += fmt.Sprintf(`.folders ? (@.name.value == "%s")`, part)
 	}
 
-	queryBuilder.WriteString(fmt.Sprintf(`
-		SELECT jsonb_path_query_first(ovd.data, '%s') 
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id
-		WHERE ov.type = $1 
-		  AND ov.ehr_id = $2
-		  AND ovd.object_data @? $3
-	`, jsonPath))
-	args = []any{rm.FOLDER_TYPE, ehrID, jsonPath}
-	argNum += 3
+	query := fmt.Sprintf(`
+		SELECT jsonb_path_query_first(fd.data, '%s') 
+		FROM openehr.tbl_folder f
+		JOIN openehr.tbl_folder_data fd ON fd.id = f.id
+		WHERE f.ehr_id = $1
+		  AND fd.data @? $2
+	`, jsonPath)
+	args := []any{ehrID, jsonPath}
 
 	if !filterAtTime.IsZero() {
-		queryBuilder.WriteString(fmt.Sprintf(`AND ov.created_at <= $%d `, argNum))
+		query += `AND ov.created_at <= $3 `
 		args = append(args, filterAtTime)
-		argNum++
 	}
 
-	if filterVersionID != "" {
-		queryBuilder.WriteString(fmt.Sprintf(`AND ov.id = $%d `, argNum))
-		args = append(args, filterVersionID)
-	}
+	query += `ORDER BY ov.version_int DESC LIMIT 1`
 
-	queryBuilder.WriteString(`ORDER BY ov.created_at DESC LIMIT 1`)
-	row := s.DB.QueryRow(ctx, queryBuilder.String(), args...)
+	row := s.DB.QueryRow(ctx, query, args...)
 
-	var folder rm.FOLDER
-	if err := row.Scan(&folder); err != nil {
+	var data []byte
+	if err := row.Scan(&data); err != nil {
 		if err == database.ErrNoRows {
-			if len(filterPathParts) > 0 {
-				return rm.FOLDER{}, ErrFolderNotFoundInDirectory
+			if path != "" {
+				return nil, ErrFolderNotFoundInDirectory
 			}
-			return rm.FOLDER{}, ErrDirectoryNotFound
+			return nil, ErrDirectoryNotFound
 		}
-		return rm.FOLDER{}, fmt.Errorf("failed to fetch Folder at time from database: %w", err)
+		return nil, fmt.Errorf("failed to fetch Folder at time from database: %w", err)
 	}
 
-	return folder, nil
+	return data, nil
+}
+
+func (s *Service) GetFolderInDirectoryByIDRawJSON(ctx context.Context, ehrID uuid.UUID, folderID uuid.UUID, path string) ([]byte, error) {
+	jsonPath := "$"
+	for part := range strings.SplitSeq(path, "/") {
+		jsonPath += fmt.Sprintf(`.folders ? (@.name.value == "%s")`, part)
+	}
+
+	query := fmt.Sprintf(`
+		SELECT jsonb_path_query_first(fd.data, '%s') 
+		FROM openehr.tbl_folder f
+		JOIN openehr.tbl_folder_data fd ON fd.id = f.id
+		WHERE f.ehr_id = $1
+		  AND fd.data @? $2
+		  AND f.id = $3
+		LIMIT 1
+	`, jsonPath)
+	args := []any{ehrID, jsonPath, folderID}
+
+	row := s.DB.QueryRow(ctx, query, args...)
+
+	var data []byte
+	if err := row.Scan(&data); err != nil {
+		if err == database.ErrNoRows {
+			if path != "" {
+				return nil, ErrFolderNotFoundInDirectory
+			}
+			return nil, ErrDirectoryNotFound
+		}
+		return nil, fmt.Errorf("failed to fetch Folder at time from database: %w", err)
+	}
+
+	return data, nil
+}
+
+func (s *Service) ValidateTags(ctx context.Context, tags []rm.ITEM_TAG) error {
+	for i := range tags {
+		validateErr := tags[i].Validate("$")
+		if len(validateErr.Errs) > 0 {
+			return validateErr
+		}
+	}
+	return nil
+}
+
+func (s *Service) GetEHRTagsRawJSON(ctx context.Context, ehrID uuid.UUID) ([]byte, error) {
+	query := `
+		SELECT COALESCE(jsonb_agg(data), '[]'::jsonb)
+		FROM (
+			SELECT data
+			FROM openehr.tbl_ehr_status_tag
+			WHERE ehr_id = $1
+			UNION ALL
+			SELECT data
+			FROM openehr.tbl_composition_tag
+			WHERE ehr_id = $1
+		)
+	`
+	row := s.DB.QueryRow(ctx, query, ehrID)
+
+	var data []byte
+	if err := row.Scan(&data); err != nil {
+		return nil, fmt.Errorf("failed to fetch EHR tags by EHR ID from database: %w", err)
+	}
+
+	return data, nil
+}
+
+func (s *Service) GetCompositionTagsRawJSON(ctx context.Context, ehrID uuid.UUID, compositionID string) ([]byte, error) {
+	query := `
+		SELECT jsonb_agg(data)
+		FROM openehr.tbl_composition_tag
+		WHERE ehr_id = $1 AND composition_id = $2
+	`
+	row := s.DB.QueryRow(ctx, query, ehrID, compositionID)
+
+	var data []byte
+	if err := row.Scan(&data); err != nil {
+		if err == database.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to fetch Composition tags by ID from database: %w", err)
+	}
+
+	return data, nil
+}
+
+func (s *Service) GetVersionedCompositionTagsRawJSON(ctx context.Context, ehrID uuid.UUID, versionedCompositionID uuid.UUID) ([]byte, error) {
+	query := `
+		SELECT jsonb_agg(data)
+		FROM openehr.tbl_versioned_composition_tag
+		WHERE ehr_id = $1 AND versioned_composition_id = $2
+	`
+	row := s.DB.QueryRow(ctx, query, ehrID, versionedCompositionID)
+
+	var data []byte
+	if err := row.Scan(&data); err != nil {
+		if err == database.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to fetch Versioned Composition tags by ID from database: %w", err)
+	}
+
+	return data, nil
+}
+
+func (s *Service) ReplaceVersionedCompositionTags(ctx context.Context, ehrID, versionedCompositionID uuid.UUID, tags []rm.ITEM_TAG) ([]rm.ITEM_TAG, error) {
+	err := s.ValidateTags(ctx, tags)
+	if err != nil {
+		return nil, err
+	}
+
+	// Make sure target and object ref are correct
+	for i := range tags {
+		if tags[i].Target.Kind != rm.UID_BASED_ID_kind_HIER_OBJECT_ID {
+			return nil, fmt.Errorf("invalid tag target UID kind: expected HIER_OBJECT_ID, got %d", tags[i].Target.Kind)
+		}
+		if tags[i].Target.HIER_OBJECT_ID().Value != versionedCompositionID.String() {
+			return nil, fmt.Errorf("invalid tag target UID value: expected %s, got %s", versionedCompositionID.String(), tags[i].Target.HIER_OBJECT_ID().Value)
+		}
+		if tags[i].OwnerID.ID.Kind != rm.OBJECT_ID_kind_HIER_OBJECT_ID {
+			return nil, fmt.Errorf("invalid tag owner ID kind: expected HIER_OBJECT_ID, got %d", tags[i].OwnerID.ID.Kind)
+		}
+		if tags[i].OwnerID.ID.HIER_OBJECT_ID().Value != ehrID.String() {
+			return nil, fmt.Errorf("invalid tag owner ID value: expected %s, got %s", ehrID.String(), tags[i].OwnerID.ID.HIER_OBJECT_ID().Value)
+		}
+	}
+
+	contribution := NewContribution("Versioned Composition tags replaced", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
+		[]rm.OBJECT_REF{
+			{
+				Type:      rm.VERSIONED_COMPOSITION_TYPE,
+				Namespace: rm.Namespace_local,
+				ID: rm.OBJECT_ID_from_HIER_OBJECT_ID(rm.HIER_OBJECT_ID{
+					Value: versionedCompositionID.String(),
+				}),
+			},
+		},
+	)
+
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if rbErr := tx.Rollback(ctx); rbErr != nil && rbErr != database.ErrTxClosed {
+			s.Logger.ErrorContext(ctx, "failed to rollback transaction", "error", rbErr)
+		}
+	}()
+
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert contribution into the database: %w", err)
+	}
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Delete existing tags
+	_, err = tx.Exec(ctx, `
+		DELETE FROM openehr.tbl_versioned_composition_tag
+		WHERE ehr_id = $1 AND versioned_composition_id = $2
+	`, ehrID, versionedCompositionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete existing tags: %w", err)
+	}
+
+	// Insert new tags
+	for _, tag := range tags {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO openehr.tbl_versioned_composition_tag (versioned_composition_id, key, data, ehr_id)
+			VALUES ($1, $2, $3, $4)
+		`, versionedCompositionID, tag.Key, tag, ehrID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert tag: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return tags, nil
+}
+
+func (s *Service) ReplaceCompositionTags(ctx context.Context, ehrID uuid.UUID, compositionID string, tags []rm.ITEM_TAG) ([]rm.ITEM_TAG, error) {
+	err := s.ValidateTags(ctx, tags)
+	if err != nil {
+		return nil, err
+	}
+
+	// Make sure target and object ref are correct
+	for i := range tags {
+		if tags[i].Target.Kind != rm.UID_BASED_ID_kind_OBJECT_VERSION_ID {
+			return nil, fmt.Errorf("invalid tag target UID kind: expected OBJECT_VERSION_ID, got %s", tags[i].Target.Kind.String())
+		}
+		if tags[i].Target.OBJECT_VERSION_ID().Value != compositionID {
+			return nil, fmt.Errorf("invalid tag target UID value: expected %s, got %s", compositionID, tags[i].Target.OBJECT_VERSION_ID().Value)
+		}
+		if tags[i].OwnerID.ID.Kind != rm.OBJECT_ID_kind_HIER_OBJECT_ID {
+			return nil, fmt.Errorf("invalid tag owner ID kind: expected HIER_OBJECT_ID, got %s", tags[i].OwnerID.ID.Kind.String())
+		}
+		if tags[i].OwnerID.ID.HIER_OBJECT_ID().Value != ehrID.String() {
+			return nil, fmt.Errorf("invalid tag owner ID value: expected %s, got %s", ehrID.String(), tags[i].OwnerID.ID.HIER_OBJECT_ID().Value)
+		}
+	}
+
+	contribution := NewContribution("Composition tags replaced", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
+		[]rm.OBJECT_REF{
+			{
+				Type:      rm.COMPOSITION_TYPE,
+				Namespace: rm.Namespace_local,
+				ID: rm.OBJECT_ID_from_OBJECT_VERSION_ID(rm.OBJECT_VERSION_ID{
+					Value: compositionID,
+				}),
+			},
+		},
+	)
+
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if rbErr := tx.Rollback(ctx); rbErr != nil && rbErr != database.ErrTxClosed {
+			s.Logger.ErrorContext(ctx, "failed to rollback transaction", "error", rbErr)
+		}
+	}()
+
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert contribution into the database: %w", err)
+	}
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Delete existing tags
+	_, err = tx.Exec(ctx, `
+		DELETE FROM openehr.tbl_composition_tag ct
+		JOIN openehr.tbl_composition c ON c.id = ct.composition_id
+		WHERE ehr_id = $1 AND data->'target'->'id'->>'value' = $2
+	`, ehrID, compositionID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to delete existing tags: %w", err)
+	}
+
+	for _, tag := range tags {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO openehr.tbl_tag (ehr_id, data)
+			VALUES ($1, $2)
+		`, ehrID, tag)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert tag: %w", err)
+		}
+	}
+
+	// Update EHR with contribution ref
+	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true)
+		WHERE id = $2
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, ehrID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update EHR with new contribution: %w", err)
+	}
+
+	// Update EHR with new tags
+	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+		SET data = jsonb_set(
+			data,
+			'{tags}',
+			(
+				SELECT jsonb_agg(item)
+				FROM (
+					SELECT item
+					FROM jsonb_array_elements(data->'tags') AS item
+					WHERE item->'target''id'->>'value' != $2::text
+					UNION ALL
+					SELECT item
+					FROM unnest($3::jsonb[]) AS item
+				)
+			)
+		)
+		WHERE id = $1
+	`, ehrID, compositionID, tags)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update EHR with new tags: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return tags, nil
+}
+
+func (s *Service) DeleteVersionedCompositionTagByKey(ctx context.Context, ehrID uuid.UUID, versionedCompositionID uuid.UUID, key string) error {
+	contribution := NewContribution("Versioned Composition tag deleted", terminology.AUDIT_CHANGE_TYPE_CODE_DELETED,
+		[]rm.OBJECT_REF{
+			{
+				Type:      rm.VERSIONED_COMPOSITION_TYPE,
+				Namespace: rm.Namespace_local,
+				ID: rm.OBJECT_ID_from_HIER_OBJECT_ID(rm.HIER_OBJECT_ID{
+					Value: versionedCompositionID.String(),
+				}),
+			},
+		},
+	)
+
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if rbErr := tx.Rollback(ctx); rbErr != nil && rbErr != database.ErrTxClosed {
+			s.Logger.ErrorContext(ctx, "failed to rollback transaction", "error", rbErr)
+		}
+	}()
+
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
+	if err != nil {
+		return fmt.Errorf("failed to insert contribution into the database: %w", err)
+	}
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
+	if err != nil {
+		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Delete the tag
+	_, err = s.DB.Exec(ctx, `
+		DELETE FROM openehr.tbl_tag
+		WHERE ehr_id = $1
+		  AND data->'target'->'id'->>'value' = $2
+		  AND data->>'key' = $3
+	`, ehrID, versionedCompositionID.String(), key)
+	if err != nil {
+		return fmt.Errorf("failed to delete Versioned Composition tag by key: %w", err)
+	}
+
+	// Update EHR
+	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true)
+		WHERE id = $2
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, ehrID)
+	if err != nil {
+		return fmt.Errorf("failed to update EHR with new contribution: %w", err)
+	}
+
+	// Update EHR with new tags
+	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+		SET data = jsonb_set(
+			data,
+			'{tags}',
+			(
+				SELECT jsonb_agg(item)
+				FROM jsonb_array_elements(data->'tags') AS item
+				WHERE item->'target''id'->>'value' != $2::text
+					AND item->>'key' != $3::text
+			)
+		)
+		WHERE id = $1
+	`, ehrID, versionedCompositionID, key)
+	if err != nil {
+		return fmt.Errorf("failed to update EHR with new tags: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Service) ValidateAgent(ctx context.Context, agent rm.AGENT) error {
@@ -1350,13 +2055,13 @@ func (s *Service) CreateAgent(ctx context.Context, agent rm.AGENT) (rm.AGENT, er
 	}
 
 	versionedParty := NewVersionedParty(uuid.MustParse(agent.UID.V.OBJECT_VERSION_ID().UID()))
-	agentVersion := NewOriginalVersion(*agent.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_AGENT(agent), utils.None[rm.OBJECT_VERSION_ID]())
+	agentVersion := NewOriginalVersion(agent.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_AGENT(agent), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Agent created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_PARTY_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*agent.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(agent.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -1371,17 +2076,37 @@ func (s *Service) CreateAgent(ctx context.Context, agent rm.AGENT) (rm.AGENT, er
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.AGENT{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveVersionedObjectWithTx(ctx, tx, versionedParty, utils.None[uuid.UUID]())
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to save versioned party: %w", err)
+		return rm.AGENT{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, agentVersion, contribution.UID.Value, utils.None[uuid.UUID]())
+
+	// Insert VERSIONED_PARTY
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
 	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to save agent: %w", err)
+		return rm.AGENT{}, fmt.Errorf("failed to insert versioned party into the database: %w", err)
+	}
+	versionedParty.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_party (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
+	if err != nil {
+		return rm.AGENT{}, fmt.Errorf("failed to insert versioned party data into the database: %w", err)
+	}
+
+	// Insert AGENT
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_agent (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, agentVersion.UID.Value, agentVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
+	if err != nil {
+		return rm.AGENT{}, fmt.Errorf("failed to insert agent version into the database: %w", err)
+	}
+	agentVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_agent_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, agentVersion.UID.Value, agentVersion)
+	if err != nil {
+		return rm.AGENT{}, fmt.Errorf("failed to insert agent version data into the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1391,50 +2116,75 @@ func (s *Service) CreateAgent(ctx context.Context, agent rm.AGENT) (rm.AGENT, er
 	return agent, nil
 }
 
-func (s *Service) GetCurrentAgentVersionByVersionedPartyID(ctx context.Context, versionedPartyID uuid.UUID) (rm.AGENT, error) {
+func (s *Service) GetAgentID(ctx context.Context, versionedPartyID uuid.UUID) (rm.OBJECT_VERSION_ID, error) {
 	query := `
-		SELECT ovd.object_data 
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.versioned_object_id = $1 AND ov.type = $2
-		ORDER BY ov.created_at DESC
+		SELECT a.id 
+		FROM openehr.tbl_agent a
+		WHERE a.versioned_party_id = $1
+		ORDER BY version_int DESC
+		LIMIT 1
+	`
+	row := s.DB.QueryRow(ctx, query, versionedPartyID)
+
+	var agentID string
+	err := row.Scan(&agentID)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return rm.OBJECT_VERSION_ID{}, ErrAgentNotFound
+		}
+		return rm.OBJECT_VERSION_ID{}, fmt.Errorf("failed to get latest agent by versioned party ID: %w", err)
+	}
+
+	return rm.OBJECT_VERSION_ID{Value: agentID}, nil
+}
+
+func (s *Service) GetAgentByVersionedPartyIDRawJSON(ctx context.Context, versionedPartyID uuid.UUID) ([]byte, error) {
+	query := `
+		SELECT ad.data 
+		FROM openehr.tbl_agent a
+		JOIN openehr.tbl_agent_data ad ON ad.id = a.id 
+		WHERE a.versioned_party_id = $1
+		ORDER BY version_int DESC
 		LIMIT 1
 	`
 
-	var agent rm.AGENT
-	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.AGENT_TYPE).Scan(&agent)
+	row := s.DB.QueryRow(ctx, query, versionedPartyID)
+
+	var data []byte
+	err := row.Scan(&data)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
-			return rm.AGENT{}, ErrAgentNotFound
+			return nil, ErrAgentNotFound
 		}
-		return rm.AGENT{}, fmt.Errorf("failed to get latest agent by versioned party ID: %w", err)
+		return nil, fmt.Errorf("failed to get latest agent by versioned party ID: %w", err)
 	}
 
-	return agent, nil
+	return data, nil
 }
 
-func (s *Service) GetAgentAtVersion(ctx context.Context, versionID string) (rm.AGENT, error) {
+func (s *Service) GetAgentAtVersionRawJSON(ctx context.Context, agentID string) ([]byte, error) {
 	query := `
-		SELECT ovd.object_data 
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.id = $1 AND ov.type = $2
+		SELECT data 
+		FROM openehr.tbl_agent_data
+		WHERE id = $1
 		LIMIT 1
 	`
 
-	var agent rm.AGENT
-	err := s.DB.QueryRow(ctx, query, versionID, rm.AGENT_TYPE).Scan(&agent)
+	row := s.DB.QueryRow(ctx, query, agentID)
+
+	var data []byte
+	err := row.Scan(&data)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
-			return rm.AGENT{}, ErrAgentNotFound
+			return nil, ErrAgentNotFound
 		}
-		return rm.AGENT{}, fmt.Errorf("failed to get agent at version: %w", err)
+		return nil, fmt.Errorf("failed to get agent at version from database: %w", err)
 	}
 
-	return agent, nil
+	return data, nil
 }
 
-func (s *Service) UpdateAgent(ctx context.Context, currentAgent, nextAgent rm.AGENT) (rm.AGENT, error) {
+func (s *Service) UpdateAgent(ctx context.Context, currentAgentID rm.OBJECT_VERSION_ID, nextAgent rm.AGENT) (rm.AGENT, error) {
 	err := s.ValidateAgent(ctx, nextAgent)
 	if err != nil {
 		return rm.AGENT{}, err
@@ -1442,23 +2192,23 @@ func (s *Service) UpdateAgent(ctx context.Context, currentAgent, nextAgent rm.AG
 
 	if !nextAgent.UID.E {
 		nextAgent.UID = utils.Some(rm.UID_BASED_ID_from_HIER_OBJECT_ID(&rm.HIER_OBJECT_ID{
-			Value: currentAgent.UID.V.OBJECT_VERSION_ID().UID(),
+			Value: currentAgentID.UID(),
 		}))
 	}
 
-	updatedID, err := UpgradeObjectVersionID(currentAgent.UID.V, *currentAgent.UID.V.OBJECT_VERSION_ID())
+	updatedID, err := UpgradeObjectVersionID(nextAgent.UID.V, currentAgentID)
 	if err != nil {
 		return rm.AGENT{}, fmt.Errorf("failed to upgrade current Agent UID: %w", err)
 	}
 	nextAgent.UID = utils.Some(rm.UID_BASED_ID_from_OBJECT_VERSION_ID(&updatedID))
 
-	agentVersion := NewOriginalVersion(*nextAgent.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_AGENT(nextAgent), utils.Some(*currentAgent.UID.V.OBJECT_VERSION_ID()))
+	agentVersion := NewOriginalVersion(nextAgent.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_AGENT(nextAgent), utils.Some(currentAgentID))
 	contribution := NewContribution("Agent updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_PARTY_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*nextAgent.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(nextAgent.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -1473,13 +2223,26 @@ func (s *Service) UpdateAgent(ctx context.Context, currentAgent, nextAgent rm.AG
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.AGENT{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, agentVersion, contribution.UID.Value, utils.None[uuid.UUID]())
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to save agent: %w", err)
+		return rm.AGENT{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Insert AGENT
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_agent (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, agentVersion.UID.Value, 1, uuid.MustParse(strings.Split(nextAgent.UID.V.OBJECT_VERSION_ID().UID(), "::")[0]), rm.AGENT_TYPE, contribution.UID.Value)
+	if err != nil {
+		return rm.AGENT{}, fmt.Errorf("failed to insert agent version into the database: %w", err)
+	}
+	agentVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_agent_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, agentVersion.UID.Value, agentVersion)
+	if err != nil {
+		return rm.AGENT{}, fmt.Errorf("failed to insert agent version data into the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1489,23 +2252,14 @@ func (s *Service) UpdateAgent(ctx context.Context, currentAgent, nextAgent rm.AG
 	return nextAgent, nil
 }
 
-func (s *Service) DeleteAgent(ctx context.Context, versionedObjectID string) error {
-	// Check if agent exists
-	_, err := s.GetCurrentAgentVersionByVersionedPartyID(ctx, uuid.MustParse(strings.Split(versionedObjectID, "::")[0]))
-	if err != nil {
-		if errors.Is(err, ErrAgentNotFound) {
-			return ErrAgentNotFound
-		}
-		return fmt.Errorf("failed to get agent before deletion: %w", err)
-	}
-
+func (s *Service) DeleteAgent(ctx context.Context, versionedPartyID uuid.UUID) error {
 	contribution := NewContribution("Agent deleted", terminology.AUDIT_CHANGE_TYPE_CODE_DELETED,
 		[]rm.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
 				Type:      rm.AGENT_TYPE,
 				ID: rm.OBJECT_ID_from_HIER_OBJECT_ID(rm.HIER_OBJECT_ID{
-					Value: versionedObjectID,
+					Value: versionedPartyID.String(),
 				}),
 			},
 		},
@@ -1521,13 +2275,21 @@ func (s *Service) DeleteAgent(ctx context.Context, versionedObjectID string) err
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return fmt.Errorf("failed to save contribution: %w", err)
+		return fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.DeleteVersionedObjectWithTx(ctx, tx, uuid.MustParse(strings.Split(versionedObjectID, "::")[0]))
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return fmt.Errorf("failed to delete agent: %w", err)
+		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Delete VERSIONED_PARTY
+	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_party WHERE id = $1`, versionedPartyID)
+	if err != nil {
+		return fmt.Errorf("failed to delete agent from the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1586,13 +2348,13 @@ func (s *Service) CreatePerson(ctx context.Context, person rm.PERSON) (rm.PERSON
 	}
 
 	versionedParty := NewVersionedParty(uuid.MustParse(person.UID.V.OBJECT_VERSION_ID().UID()))
-	personVersion := NewOriginalVersion(*person.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_PERSON(person), utils.None[rm.OBJECT_VERSION_ID]())
+	personVersion := NewOriginalVersion(person.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_PERSON(person), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Person created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_PARTY_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*person.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(person.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -1607,17 +2369,37 @@ func (s *Service) CreatePerson(ctx context.Context, person rm.PERSON) (rm.PERSON
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.PERSON{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveVersionedObjectWithTx(ctx, tx, versionedParty, utils.None[uuid.UUID]())
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to save versioned party: %w", err)
+		return rm.PERSON{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, personVersion, contribution.UID.Value, utils.None[uuid.UUID]())
+
+	// Insert VERSIONED_PARTY
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
 	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to save person: %w", err)
+		return rm.PERSON{}, fmt.Errorf("failed to insert versioned party into the database: %w", err)
+	}
+	versionedParty.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_party (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
+	if err != nil {
+		return rm.PERSON{}, fmt.Errorf("failed to insert versioned party data into the database: %w", err)
+	}
+
+	// Insert PERSON
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_person (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, personVersion.UID.Value, personVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
+	if err != nil {
+		return rm.PERSON{}, fmt.Errorf("failed to insert person version into the database: %w", err)
+	}
+	personVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_person_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, personVersion.UID.Value, personVersion)
+	if err != nil {
+		return rm.PERSON{}, fmt.Errorf("failed to insert person version data into the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1627,50 +2409,68 @@ func (s *Service) CreatePerson(ctx context.Context, person rm.PERSON) (rm.PERSON
 	return person, nil
 }
 
-func (s *Service) GetCurrentPersonVersionByVersionedPartyID(ctx context.Context, versionedPartyID uuid.UUID) (rm.PERSON, error) {
+func (s *Service) GetCurrentPersonID(ctx context.Context, versionedPartyID uuid.UUID) (rm.OBJECT_VERSION_ID, error) {
 	query := `
-		SELECT ovd.object_data
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.versioned_object_id = $1 AND ov.type = $2
-		ORDER BY ov.created_at DESC
+		SELECT p.id 
+		FROM openehr.tbl_person p
+		WHERE p.versioned_party_id = $1
+		ORDER BY version_int DESC
+		LIMIT 1
+	`
+	row := s.DB.QueryRow(ctx, query, versionedPartyID)
+
+	var personID string
+	err := row.Scan(&personID)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return rm.OBJECT_VERSION_ID{}, ErrPersonNotFound
+		}
+		return rm.OBJECT_VERSION_ID{}, fmt.Errorf("failed to get latest person by versioned party ID: %w", err)
+	}
+
+	return rm.OBJECT_VERSION_ID{Value: personID}, nil
+}
+
+func (s *Service) GetPersonByVersionedPartyIDRawJSON(ctx context.Context, versionedPartyID uuid.UUID) ([]byte, error) {
+	query := `
+		SELECT pd.data 
+		FROM openehr.tbl_person p
+		JOIN openehr.tbl_person_data pd ON pd.id = p.id 
+		WHERE p.versioned_party_id = $1
+		ORDER BY version_int DESC
 		LIMIT 1
 	`
 
-	var person rm.PERSON
-	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.PERSON_TYPE).Scan(&person)
+	row := s.DB.QueryRow(ctx, query, versionedPartyID)
+
+	var data []byte
+	err := row.Scan(&data)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
-			return rm.PERSON{}, ErrPersonNotFound
+			return nil, ErrPersonNotFound
 		}
-		return rm.PERSON{}, fmt.Errorf("failed to get latest person by versioned party ID: %w", err)
+		return nil, fmt.Errorf("failed to get latest person by versioned party ID: %w", err)
 	}
 
-	return person, nil
+	return data, nil
 }
 
-func (s *Service) GetPersonAtVersion(ctx context.Context, versionID string) (rm.PERSON, error) {
-	query := `
-		SELECT ovd.object_data
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.id = $1 AND ov.type = $2
-		LIMIT 1
-	`
+func (s *Service) GetPersonByIDRawJSON(ctx context.Context, personID string) ([]byte, error) {
+	query := `SELECT data FROM openehr.tbl_person_data WHERE id = $1 LIMIT 1`
 
-	var person rm.PERSON
-	err := s.DB.QueryRow(ctx, query, versionID, rm.GROUP_TYPE).Scan(&person)
+	var data []byte
+	err := s.DB.QueryRow(ctx, query, personID).Scan(&data)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
-			return rm.PERSON{}, ErrPersonNotFound
+			return nil, ErrPersonNotFound
 		}
-		return rm.PERSON{}, fmt.Errorf("failed to get person at version: %w", err)
+		return nil, fmt.Errorf("failed to get person: %w", err)
 	}
 
-	return person, nil
+	return data, nil
 }
 
-func (s *Service) UpdatePerson(ctx context.Context, previousPerson, nextPerson rm.PERSON) (rm.PERSON, error) {
+func (s *Service) UpdatePerson(ctx context.Context, currentPersonID rm.OBJECT_VERSION_ID, nextPerson rm.PERSON) (rm.PERSON, error) {
 	err := s.ValidatePerson(ctx, nextPerson)
 	if err != nil {
 		return rm.PERSON{}, err
@@ -1678,23 +2478,23 @@ func (s *Service) UpdatePerson(ctx context.Context, previousPerson, nextPerson r
 
 	if !nextPerson.UID.E {
 		nextPerson.UID = utils.Some(rm.UID_BASED_ID_from_HIER_OBJECT_ID(&rm.HIER_OBJECT_ID{
-			Value: previousPerson.UID.V.HIER_OBJECT_ID().Value,
+			Value: currentPersonID.Value,
 		}))
 	}
 
-	updatedID, err := UpgradeObjectVersionID(previousPerson.UID.V, *previousPerson.UID.V.OBJECT_VERSION_ID())
+	updatedID, err := UpgradeObjectVersionID(nextPerson.UID.V, currentPersonID)
 	if err != nil {
 		return rm.PERSON{}, fmt.Errorf("failed to upgrade current Person UID: %w", err)
 	}
 	nextPerson.UID = utils.Some(rm.UID_BASED_ID_from_OBJECT_VERSION_ID(&updatedID))
 
-	personVersion := NewOriginalVersion(*nextPerson.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_PERSON(nextPerson), utils.Some(*previousPerson.UID.V.OBJECT_VERSION_ID()))
+	personVersion := NewOriginalVersion(nextPerson.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_PERSON(nextPerson), utils.Some(currentPersonID))
 	contribution := NewContribution("Person updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_PARTY_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*nextPerson.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(nextPerson.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -1709,13 +2509,26 @@ func (s *Service) UpdatePerson(ctx context.Context, previousPerson, nextPerson r
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.PERSON{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, personVersion, contribution.UID.Value, utils.None[uuid.UUID]())
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to save person: %w", err)
+		return rm.PERSON{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Insert PERSON
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_person (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, personVersion.UID.Value, 1, uuid.MustParse(strings.Split(nextPerson.UID.V.OBJECT_VERSION_ID().UID(), "::")[0]), rm.PERSON_TYPE, contribution.UID.Value)
+	if err != nil {
+		return rm.PERSON{}, fmt.Errorf("failed to insert person version into the database: %w", err)
+	}
+	personVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_person_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, personVersion.UID.Value, personVersion)
+	if err != nil {
+		return rm.PERSON{}, fmt.Errorf("failed to insert person version data into the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1726,15 +2539,6 @@ func (s *Service) UpdatePerson(ctx context.Context, previousPerson, nextPerson r
 }
 
 func (s *Service) DeletePerson(ctx context.Context, versionedObjectID uuid.UUID) error {
-	// Check if person exists
-	_, err := s.GetCurrentPersonVersionByVersionedPartyID(ctx, versionedObjectID)
-	if err != nil {
-		if errors.Is(err, ErrPersonNotFound) {
-			return ErrPersonNotFound
-		}
-		return fmt.Errorf("failed to get person before deletion: %w", err)
-	}
-
 	contribution := NewContribution("Person deleted", terminology.AUDIT_CHANGE_TYPE_CODE_DELETED,
 		[]rm.OBJECT_REF{
 			{
@@ -1757,13 +2561,21 @@ func (s *Service) DeletePerson(ctx context.Context, versionedObjectID uuid.UUID)
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return fmt.Errorf("failed to save contribution: %w", err)
+		return fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.DeleteVersionedObjectWithTx(ctx, tx, versionedObjectID)
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return fmt.Errorf("failed to delete person: %w", err)
+		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Delete PERSON
+	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_party WHERE id = $1`, versionedObjectID)
+	if err != nil {
+		return fmt.Errorf("failed to delete person from the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1822,13 +2634,13 @@ func (s *Service) CreateGroup(ctx context.Context, group rm.GROUP) (rm.GROUP, er
 	}
 
 	versionedParty := NewVersionedParty(uuid.MustParse(group.UID.V.OBJECT_VERSION_ID().UID()))
-	groupVersion := NewOriginalVersion(*group.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_GROUP(group), utils.None[rm.OBJECT_VERSION_ID]())
+	groupVersion := NewOriginalVersion(group.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_GROUP(group), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Group created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_PARTY_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*group.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(group.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -1843,17 +2655,37 @@ func (s *Service) CreateGroup(ctx context.Context, group rm.GROUP) (rm.GROUP, er
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.GROUP{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveVersionedObjectWithTx(ctx, tx, versionedParty, utils.None[uuid.UUID]())
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to save versioned party: %w", err)
+		return rm.GROUP{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, groupVersion, contribution.UID.Value, utils.None[uuid.UUID]())
+
+	// Insert VERSIONED_PARTY
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
 	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to save group: %w", err)
+		return rm.GROUP{}, fmt.Errorf("failed to insert versioned party into the database: %w", err)
+	}
+	versionedParty.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_party (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
+	if err != nil {
+		return rm.GROUP{}, fmt.Errorf("failed to insert versioned party data into the database: %w", err)
+	}
+
+	// Insert GROUP
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_group (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, groupVersion.UID.Value, groupVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
+	if err != nil {
+		return rm.GROUP{}, fmt.Errorf("failed to insert group version into the database: %w", err)
+	}
+	groupVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_group_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, groupVersion.UID.Value, groupVersion)
+	if err != nil {
+		return rm.GROUP{}, fmt.Errorf("failed to insert group version data into the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1863,74 +2695,92 @@ func (s *Service) CreateGroup(ctx context.Context, group rm.GROUP) (rm.GROUP, er
 	return group, nil
 }
 
-func (s *Service) GetCurrentGroupVersionByVersionedPartyID(ctx context.Context, versionedPartyID uuid.UUID) (rm.GROUP, error) {
+func (s *Service) GetGroupID(ctx context.Context, versionedPartyID uuid.UUID) (rm.OBJECT_VERSION_ID, error) {
 	query := `
-		SELECT ovd.object_data
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.versioned_object_id = $1 AND ov.type = $2
-		ORDER BY ov.created_at DESC
+		SELECT g.id 
+		FROM openehr.tbl_group g
+		WHERE g.versioned_party_id = $1
+		ORDER BY version_int DESC
+		LIMIT 1
+	`
+	row := s.DB.QueryRow(ctx, query, versionedPartyID)
+
+	var groupID string
+	err := row.Scan(&groupID)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return rm.OBJECT_VERSION_ID{}, ErrGroupNotFound
+		}
+		return rm.OBJECT_VERSION_ID{}, fmt.Errorf("failed to get latest group by versioned party ID: %w", err)
+	}
+
+	return rm.OBJECT_VERSION_ID{Value: groupID}, nil
+}
+
+func (s *Service) GetGroupByVersionedPartyIDRawJSON(ctx context.Context, versionedPartyID uuid.UUID) ([]byte, error) {
+	query := `
+		SELECT gd.data
+		FROM openehr.tbl_group g
+		JOIN openehr.tbl_group_data gd ON gd.id = g.id 
+		WHERE g.versioned_object_id = $1
+		ORDER BY g.version_int DESC
 		LIMIT 1
 	`
 
-	var group rm.GROUP
-	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.GROUP_TYPE).Scan(&group)
+	row := s.DB.QueryRow(ctx, query, versionedPartyID)
+
+	var data []byte
+	err := row.Scan(&data)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
-			return rm.GROUP{}, ErrGroupNotFound
+			return nil, ErrGroupNotFound
 		}
-		return rm.GROUP{}, fmt.Errorf("failed to get latest group by versioned party ID: %w", err)
+		return nil, fmt.Errorf("failed to get latest group by versioned party ID: %w", err)
 	}
 
-	return group, nil
+	return data, nil
 }
 
-func (s *Service) GetGroupAtVersion(ctx context.Context, versionID string) (rm.GROUP, error) {
-	query := `
-		SELECT ovd.object_data
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.id = $1 AND ov.type = $2
-		LIMIT 1
-	`
+func (s *Service) GetGroupRawJSON(ctx context.Context, groupID string) ([]byte, error) {
+	query := `SELECT data FROM tbl_group_data WHERE id = $1 LIMIT 1`
 
-	var group rm.GROUP
-	err := s.DB.QueryRow(ctx, query, versionID, rm.GROUP_TYPE).Scan(&group)
+	var data []byte
+	err := s.DB.QueryRow(ctx, query, groupID).Scan(&data)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
-			return rm.GROUP{}, ErrGroupNotFound
+			return nil, ErrGroupNotFound
 		}
-		return rm.GROUP{}, fmt.Errorf("failed to get group at version: %w", err)
+		return nil, fmt.Errorf("failed to get group: %w", err)
 	}
 
-	return group, nil
+	return data, nil
 }
 
-func (s *Service) UpdateGroup(ctx context.Context, currentGroup, nextGroup rm.GROUP) (rm.GROUP, error) {
+func (s *Service) UpdateGroup(ctx context.Context, currentGroupID rm.OBJECT_VERSION_ID, nextGroup rm.GROUP) (rm.GROUP, error) {
 	err := s.ValidateGroup(ctx, nextGroup)
 	if err != nil {
 		return rm.GROUP{}, err
 	}
 
-	if !currentGroup.UID.E {
+	if !nextGroup.UID.E {
 		nextGroup.UID = utils.Some(rm.UID_BASED_ID_from_HIER_OBJECT_ID(&rm.HIER_OBJECT_ID{
-			Value: currentGroup.UID.V.OBJECT_VERSION_ID().UID(),
+			Value: currentGroupID.UID(),
 		}))
 	}
 
-	updatedID, err := UpgradeObjectVersionID(nextGroup.UID.V, *currentGroup.UID.V.OBJECT_VERSION_ID())
+	updatedID, err := UpgradeObjectVersionID(nextGroup.UID.V, currentGroupID)
 	if err != nil {
 		return rm.GROUP{}, fmt.Errorf("failed to upgrade current Group UID: %w", err)
 	}
 	nextGroup.UID = utils.Some(rm.UID_BASED_ID_from_OBJECT_VERSION_ID(&updatedID))
 
-	groupVersion := NewOriginalVersion(*nextGroup.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_GROUP(nextGroup), utils.Some(*currentGroup.UID.V.OBJECT_VERSION_ID()))
+	groupVersion := NewOriginalVersion(nextGroup.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_GROUP(nextGroup), utils.Some(currentGroupID))
 	contribution := NewContribution("Group updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_PARTY_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*nextGroup.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(nextGroup.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -1945,13 +2795,26 @@ func (s *Service) UpdateGroup(ctx context.Context, currentGroup, nextGroup rm.GR
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.GROUP{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, groupVersion, contribution.UID.Value, utils.None[uuid.UUID]())
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to save group: %w", err)
+		return rm.GROUP{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Insert GROUP
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_group (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, groupVersion.UID.Value, 1, uuid.MustParse(strings.Split(nextGroup.UID.V.OBJECT_VERSION_ID().UID(), "::")[0]), rm.GROUP_TYPE, contribution.UID.Value)
+	if err != nil {
+		return rm.GROUP{}, fmt.Errorf("failed to insert group version into the database: %w", err)
+	}
+	groupVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_group_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, groupVersion.UID.Value, groupVersion)
+	if err != nil {
+		return rm.GROUP{}, fmt.Errorf("failed to insert group version data into the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1961,14 +2824,14 @@ func (s *Service) UpdateGroup(ctx context.Context, currentGroup, nextGroup rm.GR
 	return nextGroup, nil
 }
 
-func (s *Service) DeleteGroup(ctx context.Context, versionedObjectID uuid.UUID) error {
+func (s *Service) DeleteGroup(ctx context.Context, versionedPartyID uuid.UUID) error {
 	contribution := NewContribution("Group deleted", terminology.AUDIT_CHANGE_TYPE_CODE_DELETED,
 		[]rm.OBJECT_REF{
 			{
 				Namespace: config.NAMESPACE_LOCAL,
 				Type:      rm.GROUP_TYPE,
 				ID: rm.OBJECT_ID_from_HIER_OBJECT_ID(rm.HIER_OBJECT_ID{
-					Value: versionedObjectID.String(),
+					Value: versionedPartyID.String(),
 				}),
 			},
 		},
@@ -1984,13 +2847,21 @@ func (s *Service) DeleteGroup(ctx context.Context, versionedObjectID uuid.UUID) 
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return fmt.Errorf("failed to save contribution: %w", err)
+		return fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.DeleteVersionedObjectWithTx(ctx, tx, versionedObjectID)
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return fmt.Errorf("failed to delete group: %w", err)
+		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Delete VERSIONED_PARTY
+	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_party WHERE id = $1`, versionedPartyID)
+	if err != nil {
+		return fmt.Errorf("failed to delete group from the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2049,13 +2920,13 @@ func (s *Service) CreateOrganisation(ctx context.Context, organisation rm.ORGANI
 	}
 
 	versionedParty := NewVersionedParty(uuid.MustParse(organisation.UID.V.OBJECT_VERSION_ID().UID()))
-	organisationVersion := NewOriginalVersion(*organisation.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_ORGANISATION(organisation), utils.None[rm.OBJECT_VERSION_ID]())
+	organisationVersion := NewOriginalVersion(organisation.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_ORGANISATION(organisation), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Organisation created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_PARTY_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*organisation.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(organisation.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -2070,17 +2941,37 @@ func (s *Service) CreateOrganisation(ctx context.Context, organisation rm.ORGANI
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.ORGANISATION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveVersionedObjectWithTx(ctx, tx, versionedParty, utils.None[uuid.UUID]())
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to save versioned party: %w", err)
+		return rm.ORGANISATION{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, organisationVersion, contribution.UID.Value, utils.None[uuid.UUID]())
+
+	// Insert VERSIONED_PARTY
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
 	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to save organisation: %w", err)
+		return rm.ORGANISATION{}, fmt.Errorf("failed to insert versioned party into the database: %w", err)
+	}
+	versionedParty.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_party (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
+	if err != nil {
+		return rm.ORGANISATION{}, fmt.Errorf("failed to insert versioned party data into the database: %w", err)
+	}
+
+	// Insert ORGANISATION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_organisation (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, organisationVersion.UID.Value, organisationVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
+	if err != nil {
+		return rm.ORGANISATION{}, fmt.Errorf("failed to insert organisation version into the database: %w", err)
+	}
+	organisationVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_organisation_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, organisationVersion.UID.Value, organisationVersion)
+	if err != nil {
+		return rm.ORGANISATION{}, fmt.Errorf("failed to insert organisation version data into the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2090,50 +2981,70 @@ func (s *Service) CreateOrganisation(ctx context.Context, organisation rm.ORGANI
 	return organisation, nil
 }
 
-func (s *Service) GetCurrentOrganisationVersionByVersionedPartyID(ctx context.Context, versionedPartyID uuid.UUID) (rm.ORGANISATION, error) {
+func (s *Service) GetCurrentOrganisationID(ctx context.Context, versionedPartyID uuid.UUID) (rm.OBJECT_VERSION_ID, error) {
 	query := `
-		SELECT ovd.object_data
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.versioned_object_id = $1 AND ov.type = $2
-		ORDER BY ov.created_at DESC
+		SELECT o.id 
+		FROM openehr.tbl_organisation o
+		WHERE o.versioned_party_id = $1
+		ORDER BY version_int DESC
+		LIMIT 1
+	`
+	row := s.DB.QueryRow(ctx, query, versionedPartyID)
+
+	var organisationID string
+	err := row.Scan(&organisationID)
+	if err != nil {
+		if errors.Is(err, database.ErrNoRows) {
+			return rm.OBJECT_VERSION_ID{}, ErrOrganisationNotFound
+		}
+		return rm.OBJECT_VERSION_ID{}, fmt.Errorf("failed to get latest organisation by versioned party ID: %w", err)
+	}
+
+	return rm.OBJECT_VERSION_ID{Value: organisationID}, nil
+}
+
+func (s *Service) GetOrganisationByVersionedPartyIDRawJSON(ctx context.Context, versionedPartyID uuid.UUID) ([]byte, error) {
+	query := `
+		SELECT od.data 
+		FROM openehr.tbl_organisation o
+		JOIN openehr.tbl_organisation_data od ON od.id = o.id 
+		WHERE o.versioned_party_id = $1
+		ORDER BY o.version_int DESC
 		LIMIT 1
 	`
 
-	var organisation rm.ORGANISATION
-	err := s.DB.QueryRow(ctx, query, versionedPartyID.String(), rm.AGENT_TYPE).Scan(&organisation)
+	row := s.DB.QueryRow(ctx, query, versionedPartyID)
+
+	var data []byte
+	err := row.Scan(&data)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
-			return rm.ORGANISATION{}, ErrOrganisationNotFound
+			return nil, ErrOrganisationNotFound
 		}
-		return rm.ORGANISATION{}, fmt.Errorf("failed to get latest organisation by versioned party ID: %w", err)
+		return nil, fmt.Errorf("failed to get latest organisation by versioned party ID: %w", err)
 	}
 
-	return organisation, nil
+	return data, nil
 }
 
-func (s *Service) GetOrganisationAtVersion(ctx context.Context, versionID string) (rm.ORGANISATION, error) {
-	query := `
-		SELECT ovd.object_data 
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.id = $1 AND ov.type = $2
-		LIMIT 1
-	`
+func (s *Service) GetOrganisationByIDRawJSON(ctx context.Context, organisationID string) ([]byte, error) {
+	query := `SELECT data FROM openehr.tbl_organisation_data WHERE id = $1 LIMIT 1`
 
-	var organisation rm.ORGANISATION
-	err := s.DB.QueryRow(ctx, query, versionID, rm.ORGANISATION_TYPE).Scan(&organisation)
+	row := s.DB.QueryRow(ctx, query, organisationID)
+
+	var data []byte
+	err := row.Scan(&data)
 	if err != nil {
 		if errors.Is(err, database.ErrNoRows) {
-			return rm.ORGANISATION{}, ErrOrganisationNotFound
+			return nil, ErrOrganisationNotFound
 		}
-		return rm.ORGANISATION{}, fmt.Errorf("failed to get organisation at version: %w", err)
+		return nil, fmt.Errorf("failed to get organisation: %w", err)
 	}
 
-	return organisation, nil
+	return data, nil
 }
 
-func (s *Service) UpdateOrganisation(ctx context.Context, currentOrganisation, nextOrganisation rm.ORGANISATION) (rm.ORGANISATION, error) {
+func (s *Service) UpdateOrganisation(ctx context.Context, currentOrganisationID rm.OBJECT_VERSION_ID, nextOrganisation rm.ORGANISATION) (rm.ORGANISATION, error) {
 	err := s.ValidateOrganisation(ctx, nextOrganisation)
 	if err != nil {
 		return rm.ORGANISATION{}, err
@@ -2141,23 +3052,23 @@ func (s *Service) UpdateOrganisation(ctx context.Context, currentOrganisation, n
 
 	if !nextOrganisation.UID.E {
 		nextOrganisation.UID = utils.Some(rm.UID_BASED_ID_from_HIER_OBJECT_ID(&rm.HIER_OBJECT_ID{
-			Value: currentOrganisation.UID.V.Value.(*rm.OBJECT_VERSION_ID).UID(),
+			Value: currentOrganisationID.UID(),
 		}))
 	}
 
-	updatedID, err := UpgradeObjectVersionID(nextOrganisation.UID.V, *currentOrganisation.UID.V.OBJECT_VERSION_ID())
+	updatedID, err := UpgradeObjectVersionID(nextOrganisation.UID.V, currentOrganisationID)
 	if err != nil {
 		return rm.ORGANISATION{}, fmt.Errorf("failed to upgrade current Organisation UID: %w", err)
 	}
 	nextOrganisation.UID = utils.Some(rm.UID_BASED_ID_from_OBJECT_VERSION_ID(&updatedID))
 
-	organisationVersion := NewOriginalVersion(*nextOrganisation.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_ORGANISATION(nextOrganisation), utils.Some(*currentOrganisation.UID.V.OBJECT_VERSION_ID()))
+	organisationVersion := NewOriginalVersion(nextOrganisation.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_ORGANISATION(nextOrganisation), utils.Some(currentOrganisationID))
 	contribution := NewContribution("Organisation updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_PARTY_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*currentOrganisation.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(nextOrganisation.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -2172,13 +3083,26 @@ func (s *Service) UpdateOrganisation(ctx context.Context, currentOrganisation, n
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.ORGANISATION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, organisationVersion, contribution.UID.Value, utils.None[uuid.UUID]())
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to save organisation: %w", err)
+		return rm.ORGANISATION{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Insert ORGANISATION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_organisation (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, organisationVersion.UID.Value, 1, uuid.MustParse(strings.Split(nextOrganisation.UID.V.OBJECT_VERSION_ID().UID(), "::")[0]), rm.ORGANISATION_TYPE, contribution.UID.Value)
+	if err != nil {
+		return rm.ORGANISATION{}, fmt.Errorf("failed to insert organisation version into the database: %w", err)
+	}
+	organisationVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_organisation_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, organisationVersion.UID.Value, organisationVersion)
+	if err != nil {
+		return rm.ORGANISATION{}, fmt.Errorf("failed to insert organisation version data into the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2189,15 +3113,6 @@ func (s *Service) UpdateOrganisation(ctx context.Context, currentOrganisation, n
 }
 
 func (s *Service) DeleteOrganisation(ctx context.Context, versionedObjectID uuid.UUID) error {
-	// Check if organisation exists
-	_, err := s.GetCurrentOrganisationVersionByVersionedPartyID(ctx, versionedObjectID)
-	if err != nil {
-		if errors.Is(err, ErrOrganisationNotFound) {
-			return ErrOrganisationNotFound
-		}
-		return fmt.Errorf("failed to get organisation before deletion: %w", err)
-	}
-
 	contribution := NewContribution("Organisation deleted", terminology.AUDIT_CHANGE_TYPE_CODE_DELETED,
 		[]rm.OBJECT_REF{
 			{
@@ -2220,13 +3135,21 @@ func (s *Service) DeleteOrganisation(ctx context.Context, versionedObjectID uuid
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return fmt.Errorf("failed to save contribution: %w", err)
+		return fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.DeleteVersionedObjectWithTx(ctx, tx, versionedObjectID)
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return fmt.Errorf("failed to delete organisation: %w", err)
+		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Delete ORGANISATION
+	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_party WHERE id = $1`, versionedObjectID)
+	if err != nil {
+		return fmt.Errorf("failed to delete organisation from the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2284,13 +3207,13 @@ func (s *Service) CreateRole(ctx context.Context, role rm.ROLE) (rm.ROLE, error)
 	}
 
 	versionedParty := NewVersionedParty(uuid.MustParse(role.UID.V.OBJECT_VERSION_ID().UID()))
-	roleVersion := NewOriginalVersion(*role.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_ROLE(role), utils.None[rm.OBJECT_VERSION_ID]())
+	roleVersion := NewOriginalVersion(role.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_ROLE(role), utils.None[rm.OBJECT_VERSION_ID]())
 	contribution := NewContribution("Role created", terminology.AUDIT_CHANGE_TYPE_CODE_CREATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_PARTY_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*role.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(role.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -2305,17 +3228,37 @@ func (s *Service) CreateRole(ctx context.Context, role rm.ROLE) (rm.ROLE, error)
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.ROLE{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveVersionedObjectWithTx(ctx, tx, versionedParty, utils.None[uuid.UUID]())
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to save versioned party: %w", err)
+		return rm.ROLE{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, roleVersion, contribution.UID.Value, utils.None[uuid.UUID]())
+
+	// Insert VERSIONED_PARTY
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
 	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to save role: %w", err)
+		return rm.ROLE{}, fmt.Errorf("failed to insert versioned party into the database: %w", err)
+	}
+	versionedParty.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_party (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
+	if err != nil {
+		return rm.ROLE{}, fmt.Errorf("failed to insert versioned party data into the database: %w", err)
+	}
+
+	// Insert ROLE
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_role (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, roleVersion.UID.Value, roleVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
+	if err != nil {
+		return rm.ROLE{}, fmt.Errorf("failed to insert role version into the database: %w", err)
+	}
+	roleVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_role_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, roleVersion.UID.Value, roleVersion)
+	if err != nil {
+		return rm.ROLE{}, fmt.Errorf("failed to insert role version data into the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2347,14 +3290,8 @@ func (s *Service) GetCurrentRoleVersionByVersionedPartyID(ctx context.Context, v
 	return role, nil
 }
 
-func (s *Service) GetRoleAtVersion(ctx context.Context, versionID string) (rm.ROLE, error) {
-	query := `
-		SELECT ovd.object_data
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id 
-		WHERE ov.id = $1 AND ov.type = $2
-		LIMIT 1
-	`
+func (s *Service) GetRoleRawJSON(ctx context.Context, versionID string) (rm.ROLE, error) {
+	query := `SELECT data FROM openehr.tbl_role_data WHERE id = $1 LIMIT 1`
 
 	var role rm.ROLE
 	err := s.DB.QueryRow(ctx, query, versionID, rm.ROLE_TYPE).Scan(&role)
@@ -2395,13 +3332,13 @@ func (s *Service) UpdateRole(ctx context.Context, versionedPartyID uuid.UUID, ro
 	}
 	role.UID = utils.Some(rm.UID_BASED_ID_from_OBJECT_VERSION_ID(&updatedID))
 
-	roleVersion := NewOriginalVersion(*role.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_ROLE(role), utils.Some(*currentRoleID))
+	roleVersion := NewOriginalVersion(role.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_ROLE(role), utils.Some(*currentRoleID))
 	contribution := NewContribution("Role updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
 			{
 				Type:      rm.VERSIONED_PARTY_TYPE,
 				Namespace: rm.Namespace_local,
-				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(*role.UID.V.OBJECT_VERSION_ID()),
+				ID:        rm.OBJECT_ID_from_OBJECT_VERSION_ID(role.UID.V.OBJECT_VERSION_ID()),
 			},
 		},
 	)
@@ -2416,13 +3353,26 @@ func (s *Service) UpdateRole(ctx context.Context, versionedPartyID uuid.UUID, ro
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to save contribution: %w", err)
+		return rm.ROLE{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.SaveObjectVersionWithTx(ctx, tx, roleVersion, contribution.UID.Value, utils.None[uuid.UUID]())
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to save role: %w", err)
+		return rm.ROLE{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Insert ROLE
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_role (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, roleVersion.UID.Value, roleVersion.UID.VersionTreeID().Int(), versionedPartyID, rm.ROLE_TYPE, contribution.UID.Value)
+	if err != nil {
+		return rm.ROLE{}, fmt.Errorf("failed to insert role version into the database: %w", err)
+	}
+	roleVersion.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_role_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, roleVersion.UID.Value, roleVersion)
+	if err != nil {
+		return rm.ROLE{}, fmt.Errorf("failed to insert role version data into the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2455,13 +3405,21 @@ func (s *Service) DeleteRole(ctx context.Context, versionedObjectID uuid.UUID) e
 		}
 	}()
 
-	err = s.SaveContributionWithTx(ctx, tx, contribution, utils.None[uuid.UUID]())
+	// Insert CONTRIBUTION
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	if err != nil {
-		return fmt.Errorf("failed to save contribution: %w", err)
+		return fmt.Errorf("failed to insert contribution into the database: %w", err)
 	}
-	err = s.DeleteVersionedObjectWithTx(ctx, tx, versionedObjectID)
+	contribution.SetModelName()
+	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 	if err != nil {
-		return fmt.Errorf("failed to delete role: %w", err)
+		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
+	}
+
+	// Delete ROLE
+	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_party WHERE id = $1`, versionedObjectID)
+	if err != nil {
+		return fmt.Errorf("failed to delete role from the database: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2471,26 +3429,20 @@ func (s *Service) DeleteRole(ctx context.Context, versionedObjectID uuid.UUID) e
 	return nil
 }
 
-func (s *Service) GetVersionedParty(ctx context.Context, versionedObjectID uuid.UUID) (rm.VERSIONED_PARTY, error) {
-	query := `
-		SELECT vod.data 
-		FROM openehr.tbl_versioned_object vo
-		JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id
-		WHERE vo.ehr_id IS NULL AND vo.type = $1 AND vo.id = $2 
-		LIMIT 1
-	`
+func (s *Service) GetVersionedPartyRawJSON(ctx context.Context, versionedPartyID uuid.UUID) ([]byte, error) {
+	query := `SELECT data FROM openehr.tbl_versioned_party WHERE id = $1 LIMIT 1`
 
-	var versionedParty rm.VERSIONED_PARTY
-	err := s.DB.QueryRow(ctx, query, rm.VERSIONED_PARTY_TYPE, versionedObjectID).Scan(&versionedParty)
+	row := s.DB.QueryRow(ctx, query, versionedPartyID)
+
+	var data []byte
+	err := row.Scan(&data)
 	if err != nil {
-		return rm.VERSIONED_PARTY{}, fmt.Errorf("failed to get versioned party by ID: %w", err)
+		return nil, fmt.Errorf("failed to get versioned party by ID: %w", err)
 	}
-	return versionedParty, nil
+	return data, nil
 }
 
-func (s *Service) GetVersionedPartyRevisionHistory(ctx context.Context, versionedObjectID uuid.UUID) (rm.REVISION_HISTORY, error) {
-	// Fetch Revision History
-	// Build array of REVISION_HISTORY_ITEM objects
+func (s *Service) GetVersionedPartyRevisionHistoryRawJSON(ctx context.Context, versionedObjectID uuid.UUID) ([]byte, error) {
 	query := `
 		SELECT jsonb_build_object(
 			'items', jsonb_agg(
@@ -2517,59 +3469,72 @@ func (s *Service) GetVersionedPartyRevisionHistory(ctx context.Context, versione
 		) grouped
 	`
 	args := []any{[]string{rm.AGENT_TYPE, rm.PERSON_TYPE, rm.GROUP_TYPE, rm.ORGANISATION_TYPE, rm.ROLE_TYPE}, versionedObjectID}
+
 	row := s.DB.QueryRow(ctx, query, args...)
 
-	var revisionHistory rm.REVISION_HISTORY
-	if err := row.Scan(&revisionHistory); err != nil {
+	var data []byte
+	if err := row.Scan(&data); err != nil {
 		if err == database.ErrNoRows {
-			return rm.REVISION_HISTORY{}, ErrRevisionHistoryNotFound
+			return nil, ErrRevisionHistoryNotFound
 		}
-		return rm.REVISION_HISTORY{}, fmt.Errorf("failed to fetch Revision History from database: %w", err)
+		return nil, fmt.Errorf("failed to fetch Revision History from database: %w", err)
 	}
 
-	return revisionHistory, nil
+	return data, nil
 }
 
-func (s *Service) GetVersionedPartyVersionJSON(ctx context.Context, versionedObjectID uuid.UUID, filterAtTime time.Time, filterVersionID string) ([]byte, error) {
-	var query strings.Builder
-	var args []any
-	argNum := 1
-
-	query.WriteString(`
+func (s *Service) GetVersionedPartyVersionAtTimeRawJSON(ctx context.Context, versionedPartyID uuid.UUID, filterAtTime time.Time) ([]byte, error) {
+	query := `
 		SELECT data 
-		FROM openehr.tbl_object_version ov
-		JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id
-		WHERE ov.ehr_id IS NULL AND ov.versioned_object_id = $1
-	`)
-	args = []any{versionedObjectID}
-	argNum++
+		FROM (
+			SELECT data, created_at
+			FROM openehr.tbl_agent a
+			JOIN openehr.tbl_agent_data ad ON ad.id = a.id
+			WHERE a.versioned_party_id = $1
+			UNION ALL
+			SELECT data, created_at
+			FROM openehr.tbl_person p
+			JOIN openehr.tbl_person_data pd ON pd.id = p.id
+			WHERE p.versioned_party_id = $1
+			UNION ALL
+			SELECT data, created_at
+			FROM openehr.tbl_group g
+			JOIN openehr.tbl_group_data gd ON gd.id = g.id
+			WHERE g.versioned_party_id = $1
+			UNION ALL
+			SELECT data, created_at
+			FROM openehr.tbl_organisation o
+			JOIN openehr.tbl_organisation_data od ON od.id = o.id
+			WHERE o.versioned_party_id = $1
+			UNION ALL
+			SELECT data, created_at
+			FROM openehr.tbl_role r
+			JOIN openehr.tbl_role_data rd ON rd.id = r.id
+			WHERE r.versioned_party_id = $1
+		)
+	`
+	args := []any{versionedPartyID}
 
 	if !filterAtTime.IsZero() {
-		query.WriteString(fmt.Sprintf(`AND ov.created_at <= $%d `, argNum))
+		query += `AND ov.created_at <= $2 `
 		args = append(args, filterAtTime)
-		argNum++
 	}
+	query += `ORDER BY ov.created_at DESC LIMIT 1`
 
-	if filterVersionID != "" {
-		query.WriteString(fmt.Sprintf(`AND ov.id = $%d `, argNum))
-		args = append(args, filterVersionID)
-	}
+	row := s.DB.QueryRow(ctx, query, args...)
 
-	query.WriteString(`ORDER BY ov.created_at DESC LIMIT 1`)
-	row := s.DB.QueryRow(ctx, query.String(), args...)
-
-	var partyVersionJSON []byte
-	if err := row.Scan(&partyVersionJSON); err != nil {
+	var data []byte
+	if err := row.Scan(&data); err != nil {
 		if err == database.ErrNoRows {
 			return nil, ErrVersionedPartyVersionNotFound
 		}
 		return nil, fmt.Errorf("failed to fetch Party version at time from database: %w", err)
 	}
 
-	return partyVersionJSON, nil
+	return data, nil
 }
 
-func (s *Service) GetContribution(ctx context.Context, contributionID string, ehrID utils.Optional[uuid.UUID]) (rm.CONTRIBUTION, error) {
+func (s *Service) GetContributionRawJSON(ctx context.Context, contributionID string, ehrID utils.Optional[uuid.UUID]) ([]byte, error) {
 	query := `
 		SELECT cd.data
 		FROM openehr.tbl_contribution c
@@ -2578,21 +3543,22 @@ func (s *Service) GetContribution(ctx context.Context, contributionID string, eh
 		LIMIT 1
 	`
 	args := []any{ehrID, contributionID}
+
 	row := s.DB.QueryRow(ctx, query, args...)
 
-	var contribution rm.CONTRIBUTION
-	if err := row.Scan(&contribution); err != nil {
+	var data []byte
+	if err := row.Scan(&data); err != nil {
 		if err == database.ErrNoRows {
-			return rm.CONTRIBUTION{}, ErrContributionNotFound
+			return nil, ErrContributionNotFound
 		}
-		return rm.CONTRIBUTION{}, fmt.Errorf("failed to fetch Contribution by ID from database: %w", err)
+		return nil, fmt.Errorf("failed to fetch Contribution by ID from database: %w", err)
 	}
 
-	return contribution, nil
+	return data, nil
 }
 
 func (s *Service) ExistsVersionedObject(ctx context.Context, versionedObjectID uuid.UUID) (bool, error) {
-	query := `SELECT 1 FROM openehr.tbl_versioned_object vo WHERE vo.id = $1 LIMIT 1`
+	query := `SELECT 1 FROM openehr.tbl_versioned_object WHERE id = $1 LIMIT 1`
 	args := []any{versionedObjectID}
 
 	var exists int
@@ -2606,147 +3572,147 @@ func (s *Service) ExistsVersionedObject(ctx context.Context, versionedObjectID u
 	return true, nil
 }
 
-func (s *Service) SaveEHRWithTx(ctx context.Context, tx pgx.Tx, ehrID uuid.UUID) error {
-	query := `INSERT INTO openehr.tbl_ehr (id) VALUES ($1)`
-	args := []any{ehrID}
-	_, err := tx.Exec(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("failed to insert EHR into the database: %w", err)
-	}
+// func (s *Service) SaveEHRWithTx(ctx context.Context, tx pgx.Tx, ehr rm.EHR) error {
+// 	query := `INSERT INTO openehr.tbl_ehr (id, data) VALUES ($1, $2)`
+// 	args := []any{ehr.EHRID.Value, ehr}
+// 	_, err := tx.Exec(ctx, query, args...)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to insert EHR into the database: %w", err)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
-func (s *Service) SaveContributionWithTx(ctx context.Context, tx pgx.Tx, contribution rm.CONTRIBUTION, ehrID utils.Optional[uuid.UUID]) error {
-	// Insert Contribution
-	query := `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`
-	args := []any{contribution.UID.Value, ehrID}
-	_, err := tx.Exec(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+// func (s *Service) SaveContributionWithTx(ctx context.Context, tx pgx.Tx, contribution rm.CONTRIBUTION, ehrID utils.Optional[uuid.UUID]) error {
+// 	// Insert Contribution
+// 	query := `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`
+// 	args := []any{contribution.UID.Value, ehrID}
+// 	_, err := tx.Exec(ctx, query, args...)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to insert contribution into the database: %w", err)
+// 	}
 
-	contribution.SetModelName()
-	query = `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`
-	args = []any{contribution.UID.Value, contribution}
-	_, err = tx.Exec(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+// 	contribution.SetModelName()
+// 	query = `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`
+// 	args = []any{contribution.UID.Value, contribution}
+// 	_, err = tx.Exec(ctx, query, args...)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
-func (s *Service) SaveVersionedObjectWithTx(ctx context.Context, tx pgx.Tx, versionedObject any, ehrID utils.Optional[uuid.UUID]) error {
-	var (
-		modelType string
-		id        string
-	)
-	switch v := versionedObject.(type) {
-	case rm.VERSIONED_EHR_STATUS:
-		v.SetModelName()
-		modelType = rm.VERSIONED_EHR_STATUS_TYPE
-		id = v.UID.Value
-	case rm.VERSIONED_EHR_ACCESS:
-		v.SetModelName()
-		modelType = rm.VERSIONED_EHR_ACCESS_TYPE
-		id = v.UID.Value
-	case rm.VERSIONED_COMPOSITION:
-		v.SetModelName()
-		modelType = rm.VERSIONED_COMPOSITION_TYPE
-		id = v.UID.Value
-	case rm.VERSIONED_FOLDER:
-		v.SetModelName()
-		modelType = rm.VERSIONED_FOLDER_TYPE
-		id = v.UID.Value
-	case rm.VERSIONED_PARTY:
-		v.SetModelName()
-		modelType = rm.VERSIONED_PARTY_TYPE
-		id = v.UID.Value
-	default:
-		return fmt.Errorf("unsupported versioned object type for creation: %T", versionedObject)
-	}
+// func (s *Service) SaveVersionedObjectWithTx(ctx context.Context, tx pgx.Tx, versionedObject any, ehrID utils.Optional[uuid.UUID]) error {
+// 	var (
+// 		modelType string
+// 		id        string
+// 	)
+// 	switch v := versionedObject.(type) {
+// 	case rm.VERSIONED_EHR_STATUS:
+// 		v.SetModelName()
+// 		modelType = rm.VERSIONED_EHR_STATUS_TYPE
+// 		id = v.UID.Value
+// 	case rm.VERSIONED_EHR_ACCESS:
+// 		v.SetModelName()
+// 		modelType = rm.VERSIONED_EHR_ACCESS_TYPE
+// 		id = v.UID.Value
+// 	case rm.VERSIONED_COMPOSITION:
+// 		v.SetModelName()
+// 		modelType = rm.VERSIONED_COMPOSITION_TYPE
+// 		id = v.UID.Value
+// 	case rm.VERSIONED_FOLDER:
+// 		v.SetModelName()
+// 		modelType = rm.VERSIONED_FOLDER_TYPE
+// 		id = v.UID.Value
+// 	case rm.VERSIONED_PARTY:
+// 		v.SetModelName()
+// 		modelType = rm.VERSIONED_PARTY_TYPE
+// 		id = v.UID.Value
+// 	default:
+// 		return fmt.Errorf("unsupported versioned object type for creation: %T", versionedObject)
+// 	}
 
-	query := `INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id) VALUES ($1, $2, $3)`
-	args := []any{id, modelType, ehrID}
-	_, err := tx.Exec(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("failed to insert versioned object into the database: %w", err)
-	}
+// 	query := `INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id) VALUES ($1, $2, $3)`
+// 	args := []any{id, modelType, ehrID}
+// 	_, err := tx.Exec(ctx, query, args...)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to insert versioned object into the database: %w", err)
+// 	}
 
-	query = `INSERT INTO openehr.tbl_versioned_object_data (id, data) VALUES ($1, $2)`
-	args = []any{id, versionedObject}
-	_, err = tx.Exec(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("failed to insert versioned object data into the database: %w", err)
-	}
+// 	query = `INSERT INTO openehr.tbl_versioned_object_data (id, data) VALUES ($1, $2)`
+// 	args = []any{id, versionedObject}
+// 	_, err = tx.Exec(ctx, query, args...)
+// 	if err != nil {
+// 		return fmt.Errorf("failed to insert versioned object data into the database: %w", err)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
-func (s *Service) SaveObjectVersionWithTx(ctx context.Context, tx pgx.Tx, version any, contributionID string, ehrID utils.Optional[uuid.UUID]) error {
-	var data rm.OriginalVersionDataUnion
-	switch v := version.(type) {
-	case rm.ORIGINAL_VERSION:
-		v.SetModelName()
-		data = v.Data
-	// After enabling, make sure to change the data path below in the INSERT statement
-	// case rm.IMPORTED_VERSION:
-	// 	object = v.Data
-	default:
-		return fmt.Errorf("unsupported version type for object version creation: %T", version)
-	}
+// func (s *Service) SaveObjectVersionWithTx(ctx context.Context, tx pgx.Tx, version any, contributionID string, ehrID utils.Optional[uuid.UUID]) error {
+// 	var data rm.OriginalVersionDataUnion
+// 	switch v := version.(type) {
+// 	case rm.ORIGINAL_VERSION:
+// 		v.SetModelName()
+// 		data = v.Data
+// 	// After enabling, make sure to change the data path below in the INSERT statement
+// 	// case rm.IMPORTED_VERSION:
+// 	// 	object = v.Data
+// 	default:
+// 		return fmt.Errorf("unsupported version type for object version creation: %T", version)
+// 	}
 
-	var (
-		modelType string
-		id        rm.OBJECT_VERSION_ID
-	)
-	switch data.Kind {
-	case rm.ORIGINAL_VERSION_data_kind_EHR_STATUS:
-		modelType = rm.EHR_STATUS_TYPE
-		id = *data.EHR_STATUS().UID.V.OBJECT_VERSION_ID()
-	case rm.ORIGINAL_VERSION_data_kind_EHR_ACCESS:
-		modelType = rm.EHR_ACCESS_TYPE
-		id = *data.EHR_ACCESS().UID.V.OBJECT_VERSION_ID()
-	case rm.ORIGINAL_VERSION_data_kind_COMPOSITION:
-		modelType = rm.COMPOSITION_TYPE
-		id = *data.COMPOSITION().UID.V.OBJECT_VERSION_ID()
-	case rm.ORIGINAL_VERSION_data_kind_FOLDER:
-		modelType = rm.FOLDER_TYPE
-		id = *data.FOLDER().UID.V.OBJECT_VERSION_ID()
-	case rm.ORIGINAL_VERSION_data_kind_ROLE:
-		modelType = rm.ROLE_TYPE
-		id = *data.ROLE().UID.V.OBJECT_VERSION_ID()
-	case rm.ORIGINAL_VERSION_data_kind_PERSON:
-		modelType = rm.PERSON_TYPE
-		id = *data.PERSON().UID.V.OBJECT_VERSION_ID()
-	case rm.ORIGINAL_VERSION_data_kind_AGENT:
-		modelType = rm.AGENT_TYPE
-		id = *data.AGENT().UID.V.OBJECT_VERSION_ID()
-	case rm.ORIGINAL_VERSION_data_kind_GROUP:
-		modelType = rm.GROUP_TYPE
-		id = *data.GROUP().UID.V.OBJECT_VERSION_ID()
-	case rm.ORIGINAL_VERSION_data_kind_ORGANISATION:
-		modelType = rm.ORGANISATION_TYPE
-		id = *data.ORGANISATION().UID.V.OBJECT_VERSION_ID()
-	default:
-		return fmt.Errorf("unsupported object type for version creation: %d", data.Kind)
-	}
+// 	var (
+// 		modelType string
+// 		id        rm.OBJECT_VERSION_ID
+// 	)
+// 	switch data.Kind {
+// 	case rm.ORIGINAL_VERSION_data_kind_EHR_STATUS:
+// 		modelType = rm.EHR_STATUS_TYPE
+// 		id = *data.EHR_STATUS().UID.V.OBJECT_VERSION_ID()
+// 	case rm.ORIGINAL_VERSION_data_kind_EHR_ACCESS:
+// 		modelType = rm.EHR_ACCESS_TYPE
+// 		id = *data.EHR_ACCESS().UID.V.OBJECT_VERSION_ID()
+// 	case rm.ORIGINAL_VERSION_data_kind_COMPOSITION:
+// 		modelType = rm.COMPOSITION_TYPE
+// 		id = *data.COMPOSITION().UID.V.OBJECT_VERSION_ID()
+// 	case rm.ORIGINAL_VERSION_data_kind_FOLDER:
+// 		modelType = rm.FOLDER_TYPE
+// 		id = *data.FOLDER().UID.V.OBJECT_VERSION_ID()
+// 	case rm.ORIGINAL_VERSION_data_kind_ROLE:
+// 		modelType = rm.ROLE_TYPE
+// 		id = *data.ROLE().UID.V.OBJECT_VERSION_ID()
+// 	case rm.ORIGINAL_VERSION_data_kind_PERSON:
+// 		modelType = rm.PERSON_TYPE
+// 		id = *data.PERSON().UID.V.OBJECT_VERSION_ID()
+// 	case rm.ORIGINAL_VERSION_data_kind_AGENT:
+// 		modelType = rm.AGENT_TYPE
+// 		id = *data.AGENT().UID.V.OBJECT_VERSION_ID()
+// 	case rm.ORIGINAL_VERSION_data_kind_GROUP:
+// 		modelType = rm.GROUP_TYPE
+// 		id = *data.GROUP().UID.V.OBJECT_VERSION_ID()
+// 	case rm.ORIGINAL_VERSION_data_kind_ORGANISATION:
+// 		modelType = rm.ORGANISATION_TYPE
+// 		id = *data.ORGANISATION().UID.V.OBJECT_VERSION_ID()
+// 	default:
+// 		return fmt.Errorf("unsupported object type for version creation: %d", data.Kind)
+// 	}
 
-	query := `INSERT INTO openehr.tbl_object_version (id, versioned_object_id, type, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`
-	args := []any{id.Value, id.UID(), modelType, ehrID, contributionID}
-	if _, err := tx.Exec(ctx, query, args...); err != nil {
-		return fmt.Errorf("failed to insert object version into the database: %w", err)
-	}
+// 	query := `INSERT INTO openehr.tbl_object_version (id, version_int, versioned_object_id, type, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5, $6)`
+// 	args := []any{id.Value, id.VersionTreeID().Int(), id.UID(), modelType, ehrID, contributionID}
+// 	if _, err := tx.Exec(ctx, query, args...); err != nil {
+// 		return fmt.Errorf("failed to insert object version into the database: %w", err)
+// 	}
 
-	query = `INSERT INTO openehr.tbl_object_version_data (id, version_data, object_data) VALUES ($1, jsonb_set($2, '{data}', 'null', true), $2->'data')`
-	args = []any{id.Value, version}
-	if _, err := tx.Exec(ctx, query, args...); err != nil {
-		return fmt.Errorf("failed to insert object version data into the database: %w", err)
-	}
+// 	query = `INSERT INTO openehr.tbl_object_version_data (id, version_data, object_data) VALUES ($1, jsonb_set($2, '{data}', 'null', true), $2->'data')`
+// 	args = []any{id.Value, version}
+// 	if _, err := tx.Exec(ctx, query, args...); err != nil {
+// 		return fmt.Errorf("failed to insert object version data into the database: %w", err)
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 func (s *Service) DeleteVersionedObjectWithTx(ctx context.Context, tx pgx.Tx, versionedObjectID uuid.UUID) error {
 	var deleted uint8
@@ -3009,7 +3975,7 @@ func UpgradeObjectVersionID(current rm.UIDBasedIDUnion, previous rm.OBJECT_VERSI
 		if current.OBJECT_VERSION_ID().VersionTreeID().CompareTo(previous.VersionTreeID()) <= 0 {
 			return rm.OBJECT_VERSION_ID{}, ErrVersionLowerOrEqualToCurrent
 		}
-		return *current.OBJECT_VERSION_ID(), nil
+		return current.OBJECT_VERSION_ID(), nil
 	case rm.UID_BASED_ID_kind_HIER_OBJECT_ID:
 		currentUID := current.HIER_OBJECT_ID()
 
@@ -3063,8 +4029,18 @@ func NewContribution(description string, auditChangeType terminology.AuditChange
 				},
 			},
 		}
+	case terminology.AUDIT_CHANGE_TYPE_CODE_DELETED:
+		contribution.Audit.ChangeType = rm.DV_CODED_TEXT{
+			Value: terminology.GetAuditChangeTypeName(terminology.AUDIT_CHANGE_TYPE_CODE_DELETED),
+			DefiningCode: rm.CODE_PHRASE{
+				CodeString: string(terminology.AUDIT_CHANGE_TYPE_CODE_DELETED),
+				TerminologyID: rm.TERMINOLOGY_ID{
+					Value: string(terminology.AUDIT_CHANGE_TYPE_TERMINOLOGY_ID_OPENEHR),
+				},
+			},
+		}
 	default:
-		return rm.CONTRIBUTION{}
+		panic("unsupported audit change type")
 	}
 
 	return contribution

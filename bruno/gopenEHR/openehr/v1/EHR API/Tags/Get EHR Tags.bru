@@ -1,0 +1,20 @@
+meta {
+  name: Get EHR Tags
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/openehr/v1/ehr/:ehr_id/tags
+  body: none
+  auth: inherit
+}
+
+params:path {
+  ehr_id: 169b0cab-5895-4c51-bc44-5efdf77a4267
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

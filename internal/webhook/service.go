@@ -21,8 +21,8 @@ type Service struct {
 	DB     *database.Database
 }
 
-func NewService(logger *telemetry.Logger, db *database.Database) Service {
-	return Service{Logger: logger, DB: db}
+func NewService(logger *telemetry.Logger, db *database.Database) *Service {
+	return &Service{Logger: logger, DB: db}
 }
 
 type Subscription struct {

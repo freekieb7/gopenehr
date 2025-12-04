@@ -76,8 +76,8 @@ type Service struct {
 }
 
 // NewService returns a pointer (so receiver methods work on it)
-func NewService(logger *telemetry.Logger, trustedIssuers []string, audience string) Service {
-	return Service{
+func NewService(logger *telemetry.Logger, trustedIssuers []string, audience string) *Service {
+	return &Service{
 		Logger:         logger,
 		TrustedIssuers: trustedIssuers,
 		Audience:       audience,

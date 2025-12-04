@@ -467,7 +467,7 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 
 	switch modelName {
 	case rm.EHR_TYPE:
-		expression := "SELECT id, data FROM openehr.vw_ehr"
+		expression := "SELECT id, data FROM openehr.tbl_ehr"
 		if whereExpression != "" {
 			expression += " WHERE " + whereExpression
 		}

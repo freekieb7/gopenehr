@@ -15,7 +15,7 @@ type Sink struct {
 	Logger *telemetry.Logger
 	DB     *database.Database
 
-	worker *async.Worker
+	worker *async.Worker[Event]
 }
 
 // NewSink creates a Sink backed by async.Worker
@@ -48,7 +48,7 @@ func NewSink(tel *telemetry.Telemetry, db *database.Database) *Sink {
 	}
 
 	// Worker flush function calls Sink.flush
-	sink.worker = async.NewWorker(cfg, func(ctx context.Context, batch []async.Event) error {
+	sink.worker = async.NewWorker(cfg, func(ctx context.Context, batch []Event) error {
 		return sink.flush(ctx, batch)
 	})
 
@@ -62,11 +62,11 @@ func (s *Sink) Start(ctx context.Context) {
 
 // Enqueue sends an event to the worker
 func (s *Sink) Enqueue(event Event) {
-	s.worker.Enqueue(async.Event(event))
+	s.worker.Enqueue(event)
 }
 
 // flush persists a batch of events (called by async.Worker)
-func (s *Sink) flush(ctx context.Context, batch []async.Event) error {
+func (s *Sink) flush(ctx context.Context, batch []Event) error {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err
@@ -77,21 +77,18 @@ func (s *Sink) flush(ctx context.Context, batch []async.Event) error {
 
 	rows := make([][]interface{}, len(batch))
 	for i, event := range batch {
-		e := event.(Event)
-
-		// Generate UUIDv7 for ID
 		id := uuid.New() // replace with v7 generator if needed
 		rows[i] = []interface{}{
 			id,
-			e.ActorID,
-			e.ActorType,
-			e.Resource,
-			e.Action,
-			e.Success,
-			e.IPAddress,
-			e.UserAgent,
-			e.Details,
-			e.CreatedAt,
+			event.ActorID,
+			event.ActorType,
+			event.Resource,
+			event.Action,
+			event.Success,
+			event.IPAddress,
+			event.UserAgent,
+			event.Details,
+			event.CreatedAt,
 		}
 	}
 

@@ -23,7 +23,7 @@ type InMemorySink struct {
 	Logger *telemetry.Logger
 	DB     *database.Database
 
-	worker *async.Worker
+	worker *async.Worker[Event]
 }
 
 // NewInMemorySink creates a Sink backed by async.Worker
@@ -56,7 +56,7 @@ func NewInMemorySink(tel *telemetry.Telemetry, db *database.Database) Sink {
 	}
 
 	// Worker flush function calls Sink.flush
-	sink.worker = async.NewWorker(cfg, func(ctx context.Context, batch []async.Event) error {
+	sink.worker = async.NewWorker(cfg, func(ctx context.Context, batch []Event) error {
 		return sink.flush(ctx, batch)
 	})
 
@@ -70,14 +70,14 @@ func (s *InMemorySink) Start(ctx context.Context) {
 
 // Enqueue sends an event to the worker
 func (s *InMemorySink) Enqueue(eventType EventType, payload map[string]any) {
-	s.worker.Enqueue(async.Event(Event{
+	s.worker.Enqueue(Event{
 		Type: eventType,
 		Data: payload,
-	}))
+	})
 }
 
 // flush persists a batch of events (called by async.Worker)
-func (s *InMemorySink) flush(ctx context.Context, batch []async.Event) error {
+func (s *InMemorySink) flush(ctx context.Context, batch []Event) error {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err
@@ -87,12 +87,11 @@ func (s *InMemorySink) flush(ctx context.Context, batch []async.Event) error {
 	var eventID string
 
 	for _, event := range batch {
-		ev := event.(Event)
 		if err := tx.QueryRow(ctx, `
 			INSERT INTO webhook.tbl_event (type, payload)
 			VALUES ($1, $2)
 			RETURNING id
-		`, ev.Type, ev.Data).Scan(&eventID); err != nil {
+		`, event.Type, event.Data).Scan(&eventID); err != nil {
 			s.Logger.Error("failed inserting webhook event", "error", err)
 			continue
 		}
@@ -106,7 +105,7 @@ func (s *InMemorySink) flush(ctx context.Context, batch []async.Event) error {
 			WHERE e.id = $1
 			  AND s.is_active = TRUE
 			  AND $2 = ANY(s.event_types)
-		`, eventID, ev.Type); err != nil {
+		`, eventID, event.Type); err != nil {
 			s.Logger.Error("failed inserting delivery rows", "event_id", eventID, "error", err)
 		}
 	}

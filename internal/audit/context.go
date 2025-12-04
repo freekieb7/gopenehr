@@ -61,7 +61,11 @@ func (c *Context) Commit() {
 func From(c *fiber.Ctx) *Context {
 	raw := c.Locals(string(ContextKey))
 	if raw == nil {
-		return nil
+		panic("audit context not found in fiber context")
+	}
+	_, ok := raw.(*Context)
+	if !ok {
+		panic("audit context has wrong type")
 	}
 	return raw.(*Context)
 }

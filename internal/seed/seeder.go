@@ -82,7 +82,7 @@ func (s *Seeder) seedEHRs(ctx context.Context, count int) {
 
 			for range compositionsToUpdate {
 				s.RandomizeRapportage(&composition)
-				newComposition, err = openehrService.UpdateComposition(ctx, ehrID, newComposition, composition)
+				newComposition, err = openehrService.UpdateComposition(ctx, ehrID, newComposition.UID.V.OBJECT_VERSION_ID(), composition)
 				if err != nil {
 					s.Logger.Error("Failed to create Composition", "error", err)
 					continue
@@ -108,6 +108,21 @@ func (s *Seeder) RandomizeRapportage(composition *rm.COMPOSITION) {
 	composition.Context.V.OtherContext.V.ITEM_TREE().Items.V[3].ELEMENT().Value.V.DV_CODED_TEXT().DefiningCode.CodeString = RandFromSlice([]string{"at0041", "at0042", "at0043", "at0044"})
 	composition.Context.V.OtherContext.V.ITEM_TREE().Items.V[4].ELEMENT().Value.V.DV_EHR_URI().Value = "ehr://ehr_id/value"
 	composition.Content.V[0].EVALUATION().Data.ITEM_TREE().Items.V[0].ELEMENT().Value.V.DV_TEXT().Value = "1235"
+}
+
+// <?xml version="1.0"?>
+// <datamap template="Attachment.v2">
+//   <paths add="encounter_ontmoeting" path="/category" comment="DV_CODED_TEXT"/>
+//   <paths add="annotaties" path="/context/other_context[at0001]/items[openEHR-EHR-CLUSTER.annotations.v1]" comment="CLUSTER"/>
+//   <paths add="annotatie" path="/context/other_context[at0001]/items[openEHR-EHR-CLUSTER.annotations.v1]/items[at0001]/name" comment="DV_CODED_TEXT"/>
+//   <paths add="annotatie_1" path="/context/other_context[at0001]/items[openEHR-EHR-CLUSTER.annotations.v1]/items[at0001]/value" comment="DV_TEXT"/>
+//   <paths add="multimedia_document" path="/content[openEHR-EHR-ADMIN_ENTRY.attachment.v2]/data[at0001]/items[at0002]/value" comment="DV_MULTIMEDIA"/>
+//   <paths add="categorie" path="/content[openEHR-EHR-ADMIN_ENTRY.attachment.v2]/data[at0001]/items[at0020]/value" comment="DV_CODED_TEXT"/>
+//   <paths add="opmerking" path="/content[openEHR-EHR-ADMIN_ENTRY.attachment.v2]/data[at0001]/items[at0007]/value" comment="DV_TEXT"/>
+// </datamap>
+
+func (s *Seeder) RandomizeAttachment(composition *rm.COMPOSITION) {
+
 }
 
 func RandFromSlice[T any](slice []T) T {

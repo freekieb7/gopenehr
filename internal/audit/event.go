@@ -43,6 +43,7 @@ const (
 	ResourceTemplate                    Resource = "template"
 	ResourceQuery                       Resource = "query"
 	ResourceWebhook                     Resource = "webhook"
+	ResourceItemTag                     Resource = "item_tag"
 )
 
 type Action string

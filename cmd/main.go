@@ -139,16 +139,16 @@ func runServer(ctx context.Context) error {
 	openEHRService := openehr.NewService(tel.Logger, db)
 
 	// Routes
-	healthHandler := health.NewHandler(&healthChecker)
+	healthHandler := health.NewHandler(tel.Logger, healthChecker)
 	healthHandler.RegisterRoutes(srv)
 
-	auditHandler := audit.NewHandler(&settings, tel.Logger, &auditService, &oauthService, auditSink)
+	auditHandler := audit.NewHandler(&settings, tel.Logger, auditService, oauthService, auditSink)
 	auditHandler.RegisterRoutes(srv)
 
-	webhookHandler := webhook.NewHandler(&settings, tel.Logger, auditSink, &oauthService, &webhookService)
+	webhookHandler := webhook.NewHandler(&settings, tel.Logger, auditSink, oauthService, webhookService)
 	webhookHandler.RegisterRoutes(srv)
 
-	openEHRHandler := openehr.NewHandler(&settings, tel, &openEHRService, &auditService, &webhookService, auditSink, webhookSink)
+	openEHRHandler := openehr.NewHandler(&settings, tel, openEHRService, auditService, webhookService, auditSink, webhookSink)
 	openEHRHandler.RegisterRoutes(srv)
 
 	// Set up signal handling for graceful shutdown
@@ -182,7 +182,7 @@ func runServer(ctx context.Context) error {
 	// Start webhook delivery worker
 	go func() {
 		tel.Logger.InfoContext(ctx, "Starting webhook delivery worker")
-		err := webhookSender.Run(ctx)
+		err := webhookSender.Start(ctx)
 		if err != nil {
 			tel.Logger.ErrorContext(ctx, "Webhook delivery worker error", "error", err)
 		}

@@ -20,6 +20,7 @@ CREATE SCHEMA openehr;
 
 CREATE TABLE openehr.tbl_ehr (
     id UUID PRIMARY KEY,
+    data JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -218,82 +219,6 @@ CREATE INDEX idx_query_name_version ON openehr.tbl_query
 -- Index for time-based query lookups
 CREATE INDEX idx_query_created_at ON openehr.tbl_query 
     USING btree (created_at DESC);
-
--- ========= EHR View ==========
-CREATE VIEW openehr.vw_ehr AS
-SELECT
-    e.id,
-    jsonb_build_object(
-        'system_id', jsonb_build_object(
-            'value', 'gopenehr'
-        ),
-        'ehr_id', jsonb_build_object(
-            'value', e.id
-        ),
-        'ehr_status', jsonb_build_object(
-            'namespace', 'local',
-            'type', 'EHR_STATUS',
-            'id', jsonb_build_object(
-                '_type', 'OBJECT_VERSION_ID',
-                'value', es.id
-            )
-        ),
-        'ehr_access', jsonb_build_object(
-            'namespace', 'local',
-            'type', 'EHR_ACCESS',
-            'id', jsonb_build_object(
-                '_type', 'OBJECT_VERSION_ID',
-                'value', ea.id
-            )
-        ),
-        'contributions', coalesce(contrib.contributions, '[]'::jsonb),
-        'compositions', coalesce(comp.compositions, '[]'::jsonb),
-        'directory', jsonb_build_object(
-            'namespace', 'local',
-            'type', 'FOLDER',
-            'id', jsonb_build_object(
-                '_type', 'OBJECT_VERSION_ID',
-                'value', fo.id
-            )
-        ),
-        'time_created', jsonb_build_object(
-            'value', to_char(e.created_at, 'YYYY-MM-DD"T"HH24:MI:SS.USZ')
-        )
-    ) AS data,
-    e.created_at
-FROM openehr.tbl_ehr e
-
-JOIN openehr.tbl_object_version es 
-  ON es.ehr_id = e.id AND es.type = 'EHR_STATUS'
-JOIN openehr.tbl_object_version ea 
-  ON ea.ehr_id = e.id AND ea.type = 'EHR_ACCESS'
-LEFT JOIN openehr.tbl_object_version fo 
-  ON fo.ehr_id = e.id AND fo.type = 'FOLDER'
-LEFT JOIN LATERAL (
-    SELECT jsonb_agg(jsonb_build_object(
-        'namespace', 'local',
-        'type', 'CONTRIBUTION',
-        'id', jsonb_build_object(
-            '_type', 'HIER_OBJECT_ID',
-            'value', id
-        )
-    )) AS contributions
-    FROM openehr.tbl_contribution
-    WHERE ehr_id = e.id
-) contrib ON true
-LEFT JOIN LATERAL (
-    SELECT jsonb_agg(jsonb_build_object(
-        'namespace', 'local',
-        'type', 'VERSIONED_COMPOSITION',
-        'id', jsonb_build_object(
-            '_type', 'HIER_OBJECT_ID',
-            'value', id
-        )
-    )) AS compositions
-    FROM openehr.tbl_versioned_object
-    WHERE ehr_id = e.id
-      AND type = 'VERSIONED_COMPOSITION'
-) comp ON true;
 
 -- ========== Audit Schemas ==========
 

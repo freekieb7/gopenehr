@@ -148,6 +148,42 @@ func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus rm.E
 			},
 		},
 	)
+	ehr := rm.EHR{
+		SystemID: rm.HIER_OBJECT_ID{
+			Value: config.SYSTEM_ID_GOPENEHR,
+		},
+		EHRID: rm.HIER_OBJECT_ID{
+			Value: ehrID.String(),
+		},
+		EHRStatus: rm.OBJECT_REF{
+			Type:      rm.VERSIONED_EHR_STATUS_TYPE,
+			Namespace: rm.Namespace_local,
+			ID: rm.OBJECT_ID_from_HIER_OBJECT_ID(rm.HIER_OBJECT_ID{
+				Value: ehrStatus.UID.V.OBJECT_VERSION_ID().UID(),
+			}),
+		},
+		EHRAccess: rm.OBJECT_REF{
+			Type:      rm.VERSIONED_EHR_ACCESS_TYPE,
+			Namespace: rm.Namespace_local,
+			ID: rm.OBJECT_ID_from_HIER_OBJECT_ID(rm.HIER_OBJECT_ID{
+				Value: ehrAccess.UID.V.OBJECT_VERSION_ID().UID(),
+			}),
+		},
+		Contributions: utils.Some([]rm.OBJECT_REF{
+			{
+				Type:      rm.CONTRIBUTION_TYPE,
+				Namespace: rm.Namespace_local,
+				ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+			},
+		}),
+		Compositions: utils.Some([]rm.OBJECT_REF{}),
+		Directory:    utils.None[rm.OBJECT_REF](),
+		Folders:      utils.Some([]rm.OBJECT_REF{}),
+		Tags:         utils.Some([]rm.OBJECT_REF{}),
+		TimeCreated: rm.DV_DATE_TIME{
+			Value: time.Now().Format(time.RFC3339),
+		},
+	}
 
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
@@ -159,7 +195,7 @@ func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus rm.E
 		}
 	}()
 
-	err = s.SaveEHRWithTx(ctx, tx, ehrID)
+	err = s.SaveEHRWithTx(ctx, tx, ehr)
 	if err != nil {
 		return rm.EHR{}, fmt.Errorf("failed to save EHR: %w", err)
 	}
@@ -188,11 +224,6 @@ func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus rm.E
 		return rm.EHR{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	ehr, err := s.GetEHR(ctx, ehrID)
-	if err != nil {
-		return rm.EHR{}, fmt.Errorf("failed to get EHR after creation: %w", err)
-	}
-
 	return ehr, nil
 }
 
@@ -215,7 +246,7 @@ func (s *Service) ExistsEHR(ctx context.Context, id uuid.UUID) (bool, error) {
 }
 
 func (s *Service) GetEHR(ctx context.Context, id uuid.UUID) (rm.EHR, error) {
-	query := `SELECT data FROM openehr.vw_ehr WHERE id = $1 LIMIT 1`
+	query := `SELECT data FROM openehr.tbl_ehr WHERE id = $1 LIMIT 1`
 	args := []any{id}
 
 	row := s.DB.QueryRow(ctx, query, args...)
@@ -431,7 +462,7 @@ func (s *Service) UpdateEHRStatus(ctx context.Context, ehrID uuid.UUID, previous
 	}
 	nextEHRStatus.UID = utils.Some(rm.UID_BASED_ID_from_OBJECT_VERSION_ID(&updatedID))
 
-	ehrStatusVersion := NewOriginalVersion(nextEHRStatus.ObjectVersionID(), rm.ORIGINAL_VERSION_DATA_from_EHR_STATUS(nextEHRStatus), utils.Some(*previousEHRStatus.UID.V.OBJECT_VERSION_ID()))
+	ehrStatusVersion := NewOriginalVersion(*nextEHRStatus.UID.V.OBJECT_VERSION_ID(), rm.ORIGINAL_VERSION_DATA_from_EHR_STATUS(nextEHRStatus), utils.Some(*previousEHRStatus.UID.V.OBJECT_VERSION_ID()))
 	contribution := NewContribution("EHR Status updated", terminology.AUDIT_CHANGE_TYPE_CODE_MODIFICATION,
 		[]rm.OBJECT_REF{
 			{
@@ -460,6 +491,20 @@ func (s *Service) UpdateEHRStatus(ctx context.Context, ehrID uuid.UUID, previous
 	err = s.SaveObjectVersionWithTx(ctx, tx, ehrStatusVersion, contribution.UID.Value, utils.Some(ehrID))
 	if err != nil {
 		return rm.EHR_STATUS{}, fmt.Errorf("failed to save ehr status version: %w", err)
+	}
+
+	// Update EHR with contribution ref
+	_, err = s.DB.Exec(ctx, `
+		UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(data, '{contributions,-1}', $1::jsonb, true)
+		WHERE id = $2
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, ehrID)
+	if err != nil {
+		return rm.EHR_STATUS{}, fmt.Errorf("failed to update EHR with new contribution: %w", err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
@@ -684,6 +729,26 @@ func (s *Service) CreateComposition(ctx context.Context, ehrID uuid.UUID, compos
 		return rm.COMPOSITION{}, fmt.Errorf("failed to save composition version: %w", err)
 	}
 
+	// Update EHR, add contribution ref to list
+	_, err = s.DB.Exec(ctx, `
+		UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(
+			jsonb_insert(data, '{compositions, -1}', $2::jsonb, true)
+			, '{contributions, -1}', $1::jsonb, true)
+		WHERE id = $3
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, rm.OBJECT_REF{
+		Type:      rm.VERSIONED_COMPOSITION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(versionedComposition.UID),
+	}, ehrID)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to update EHR with new composition: %w", err)
+	}
+
 	if err = tx.Commit(ctx); err != nil {
 		return rm.COMPOSITION{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -782,6 +847,20 @@ func (s *Service) UpdateComposition(ctx context.Context, ehrID uuid.UUID, previo
 		return rm.COMPOSITION{}, fmt.Errorf("failed to save composition: %w", err)
 	}
 
+	// Update EHR with contribution ref
+	_, err = s.DB.Exec(ctx, `
+		UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true)
+		WHERE id = $2
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, ehrID)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to update EHR with new contribution: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return rm.COMPOSITION{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -819,6 +898,27 @@ func (s *Service) DeleteComposition(ctx context.Context, ehrID uuid.UUID, versio
 	err = s.DeleteVersionedObjectWithTx(ctx, tx, versionedObjectID)
 	if err != nil {
 		return fmt.Errorf("failed to delete composition version: %w", err)
+	}
+
+	// Update EHR, add contribution and remove composition ref from list
+	_, err = s.DB.Exec(ctx, `
+		UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true) #- (
+			SELECT ARRAY['compositions', (idx-1)::text]
+			FROM jsonb_array_elements(data->'compositions') WITH ORDINALITY arr(item, idx)
+			WHERE item->'id'->>'value' = $2::text
+			LIMIT 1
+		)
+		WHERE id = $3
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, versionedObjectID.String(),
+		ehrID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update EHR with new contribution: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1112,6 +1212,26 @@ func (s *Service) CreateDirectory(ctx context.Context, ehrID uuid.UUID, director
 		return rm.FOLDER{}, fmt.Errorf("failed to save folder version: %w", err)
 	}
 
+	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(
+			jsonb_insert(
+				jsonb_set(data, '{directory}', $2::jsonb)
+			, '{folders, 0}', $2::jsonb)
+		, '{contributions, -1}', $1::jsonb, true)
+		WHERE id = $3
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, rm.OBJECT_REF{
+		Type:      rm.VERSIONED_FOLDER_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(versionedFolder.UID),
+	}, ehrID)
+	if err != nil {
+		return rm.FOLDER{}, fmt.Errorf("failed to update EHR with new contribution: %w", err)
+	}
+
 	if err = tx.Commit(ctx); err != nil {
 		return rm.FOLDER{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -1206,6 +1326,18 @@ func (s *Service) UpdateDirectory(ctx context.Context, ehrID uuid.UUID, previous
 		return rm.FOLDER{}, fmt.Errorf("failed to save folder version: %w", err)
 	}
 
+	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true)
+		WHERE id = $2
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, ehrID)
+	if err != nil {
+		return rm.FOLDER{}, fmt.Errorf("failed to update EHR with new contribution: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return rm.FOLDER{}, fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -1243,6 +1375,21 @@ func (s *Service) DeleteDirectory(ctx context.Context, ehrID uuid.UUID, versione
 	err = s.DeleteVersionedObjectWithTx(ctx, tx, versionedObjectID)
 	if err != nil {
 		return fmt.Errorf("failed to delete directory version: %w", err)
+	}
+
+	// Update EHR, add contribution ref to list and remove directory reference
+	// Folder reference is dump deleted as just the first entry, like the openehr docs specify
+	_, err = s.DB.Exec(ctx, `
+		UPDATE openehr.tbl_ehr
+		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true) #- '{directory}' #- '{folders, 0}'
+		WHERE id = $2
+	`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, ehrID)
+	if err != nil {
+		return fmt.Errorf("failed to update EHR with new contribution: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2606,9 +2753,9 @@ func (s *Service) ExistsVersionedObject(ctx context.Context, versionedObjectID u
 	return true, nil
 }
 
-func (s *Service) SaveEHRWithTx(ctx context.Context, tx pgx.Tx, ehrID uuid.UUID) error {
-	query := `INSERT INTO openehr.tbl_ehr (id) VALUES ($1)`
-	args := []any{ehrID}
+func (s *Service) SaveEHRWithTx(ctx context.Context, tx pgx.Tx, ehr rm.EHR) error {
+	query := `INSERT INTO openehr.tbl_ehr (id, data) VALUES ($1, $2)`
+	args := []any{ehr.EHRID.Value, ehr}
 	_, err := tx.Exec(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to insert EHR into the database: %w", err)
@@ -3063,8 +3210,18 @@ func NewContribution(description string, auditChangeType terminology.AuditChange
 				},
 			},
 		}
+	case terminology.AUDIT_CHANGE_TYPE_CODE_DELETED:
+		contribution.Audit.ChangeType = rm.DV_CODED_TEXT{
+			Value: terminology.GetAuditChangeTypeName(terminology.AUDIT_CHANGE_TYPE_CODE_DELETED),
+			DefiningCode: rm.CODE_PHRASE{
+				CodeString: string(terminology.AUDIT_CHANGE_TYPE_CODE_DELETED),
+				TerminologyID: rm.TERMINOLOGY_ID{
+					Value: string(terminology.AUDIT_CHANGE_TYPE_TERMINOLOGY_ID_OPENEHR),
+				},
+			},
+		}
 	default:
-		return rm.CONTRIBUTION{}
+		panic("unsupported audit change type")
 	}
 
 	return contribution

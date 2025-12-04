@@ -1668,7 +1668,7 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.OpenEHRService.DeleteDirectory(ctx, ehrID, uuid.MustParse(currentDirectory.UID.V.Value.(*rm.OBJECT_VERSION_ID).Value)); err != nil {
+	if err := h.OpenEHRService.DeleteDirectory(ctx, ehrID, uuid.MustParse(currentDirectory.UID.V.OBJECT_VERSION_ID().UID())); err != nil {
 		if err == ErrEHRNotFound {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusNotFound,

@@ -1,0 +1,198 @@
+{
+    "_type": "COMPOSITION",
+    "archetype_node_id": "openEHR-EHR-COMPOSITION.encounter.v1",
+    "name": {
+        "value": "Encounter, Ontmoeting"
+    },
+    "archetype_details": {
+        "archetype_id": {
+            "value": "openEHR-EHR-COMPOSITION.encounter.v1"
+        },
+        "template_id": {
+            "value": "Attachment.v2::3324da84-5846-3628-a4ef-1bfe8585b621"
+        },
+        "rm_version": "1.0.2"
+    },
+    "language": {
+        "terminology_id": {
+            "value": "ISO_639-1"
+        },
+        "code_string": "nl"
+    },
+    "territory": {
+        "terminology_id": {
+            "value": "ISO_3166-1"
+        },
+        "code_string": "NL"
+    },
+    "category": {
+        "value": "event",
+        "defining_code": {
+            "terminology_id": {
+                "value": "openehr"
+            },
+            "code_string": "433"
+        }
+    },
+    "composer": {
+        "_type": "PARTY_SELF"
+    },
+    "context": {
+        "start_time": {
+            "value": "20251202T091222"
+        },
+        "setting": {
+            "value": "DV_CODED_TEXT-6931ba66430d4",
+            "defining_code": {
+                "terminology_id": {
+                    "value": null
+                },
+                "code_string": null
+            }
+        },
+        "other_context": {
+            "_type": "ITEM_TREE",
+            "archetype_node_id": "at0001",
+            "name": {
+                "value": "Tree"
+            },
+            "items": [
+                {
+                    "_type": "CLUSTER",
+                    "archetype_node_id": "openEHR-EHR-CLUSTER.annotations.v1",
+                    "name": {
+                        "value": "Annotaties"
+                    },
+                    "archetype_details": {
+                        "archetype_id": {
+                            "value": "openEHR-EHR-CLUSTER.annotations.v1"
+                        },
+                        "rm_version": "1.0.2"
+                    },
+                    "items": [
+                        {
+                            "_type": "ELEMENT",
+                            "archetype_node_id": "at0001",
+                            "name": {
+                                "_type": "DV_CODED_TEXT",
+                                "value": null,
+                                "defining_code": {
+                                    "terminology_id": {
+                                        "value": "code24"
+                                    },
+                                    "code_string": null
+                                }
+                            },
+                            "value": {
+                                "_type": "DV_TEXT",
+                                "value": "value-6931ba664299e"
+                            }
+                        },
+                        {
+                            "_type": "ELEMENT",
+                            "archetype_node_id": "at0001",
+                            "name": {
+                                "_type": "DV_CODED_TEXT",
+                                "value": null,
+                                "defining_code": {
+                                    "terminology_id": {
+                                        "value": "code24"
+                                    },
+                                    "code_string": null
+                                }
+                            },
+                            "value": {
+                                "_type": "DV_TEXT",
+                                "value": "value-6931ba6642cad"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    "content": [
+        {
+            "_type": "ADMIN_ENTRY",
+            "archetype_node_id": "openEHR-EHR-ADMIN_ENTRY.attachment.v2",
+            "name": {
+                "value": "Bijlage"
+            },
+            "archetype_details": {
+                "archetype_id": {
+                    "value": "openEHR-EHR-ADMIN_ENTRY.attachment.v2"
+                },
+                "rm_version": "1.0.2"
+            },
+            "language": {
+                "terminology_id": {
+                    "value": "ISO_639-1"
+                },
+                "code_string": "nl"
+            },
+            "encoding": {
+                "terminology_id": {
+                    "value": "IANA_character-sets"
+                },
+                "code_string": "UTF-8"
+            },
+            "subject": {
+                "_type": "PARTY_SELF"
+            },
+            "data": {
+                "_type": "ITEM_TREE",
+                "archetype_node_id": "at0001",
+                "name": {
+                    "value": "Tree"
+                },
+                "items": [
+                    {
+                        "_type": "ELEMENT",
+                        "archetype_node_id": "at0002",
+                        "name": {
+                            "value": "Multimedia document"
+                        },
+                        "value": {
+                            "_type": "DV_MULTIMEDIA",
+                            "size": 86,
+                            "media_type": {
+                                "terminology_id": {
+                                    "value": "IANA_media-types"
+                                },
+                                "code_string": null
+                            }
+                        }
+                    },
+                    {
+                        "_type": "ELEMENT",
+                        "archetype_node_id": "at0020",
+                        "name": {
+                            "value": "Categorie"
+                        },
+                        "value": {
+                            "_type": "DV_CODED_TEXT",
+                            "value": "value-6931ba6643c75",
+                            "defining_code": {
+                                "terminology_id": {
+                                    "value": null
+                                },
+                                "code_string": null
+                            }
+                        }
+                    },
+                    {
+                        "_type": "ELEMENT",
+                        "archetype_node_id": "at0007",
+                        "name": {
+                            "value": "Opmerking"
+                        },
+                        "value": {
+                            "_type": "DV_TEXT",
+                            "value": "value-6931ba6643e13"
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}

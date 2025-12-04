@@ -103,12 +103,3 @@ func (e *EHR_STATUS) Validate(path string) util.ValidateError {
 
 	return validateErr
 }
-
-func (e *EHR_STATUS) ObjectVersionID() OBJECT_VERSION_ID {
-	if e.UID.E {
-		if objVerID, ok := e.UID.V.Value.(*OBJECT_VERSION_ID); ok {
-			return *objVerID
-		}
-	}
-	return OBJECT_VERSION_ID{}
-}

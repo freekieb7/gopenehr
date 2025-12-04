@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const SYSTEM_ID_GOPENEHR = "gopenehr"
+const SYSTEM_ID_GOPENEHR = "e6d14bbd-2a0c-474a-9964-11f0bfbe36bd"
 const NAMESPACE_LOCAL = "local"
 const API_KEY_HEADER = "X-API-Key"
 const TARGET_MIGRATION_VERSION uint64 = 20251113195000

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/database"
 	"github.com/freekieb7/gopenehr/internal/openehr/aql"
@@ -185,6 +186,13 @@ func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus rm.E
 		},
 	}
 
+	// Only 'local' VERSIONED_PARTY external refs are supported
+	localRefVersionedParty := utils.None[uuid.UUID]()
+	if ehrStatus.Subject.ExternalRef.E && ehrStatus.Subject.ExternalRef.V.Namespace == rm.Namespace_local && ehrStatus.Subject.ExternalRef.V.Type == rm.VERSIONED_PARTY_TYPE {
+		localRefVersionedPartyID := uuid.MustParse(ehrStatus.Subject.ExternalRef.V.ID.Value.(*rm.HIER_OBJECT_ID).Value)
+		localRefVersionedParty = utils.Some(localRefVersionedPartyID)
+	}
+
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return rm.EHR{}, fmt.Errorf("failed to begin transaction: %w", err)
@@ -199,7 +207,6 @@ func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus rm.E
 
 	// Insert EHR
 	batch.Queue(`INSERT INTO openehr.tbl_ehr (id) VALUES ($1)`, ehr.EHRID.Value)
-
 	ehr.SetModelName()
 	batch.Queue(`INSERT INTO openehr.tbl_ehr_data (id, data) VALUES ($1, $2)`, ehr.EHRID.Value, ehr)
 	// Insert CONTRIBUTION
@@ -209,15 +216,15 @@ func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus rm.E
 	// Insert VERSIONED_EHR_STATUS
 	batch.Queue(`INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id) VALUES ($1, $2, $3)`, versionedEHRStatus.UID.Value, rm.VERSIONED_EHR_STATUS_TYPE, ehrID)
 	versionedEHRStatus.SetModelName()
-	batch.Queue(`INSERT INTO openehr.tbl_versioned_ehr_status (id, data) VALUES ($1, $2)`, versionedEHRStatus.UID.Value, versionedEHRStatus)
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_ehr_status_data (id, data) VALUES ($1, $2)`, versionedEHRStatus.UID.Value, versionedEHRStatus)
 	// Insert EHR_STATUS
-	batch.Queue(`INSERT INTO openehr.tbl_ehr_status (id, version_int, versioned_ehr_status_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, ehrStatusVersion.UID.Value, ehrStatusVersion.UID.VersionTreeID().Int(), ehrStatusVersion.UID.UID(), ehrID, contribution.UID.Value)
+	batch.Queue(`INSERT INTO openehr.tbl_ehr_status (id, version_int, versioned_ehr_status_id, ehr_id, contribution_id, local_ref_versioned_party_id) VALUES ($1, $2, $3, $4, $5, $6)`, ehrStatusVersion.UID.Value, ehrStatusVersion.UID.VersionTreeID().Int(), ehrStatusVersion.UID.UID(), ehrID, contribution.UID.Value, localRefVersionedParty)
 	ehrStatusVersion.SetModelName()
 	batch.Queue(`INSERT INTO openehr.tbl_ehr_status_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, ehrStatusVersion.UID.Value, ehrStatusVersion)
 	// Insert VERSIONED_EHR_ACCESS
 	batch.Queue(`INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id) VALUES ($1, $2, $3)`, versionedEHRAccess.UID.Value, rm.VERSIONED_EHR_ACCESS_TYPE, ehrID)
 	versionedEHRAccess.SetModelName()
-	batch.Queue(`INSERT INTO openehr.tbl_versioned_ehr_access (id, data) VALUES ($1, $2)`, versionedEHRAccess.UID.Value, versionedEHRAccess)
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_ehr_access_data (id, data) VALUES ($1, $2)`, versionedEHRAccess.UID.Value, versionedEHRAccess)
 	// Insert EHR_ACCESS
 	batch.Queue(`INSERT INTO openehr.tbl_ehr_access (id, version_int, versioned_ehr_access_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, ehrAccessVersion.UID.Value, ehrAccessVersion.UID.VersionTreeID().Int(), ehrAccessVersion.UID.UID(), ehrID, contribution.UID.Value)
 	ehrAccessVersion.SetModelName()
@@ -576,30 +583,27 @@ func (s *Service) UpdateEHRStatus(ctx context.Context, ehrID uuid.UUID, currentE
 		}
 	}()
 
+	// Only 'local' VERSIONED_PARTY external refs are supported
+	localRefVersionedParty := utils.None[uuid.UUID]()
+	if nextEHRStatus.Subject.ExternalRef.E && nextEHRStatus.Subject.ExternalRef.V.Namespace == rm.Namespace_local && nextEHRStatus.Subject.ExternalRef.V.Type == rm.VERSIONED_PARTY_TYPE {
+		localRefVersionedPartyID := uuid.MustParse(nextEHRStatus.Subject.ExternalRef.V.ID.Value.(*rm.HIER_OBJECT_ID).Value)
+		localRefVersionedParty = utils.Some(localRefVersionedPartyID)
+	}
+
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
-	if err != nil {
-		return rm.EHR_STATUS{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.EHR_STATUS{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert EHR_STATUS
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_ehr_status (id, version_int, versioned_ehr_status_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, nextEHRStatus.UID.V.OBJECT_VERSION_ID().Value, nextEHRStatus.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), nextEHRStatus.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
-	if err != nil {
-		return rm.EHR_STATUS{}, fmt.Errorf("failed to insert EHR status: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_ehr_status (id, version_int, versioned_ehr_status_id, ehr_id, contribution_id, local_ref_versioned_party_id) VALUES ($1, $2, $3, $4, $5, $6)`, nextEHRStatus.UID.V.OBJECT_VERSION_ID().Value, nextEHRStatus.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), nextEHRStatus.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value, localRefVersionedParty)
 	nextEHRStatus.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_ehr_status_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, nextEHRStatus.UID.V.OBJECT_VERSION_ID().Value, ehrStatusVersion)
-	if err != nil {
-		return rm.EHR_STATUS{}, fmt.Errorf("failed to insert EHR status data: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_ehr_status_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, nextEHRStatus.UID.V.OBJECT_VERSION_ID().Value, ehrStatusVersion)
 
 	// Update EHR with new contribution reference
-	_, err = s.DB.Exec(ctx, `
+	batch.Queue(`
 		UPDATE openehr.tbl_ehr_data
 		SET data = jsonb_insert(data, '{contributions,-1}', $1::jsonb, true)
 		WHERE id = $2
@@ -608,8 +612,15 @@ func (s *Service) UpdateEHRStatus(ctx context.Context, ehrID uuid.UUID, currentE
 		Namespace: rm.Namespace_local,
 		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
 	}, ehrID)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.EHR_STATUS{}, fmt.Errorf("failed to update EHR with new contribution: %w", err)
+		return rm.EHR_STATUS{}, fmt.Errorf("failed to execute batch insert for EHR Status update: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.EHR_STATUS{}, fmt.Errorf("failed to close batch result for EHR Status update: %w", err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
@@ -774,41 +785,38 @@ func (s *Service) CreateComposition(ctx context.Context, ehrID uuid.UUID, compos
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
+	contributionData, err := sonic.Marshal(contribution)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to marshal contribution data: %w", err)
+	}
+	versionedCompositionData, err := sonic.Marshal(versionedComposition)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to marshal versioned composition data: %w", err)
+	}
+	compositionVersionData, err := sonic.Marshal(compositionVersion)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to marshal composition version data: %w", err)
+	}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
-	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contributionData)
 
 	// Insert VERSIONED_COMPOSITION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id) VALUES ($1, $2, $3)`, versionedComposition.UID.Value, rm.VERSIONED_COMPOSITION_TYPE, ehrID)
-	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to insert versioned composition into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id) VALUES ($1, $2, $3)`, versionedComposition.UID.Value, rm.VERSIONED_COMPOSITION_TYPE, ehrID)
 	versionedComposition.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_composition (id, data) VALUES ($1, $2)`, versionedComposition.UID.Value, versionedComposition)
-	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to insert versioned composition data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_composition_data (id, data) VALUES ($1, $2)`, versionedComposition.UID.Value, versionedCompositionData)
 
 	// Insert COMPOSITION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_composition (id, version_int, versioned_composition_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, composition.UID.V.OBJECT_VERSION_ID().Value, composition.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), composition.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
-	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to insert composition into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_composition (id, version_int, versioned_composition_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, composition.UID.V.OBJECT_VERSION_ID().Value, composition.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), composition.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
 	compositionVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_composition_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, composition.UID.V.OBJECT_VERSION_ID().Value, compositionVersion)
-	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to insert composition data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_composition_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, composition.UID.V.OBJECT_VERSION_ID().Value, compositionVersionData)
 
 	// Update EHR, add contribution ref to list
-	_, err = s.DB.Exec(ctx, `
+	batch.Queue(`
 		UPDATE openehr.tbl_ehr_data
 		SET data = jsonb_insert(
 			jsonb_insert(data, '{compositions, -1}', $2::jsonb, true)
@@ -823,8 +831,15 @@ func (s *Service) CreateComposition(ctx context.Context, ehrID uuid.UUID, compos
 		Namespace: rm.Namespace_local,
 		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(versionedComposition.UID),
 	}, ehrID)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to update EHR with new composition: %w", err)
+		return rm.COMPOSITION{}, fmt.Errorf("failed to execute batch insert for Composition creation: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to close batch result for Composition creation: %w", err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
@@ -931,30 +946,29 @@ func (s *Service) UpdateComposition(ctx context.Context, ehrID uuid.UUID, curren
 		}
 	}()
 
+	contributionData, err := sonic.Marshal(contribution)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to marshal contribution data: %w", err)
+	}
+	compositionVersionData, err := sonic.Marshal(compositionVersion)
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to marshal composition version data: %w", err)
+	}
+
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
-	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contributionData)
 
 	// Insert COMPOSITION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_composition (id, versioned_composition_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4)`, nextComposition.UID.V.OBJECT_VERSION_ID().Value, nextComposition.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
-	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to insert composition into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_composition (id, version_int, versioned_composition_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, nextComposition.UID.V.OBJECT_VERSION_ID().Value, nextComposition.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), nextComposition.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
 	nextComposition.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_composition_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, nextComposition.UID.V.OBJECT_VERSION_ID().Value, compositionVersion)
-	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to insert composition data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_composition_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, nextComposition.UID.V.OBJECT_VERSION_ID().Value, compositionVersionData)
 
 	// Update EHR with contribution ref
-	_, err = s.DB.Exec(ctx, `
+	batch.Queue(`
 		UPDATE openehr.tbl_ehr_data
 		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true)
 		WHERE id = $2
@@ -963,8 +977,16 @@ func (s *Service) UpdateComposition(ctx context.Context, ehrID uuid.UUID, curren
 		Namespace: rm.Namespace_local,
 		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
 	}, ehrID)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.COMPOSITION{}, fmt.Errorf("failed to update EHR with new contribution: %w", err)
+		return rm.COMPOSITION{}, fmt.Errorf("failed to execute batch insert for Composition update: %w", err)
+	}
+
+	err = br.Close()
+	if err != nil {
+		return rm.COMPOSITION{}, fmt.Errorf("failed to close batch result for Composition update: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -997,25 +1019,18 @@ func (s *Service) DeleteVersionedComposition(ctx context.Context, ehrID uuid.UUI
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, contribution.UID.Value, contribution)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, contribution.UID.Value, contribution)
 
 	// Delete COMPOSITION (todo return 1 and check if deleted?)
-	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_object WHERE ehr_id = $1 AND versioned_composition_id = $2`, ehrID, versionedCompositionID)
-	if err != nil {
-		return fmt.Errorf("failed to delete composition from the database: %w", err)
-	}
+	batch.Queue(`DELETE FROM openehr.tbl_versioned_object WHERE ehr_id = $1 AND versioned_composition_id = $2`, ehrID, versionedCompositionID)
 
 	// Update EHR, add contribution and remove composition ref from list
-	_, err = s.DB.Exec(ctx, `
+	batch.Queue(`
 		UPDATE openehr.tbl_ehr
 		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true) #- (
 			SELECT ARRAY['compositions', (idx-1)::text]
@@ -1031,8 +1046,15 @@ func (s *Service) DeleteVersionedComposition(ctx context.Context, ehrID uuid.UUI
 	}, versionedCompositionID.String(),
 		ehrID,
 	)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return fmt.Errorf("failed to update EHR with new contribution: %w", err)
+		return fmt.Errorf("failed to execute batch insert for Versioned Composition deletion: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close batch result for Versioned Composition deletion: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1323,41 +1345,25 @@ func (s *Service) CreateDirectory(ctx context.Context, ehrID uuid.UUID, director
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
-	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert VERSIONED_FOLDER
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id) VALUES ($1, $2, $3)`, versionedFolder.UID.Value, rm.VERSIONED_FOLDER_TYPE, ehrID)
-	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to insert versioned folder into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_object (id, type, ehr_id) VALUES ($1, $2, $3)`, versionedFolder.UID.Value, rm.VERSIONED_FOLDER_TYPE, ehrID)
 	versionedFolder.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_folder (id, data) VALUES ($1, $2)`, versionedFolder.UID.Value, versionedFolder)
-	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to insert versioned folder data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_folder_data (id, data) VALUES ($1, $2)`, versionedFolder.UID.Value, versionedFolder)
 
 	// Insert FOLDER
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_folder (id, version_int, version_object_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, folderVersion.UID.Value, directory.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), directory.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
-	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to insert folder version into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_folder (id, version_int, version_object_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, folderVersion.UID.Value, directory.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), directory.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
 	folderVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_folder_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, folderVersion.UID.Value, folderVersion)
-	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to insert folder version data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_folder_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, folderVersion.UID.Value, folderVersion)
 
 	// Update EHR, add contribution ref to list
-	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+	batch.Queue(`UPDATE openehr.tbl_ehr
 		SET data = jsonb_insert(
 			jsonb_insert(
 				jsonb_set(data, '{directory}', $2::jsonb)
@@ -1373,8 +1379,15 @@ func (s *Service) CreateDirectory(ctx context.Context, ehrID uuid.UUID, director
 		Namespace: rm.Namespace_local,
 		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(versionedFolder.UID),
 	}, ehrID)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to update EHR with new contribution: %w", err)
+		return rm.FOLDER{}, fmt.Errorf("failed to execute batch insert for Directory creation: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.FOLDER{}, fmt.Errorf("failed to close batch result for Directory creation: %w", err)
 	}
 
 	if err = tx.Commit(ctx); err != nil {
@@ -1477,30 +1490,20 @@ func (s *Service) UpdateDirectory(ctx context.Context, ehrID uuid.UUID, currentD
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
-	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert FOLDER
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_folder (id, version_int, version_object_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, folderVersion.UID.Value, nextDirectory.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), nextDirectory.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
-	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to insert folder version into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_folder (id, version_int, version_object_id, ehr_id, contribution_id) VALUES ($1, $2, $3, $4, $5)`, folderVersion.UID.Value, nextDirectory.UID.V.OBJECT_VERSION_ID().VersionTreeID().Int(), nextDirectory.UID.V.OBJECT_VERSION_ID().UID(), ehrID, contribution.UID.Value)
 	folderVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_folder_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, folderVersion.UID.Value, folderVersion)
-	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to insert folder version data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_folder_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, folderVersion.UID.Value, folderVersion)
 
 	// Update EHR with contribution ref
-	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+	batch.Queue(`UPDATE openehr.tbl_ehr
 		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true)
 		WHERE id = $2
 	`, rm.OBJECT_REF{
@@ -1508,8 +1511,15 @@ func (s *Service) UpdateDirectory(ctx context.Context, ehrID uuid.UUID, currentD
 		Namespace: rm.Namespace_local,
 		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
 	}, ehrID)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.FOLDER{}, fmt.Errorf("failed to update EHR with new contribution: %w", err)
+		return rm.FOLDER{}, fmt.Errorf("failed to execute batch insert for Directory update: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.FOLDER{}, fmt.Errorf("failed to close batch result for Directory update: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1542,26 +1552,19 @@ func (s *Service) DeleteDirectory(ctx context.Context, ehrID uuid.UUID, versione
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Delete FOLDER (todo return 1 and check if deleted?)
-	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_object WHERE ehr_id = $1 AND id = $2`, ehrID, versionedFolderID)
-	if err != nil {
-		return fmt.Errorf("failed to delete directory from the database: %w", err)
-	}
+	batch.Queue(`DELETE FROM openehr.tbl_versioned_object WHERE ehr_id = $1 AND id = $2`, ehrID, versionedFolderID)
 
 	// Update EHR, add contribution ref to list and remove directory reference
 	// Folder reference is deleted as just the first entry, like the openehr docs specify
-	_, err = s.DB.Exec(ctx, `
+	batch.Queue(`
 		UPDATE openehr.tbl_ehr
 		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true) #- '{directory}' #- '{folders, 0}'
 		WHERE id = $2
@@ -1570,8 +1573,15 @@ func (s *Service) DeleteDirectory(ctx context.Context, ehrID uuid.UUID, versione
 		Namespace: rm.Namespace_local,
 		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
 	}, ehrID)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return fmt.Errorf("failed to update EHR with new contribution: %w", err)
+		return fmt.Errorf("failed to execute batch insert for Directory deletion: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close batch result for Directory deletion: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1767,35 +1777,36 @@ func (s *Service) ReplaceVersionedCompositionTags(ctx context.Context, ehrID, ve
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Delete existing tags
-	_, err = tx.Exec(ctx, `
-		DELETE FROM openehr.tbl_versioned_composition_tag
-		WHERE ehr_id = $1 AND versioned_composition_id = $2
-	`, ehrID, versionedCompositionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to delete existing tags: %w", err)
-	}
+	batch.Queue(`DELETE FROM openehr.tbl_versioned_composition_tag WHERE ehr_id = $1 AND versioned_composition_id = $2`, ehrID, versionedCompositionID)
 
 	// Insert new tags
 	for _, tag := range tags {
-		_, err = tx.Exec(ctx, `
-			INSERT INTO openehr.tbl_versioned_composition_tag (versioned_composition_id, key, data, ehr_id)
-			VALUES ($1, $2, $3, $4)
-		`, versionedCompositionID, tag.Key, tag, ehrID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to insert tag: %w", err)
-		}
+		batch.Queue(`INSERT INTO openehr.tbl_versioned_composition_tag (versioned_composition_id, key, data, ehr_id) VALUES ($1, $2, $3, $4)`, versionedCompositionID, tag.Key, tag, ehrID)
+	}
+
+	// Update EHR with contribution ref
+	batch.Queue(`UPDATE openehr.tbl_ehr SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true) WHERE id = $2`, rm.OBJECT_REF{
+		Type:      rm.CONTRIBUTION_TYPE,
+		Namespace: rm.Namespace_local,
+		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
+	}, ehrID)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute batch insert for Versioned Composition tags replacement: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to close batch result for Versioned Composition tags replacement: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1849,39 +1860,29 @@ func (s *Service) ReplaceCompositionTags(ctx context.Context, ehrID uuid.UUID, c
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Delete existing tags
-	_, err = tx.Exec(ctx, `
+	batch.Queue(`
 		DELETE FROM openehr.tbl_composition_tag ct
 		JOIN openehr.tbl_composition c ON c.id = ct.composition_id
 		WHERE ehr_id = $1 AND data->'target'->'id'->>'value' = $2
 	`, ehrID, compositionID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to delete existing tags: %w", err)
-	}
 
 	for _, tag := range tags {
-		_, err = tx.Exec(ctx, `
+		batch.Queue(`
 			INSERT INTO openehr.tbl_tag (ehr_id, data)
 			VALUES ($1, $2)
 		`, ehrID, tag)
-		if err != nil {
-			return nil, fmt.Errorf("failed to insert tag: %w", err)
-		}
 	}
 
 	// Update EHR with contribution ref
-	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+	batch.Queue(`UPDATE openehr.tbl_ehr
 		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true)
 		WHERE id = $2
 	`, rm.OBJECT_REF{
@@ -1889,12 +1890,9 @@ func (s *Service) ReplaceCompositionTags(ctx context.Context, ehrID uuid.UUID, c
 		Namespace: rm.Namespace_local,
 		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
 	}, ehrID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update EHR with new contribution: %w", err)
-	}
 
 	// Update EHR with new tags
-	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+	batch.Queue(`UPDATE openehr.tbl_ehr
 		SET data = jsonb_set(
 			data,
 			'{tags}',
@@ -1912,8 +1910,15 @@ func (s *Service) ReplaceCompositionTags(ctx context.Context, ehrID uuid.UUID, c
 		)
 		WHERE id = $1
 	`, ehrID, compositionID, tags)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return nil, fmt.Errorf("failed to update EHR with new tags: %w", err)
+		return nil, fmt.Errorf("failed to execute batch insert for Composition tags replacement: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return nil, fmt.Errorf("failed to close batch result for Composition tags replacement: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -1946,30 +1951,23 @@ func (s *Service) DeleteVersionedCompositionTagByKey(ctx context.Context, ehrID 
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id, ehr_id) VALUES ($1, $2)`, contribution.UID.Value, ehrID)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Delete the tag
-	_, err = s.DB.Exec(ctx, `
+	batch.Queue(`
 		DELETE FROM openehr.tbl_tag
 		WHERE ehr_id = $1
 		  AND data->'target'->'id'->>'value' = $2
 		  AND data->>'key' = $3
 	`, ehrID, versionedCompositionID.String(), key)
-	if err != nil {
-		return fmt.Errorf("failed to delete Versioned Composition tag by key: %w", err)
-	}
 
 	// Update EHR
-	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+	batch.Queue(`UPDATE openehr.tbl_ehr
 		SET data = jsonb_insert(data, '{contributions, -1}', $1::jsonb, true)
 		WHERE id = $2
 	`, rm.OBJECT_REF{
@@ -1977,12 +1975,9 @@ func (s *Service) DeleteVersionedCompositionTagByKey(ctx context.Context, ehrID 
 		Namespace: rm.Namespace_local,
 		ID:        rm.OBJECT_ID_from_HIER_OBJECT_ID(contribution.UID),
 	}, ehrID)
-	if err != nil {
-		return fmt.Errorf("failed to update EHR with new contribution: %w", err)
-	}
 
 	// Update EHR with new tags
-	_, err = tx.Exec(ctx, `UPDATE openehr.tbl_ehr
+	batch.Queue(`UPDATE openehr.tbl_ehr
 		SET data = jsonb_set(
 			data,
 			'{tags}',
@@ -1995,8 +1990,15 @@ func (s *Service) DeleteVersionedCompositionTagByKey(ctx context.Context, ehrID 
 		)
 		WHERE id = $1
 	`, ehrID, versionedCompositionID, key)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return fmt.Errorf("failed to update EHR with new tags: %w", err)
+		return fmt.Errorf("failed to execute batch insert for Versioned Composition tag deletion: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close batch result for Versioned Composition tag deletion: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2076,37 +2078,31 @@ func (s *Service) CreateAgent(ctx context.Context, agent rm.AGENT) (rm.AGENT, er
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert VERSIONED_PARTY
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
-	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to insert versioned party into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
 	versionedParty.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_party (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
-	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to insert versioned party data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_party_data (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
 
 	// Insert AGENT
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_agent (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, agentVersion.UID.Value, agentVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
-	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to insert agent version into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_agent (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, agentVersion.UID.Value, agentVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
 	agentVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_agent_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, agentVersion.UID.Value, agentVersion)
+	batch.Queue(`INSERT INTO openehr.tbl_agent_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, agentVersion.UID.Value, agentVersion)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to insert agent version data into the database: %w", err)
+		return rm.AGENT{}, fmt.Errorf("failed to execute batch insert for Agent creation: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.AGENT{}, fmt.Errorf("failed to close batch result for Agent creation: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2223,26 +2219,26 @@ func (s *Service) UpdateAgent(ctx context.Context, currentAgentID rm.OBJECT_VERS
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert AGENT
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_agent (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, agentVersion.UID.Value, 1, uuid.MustParse(strings.Split(nextAgent.UID.V.OBJECT_VERSION_ID().UID(), "::")[0]), rm.AGENT_TYPE, contribution.UID.Value)
-	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to insert agent version into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_agent (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, agentVersion.UID.Value, 1, uuid.MustParse(strings.Split(nextAgent.UID.V.OBJECT_VERSION_ID().UID(), "::")[0]), rm.AGENT_TYPE, contribution.UID.Value)
 	agentVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_agent_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, agentVersion.UID.Value, agentVersion)
+	batch.Queue(`INSERT INTO openehr.tbl_agent_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, agentVersion.UID.Value, agentVersion)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.AGENT{}, fmt.Errorf("failed to insert agent version data into the database: %w", err)
+		return rm.AGENT{}, fmt.Errorf("failed to execute batch insert for Agent update: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.AGENT{}, fmt.Errorf("failed to close batch result for Agent update: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2275,21 +2271,24 @@ func (s *Service) DeleteAgent(ctx context.Context, versionedPartyID uuid.UUID) e
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Delete VERSIONED_PARTY
-	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_party WHERE id = $1`, versionedPartyID)
+	batch.Queue(`DELETE FROM openehr.tbl_versioned_object WHERE id = $1`, versionedPartyID)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return fmt.Errorf("failed to delete agent from the database: %w", err)
+		return fmt.Errorf("failed to execute batch insert for Agent deletion: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close batch result for Agent deletion: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2369,37 +2368,31 @@ func (s *Service) CreatePerson(ctx context.Context, person rm.PERSON) (rm.PERSON
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert VERSIONED_PARTY
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
-	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to insert versioned party into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
 	versionedParty.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_party (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
-	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to insert versioned party data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_party_data (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
 
 	// Insert PERSON
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_person (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, personVersion.UID.Value, personVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
-	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to insert person version into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_person (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, personVersion.UID.Value, personVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
 	personVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_person_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, personVersion.UID.Value, personVersion)
+	batch.Queue(`INSERT INTO openehr.tbl_person_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, personVersion.UID.Value, personVersion)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to insert person version data into the database: %w", err)
+		return rm.PERSON{}, fmt.Errorf("failed to execute batch insert for Person creation: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.PERSON{}, fmt.Errorf("failed to close batch result for Person creation: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2509,26 +2502,26 @@ func (s *Service) UpdatePerson(ctx context.Context, currentPersonID rm.OBJECT_VE
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert PERSON
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_person (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, personVersion.UID.Value, 1, uuid.MustParse(strings.Split(nextPerson.UID.V.OBJECT_VERSION_ID().UID(), "::")[0]), rm.PERSON_TYPE, contribution.UID.Value)
-	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to insert person version into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_person (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, personVersion.UID.Value, 1, uuid.MustParse(strings.Split(nextPerson.UID.V.OBJECT_VERSION_ID().UID(), "::")[0]), rm.PERSON_TYPE, contribution.UID.Value)
 	personVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_person_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, personVersion.UID.Value, personVersion)
+	batch.Queue(`INSERT INTO openehr.tbl_person_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, personVersion.UID.Value, personVersion)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.PERSON{}, fmt.Errorf("failed to insert person version data into the database: %w", err)
+		return rm.PERSON{}, fmt.Errorf("failed to execute batch insert for Person creation: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.PERSON{}, fmt.Errorf("failed to close batch result for Person creation: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2561,21 +2554,24 @@ func (s *Service) DeletePerson(ctx context.Context, versionedObjectID uuid.UUID)
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Delete PERSON
-	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_party WHERE id = $1`, versionedObjectID)
+	batch.Queue(`DELETE FROM openehr.tbl_versioned_object WHERE id = $1`, versionedObjectID)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return fmt.Errorf("failed to delete person from the database: %w", err)
+		return fmt.Errorf("failed to execute batch insert for Person deletion: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close batch result for Person deletion: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2655,37 +2651,31 @@ func (s *Service) CreateGroup(ctx context.Context, group rm.GROUP) (rm.GROUP, er
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert VERSIONED_PARTY
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
-	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to insert versioned party into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
 	versionedParty.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_party (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
-	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to insert versioned party data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_party_data (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
 
 	// Insert GROUP
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_group (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, groupVersion.UID.Value, groupVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
-	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to insert group version into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_group (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, groupVersion.UID.Value, groupVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
 	groupVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_group_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, groupVersion.UID.Value, groupVersion)
+	batch.Queue(`INSERT INTO openehr.tbl_group_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, groupVersion.UID.Value, groupVersion)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to insert group version data into the database: %w", err)
+		return rm.GROUP{}, fmt.Errorf("failed to execute batch insert for Group creation: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.GROUP{}, fmt.Errorf("failed to close batch result for Group creation: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2795,26 +2785,26 @@ func (s *Service) UpdateGroup(ctx context.Context, currentGroupID rm.OBJECT_VERS
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert GROUP
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_group (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, groupVersion.UID.Value, 1, uuid.MustParse(strings.Split(nextGroup.UID.V.OBJECT_VERSION_ID().UID(), "::")[0]), rm.GROUP_TYPE, contribution.UID.Value)
-	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to insert group version into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_group (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, groupVersion.UID.Value, 1, uuid.MustParse(strings.Split(nextGroup.UID.V.OBJECT_VERSION_ID().UID(), "::")[0]), rm.GROUP_TYPE, contribution.UID.Value)
 	groupVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_group_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, groupVersion.UID.Value, groupVersion)
+	batch.Queue(`INSERT INTO openehr.tbl_group_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, groupVersion.UID.Value, groupVersion)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.GROUP{}, fmt.Errorf("failed to insert group version data into the database: %w", err)
+		return rm.GROUP{}, fmt.Errorf("failed to execute batch insert for Group creation: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.GROUP{}, fmt.Errorf("failed to close batch result for Group creation: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2847,21 +2837,24 @@ func (s *Service) DeleteGroup(ctx context.Context, versionedPartyID uuid.UUID) e
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Delete VERSIONED_PARTY
-	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_party WHERE id = $1`, versionedPartyID)
+	batch.Queue(`DELETE FROM openehr.tbl_versioned_object WHERE id = $1`, versionedPartyID)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return fmt.Errorf("failed to delete group from the database: %w", err)
+		return fmt.Errorf("failed to execute batch insert for Group deletion: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close batch result for Group deletion: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -2941,37 +2934,31 @@ func (s *Service) CreateOrganisation(ctx context.Context, organisation rm.ORGANI
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert VERSIONED_PARTY
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
-	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to insert versioned party into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
 	versionedParty.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_party (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
-	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to insert versioned party data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_party_data (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
 
 	// Insert ORGANISATION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_organisation (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, organisationVersion.UID.Value, organisationVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
-	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to insert organisation version into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_organisation (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, organisationVersion.UID.Value, organisationVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
 	organisationVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_organisation_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, organisationVersion.UID.Value, organisationVersion)
+	batch.Queue(`INSERT INTO openehr.tbl_organisation_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, organisationVersion.UID.Value, organisationVersion)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to insert organisation version data into the database: %w", err)
+		return rm.ORGANISATION{}, fmt.Errorf("failed to execute batch insert for Organisation creation: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.ORGANISATION{}, fmt.Errorf("failed to close batch result for Organisation creation: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -3083,26 +3070,26 @@ func (s *Service) UpdateOrganisation(ctx context.Context, currentOrganisationID 
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert ORGANISATION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_organisation (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, organisationVersion.UID.Value, 1, uuid.MustParse(strings.Split(nextOrganisation.UID.V.OBJECT_VERSION_ID().UID(), "::")[0]), rm.ORGANISATION_TYPE, contribution.UID.Value)
-	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to insert organisation version into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_organisation (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, organisationVersion.UID.Value, 1, uuid.MustParse(strings.Split(nextOrganisation.UID.V.OBJECT_VERSION_ID().UID(), "::")[0]), rm.ORGANISATION_TYPE, contribution.UID.Value)
 	organisationVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_organisation_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, organisationVersion.UID.Value, organisationVersion)
+	batch.Queue(`INSERT INTO openehr.tbl_organisation_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, organisationVersion.UID.Value, organisationVersion)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.ORGANISATION{}, fmt.Errorf("failed to insert organisation version data into the database: %w", err)
+		return rm.ORGANISATION{}, fmt.Errorf("failed to execute batch insert for Organisation creation: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.ORGANISATION{}, fmt.Errorf("failed to close batch result for Organisation creation: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -3135,21 +3122,24 @@ func (s *Service) DeleteOrganisation(ctx context.Context, versionedObjectID uuid
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Delete ORGANISATION
-	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_party WHERE id = $1`, versionedObjectID)
+	batch.Queue(`DELETE FROM openehr.tbl_versioned_object WHERE id = $1`, versionedObjectID)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return fmt.Errorf("failed to delete organisation from the database: %w", err)
+		return fmt.Errorf("failed to execute batch insert for Organisation deletion: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close batch result for Organisation deletion: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -3228,37 +3218,31 @@ func (s *Service) CreateRole(ctx context.Context, role rm.ROLE) (rm.ROLE, error)
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert VERSIONED_PARTY
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
-	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to insert versioned party into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_object (id, type) VALUES ($1, $2)`, versionedParty.UID.Value, rm.VERSIONED_PARTY_TYPE)
 	versionedParty.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_versioned_party (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
-	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to insert versioned party data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_versioned_party_data (id, data) VALUES ($1, $2)`, versionedParty.UID.Value, versionedParty)
 
 	// Insert ROLE
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_role (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, roleVersion.UID.Value, roleVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
-	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to insert role version into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_role (id, version_int, versioned_party_id, contribution_id) VALUES ($1, $2, $3, $4)`, roleVersion.UID.Value, roleVersion.UID.VersionTreeID().Int(), versionedParty.UID.Value, contribution.UID.Value)
 	roleVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_role_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, roleVersion.UID.Value, roleVersion)
+	batch.Queue(`INSERT INTO openehr.tbl_role_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, roleVersion.UID.Value, roleVersion)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to insert role version data into the database: %w", err)
+		return rm.ROLE{}, fmt.Errorf("failed to execute batch insert for Role creation: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.ROLE{}, fmt.Errorf("failed to close batch result for Role creation: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -3353,26 +3337,26 @@ func (s *Service) UpdateRole(ctx context.Context, versionedPartyID uuid.UUID, ro
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Insert ROLE
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_role (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, roleVersion.UID.Value, roleVersion.UID.VersionTreeID().Int(), versionedPartyID, rm.ROLE_TYPE, contribution.UID.Value)
-	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to insert role version into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_role (id, version_int, versioned_party_id, type, contribution_id) VALUES ($1, $2, $3, $4, $5)`, roleVersion.UID.Value, roleVersion.UID.VersionTreeID().Int(), versionedPartyID, rm.ROLE_TYPE, contribution.UID.Value)
 	roleVersion.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_role_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, roleVersion.UID.Value, roleVersion)
+	batch.Queue(`INSERT INTO openehr.tbl_role_data (id, data, version_data) VALUES ($1, ($2::jsonb)->'data', jsonb_set($2::jsonb, '{data}', 'null', true))`, roleVersion.UID.Value, roleVersion)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return rm.ROLE{}, fmt.Errorf("failed to insert role version data into the database: %w", err)
+		return rm.ROLE{}, fmt.Errorf("failed to execute batch insert for Role update: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return rm.ROLE{}, fmt.Errorf("failed to close batch result for Role update: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -3405,21 +3389,24 @@ func (s *Service) DeleteRole(ctx context.Context, versionedObjectID uuid.UUID) e
 		}
 	}()
 
+	batch := &pgx.Batch{}
+
 	// Insert CONTRIBUTION
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution (id) VALUES ($1)`, contribution.UID.Value)
 	contribution.SetModelName()
-	_, err = tx.Exec(ctx, `INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
-	if err != nil {
-		return fmt.Errorf("failed to insert contribution data into the database: %w", err)
-	}
+	batch.Queue(`INSERT INTO openehr.tbl_contribution_data (id, data) VALUES ($1, $2)`, contribution.UID.Value, contribution)
 
 	// Delete ROLE
-	_, err = tx.Exec(ctx, `DELETE FROM openehr.tbl_versioned_party WHERE id = $1`, versionedObjectID)
+	batch.Queue(`DELETE FROM openehr.tbl_versioned_object WHERE id = $1`, versionedObjectID)
+
+	br := tx.SendBatch(ctx, batch)
+	_, err = br.Exec()
 	if err != nil {
-		return fmt.Errorf("failed to delete role from the database: %w", err)
+		return fmt.Errorf("failed to execute batch insert for Role deletion: %w", err)
+	}
+	err = br.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close batch result for Role deletion: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -3430,9 +3417,9 @@ func (s *Service) DeleteRole(ctx context.Context, versionedObjectID uuid.UUID) e
 }
 
 func (s *Service) GetVersionedPartyRawJSON(ctx context.Context, versionedPartyID uuid.UUID) ([]byte, error) {
-	query := `SELECT data FROM openehr.tbl_versioned_party WHERE id = $1 LIMIT 1`
+	query := `SELECT data FROM openehr.tbl_versioned_object WHERE id = $1 AND type = $2 LIMIT 1`
 
-	row := s.DB.QueryRow(ctx, query, versionedPartyID)
+	row := s.DB.QueryRow(ctx, query, versionedPartyID, rm.VERSIONED_PARTY_TYPE)
 
 	var data []byte
 	err := row.Scan(&data)
@@ -3713,20 +3700,6 @@ func (s *Service) ExistsVersionedObject(ctx context.Context, versionedObjectID u
 
 // 	return nil
 // }
-
-func (s *Service) DeleteVersionedObjectWithTx(ctx context.Context, tx pgx.Tx, versionedObjectID uuid.UUID) error {
-	var deleted uint8
-	row := tx.QueryRow(ctx, `DELETE FROM openehr.tbl_versioned_object WHERE id = $1 RETURNING 1`, versionedObjectID)
-	err := row.Scan(&deleted)
-	if err != nil {
-		if errors.Is(err, database.ErrNoRows) {
-			return ErrVersionedObjectNotFound
-		}
-		return fmt.Errorf("failed to delete versioned object by object version ID from the database: %w", err)
-	}
-
-	return nil
-}
 
 func (s *Service) QueryWithStream(ctx context.Context, w io.Writer, aqlQuery string, aqlParams map[string]any) error {
 	if aqlParams == nil {

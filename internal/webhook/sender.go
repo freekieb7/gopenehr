@@ -112,7 +112,7 @@ func (s *Sender) processBatch(ctx context.Context) error {
 	}
 	defer rows.Close()
 
-	var n int = 0
+	n := 0
 	for rows.Next() {
 		if err := rows.Scan(&s.jobs[n].ID, &s.jobs[n].EventID, &s.jobs[n].EventType, &s.jobs[n].Payload, &s.jobs[n].URL, &s.jobs[n].Secret, &s.jobs[n].AttemptCount); err != nil {
 			return err

@@ -1,11 +1,11 @@
 package rm
 
 import (
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/bytedance/sonic"
 	"github.com/freekieb7/gopenehr/internal/openehr/terminology"
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 	"github.com/freekieb7/gopenehr/pkg/utils"
@@ -200,7 +200,7 @@ func (d DvTextUnion) Validate(path string) util.ValidateError {
 }
 
 func (d DvTextUnion) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.Value)
+	return sonic.Marshal(d.Value)
 }
 
 func (d *DvTextUnion) UnmarshalJSON(data []byte) error {
@@ -217,7 +217,7 @@ func (d *DvTextUnion) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	return json.Unmarshal(data, d.Value)
+	return sonic.Unmarshal(data, d.Value)
 }
 
 func (d *DvTextUnion) DV_TEXT() *DV_TEXT {

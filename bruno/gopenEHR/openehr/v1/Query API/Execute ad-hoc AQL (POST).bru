@@ -12,7 +12,7 @@ post {
 
 body:json {
   {
-      "q": "SELECT * FROM EHR CONTAINS VERSIONED_PARTY",
+      "q": "SELECT * FROM VERSIONED_COMPOSITION vc WHERE vc/uid/value = '7dac49b7-b58e-4842-b97e-a7871411ba24'",
       "query_parameters": {}
   }
 }

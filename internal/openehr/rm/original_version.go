@@ -1,9 +1,9 @@
 package rm
 
 import (
-	"encoding/json"
 	"fmt"
 
+	"github.com/bytedance/sonic"
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
@@ -172,7 +172,7 @@ func (ovd *OriginalVersionDataUnion) Validate(path string) util.ValidateError {
 }
 
 func (ovd OriginalVersionDataUnion) MarshalJSON() ([]byte, error) {
-	return json.Marshal(ovd.Value)
+	return sonic.Marshal(ovd.Value)
 }
 
 func (ovd *OriginalVersionDataUnion) UnmarshalJSON(data []byte) error {
@@ -181,43 +181,36 @@ func (ovd *OriginalVersionDataUnion) UnmarshalJSON(data []byte) error {
 	case EHR_STATUS_TYPE:
 		ovd.Kind = ORIGINAL_VERSION_data_kind_EHR_STATUS
 		ovd.Value = &EHR_STATUS{}
-		return json.Unmarshal(data, ovd.Value)
 	case EHR_ACCESS_TYPE:
 		ovd.Kind = ORIGINAL_VERSION_data_kind_EHR_ACCESS
 		ovd.Value = &EHR_ACCESS{}
-		return json.Unmarshal(data, ovd.Value)
 	case COMPOSITION_TYPE:
 		ovd.Kind = ORIGINAL_VERSION_data_kind_COMPOSITION
 		ovd.Value = &COMPOSITION{}
-		return json.Unmarshal(data, ovd.Value)
 	case FOLDER_TYPE:
 		ovd.Kind = ORIGINAL_VERSION_data_kind_FOLDER
 		ovd.Value = &FOLDER{}
-		return json.Unmarshal(data, ovd.Value)
 	case ROLE_TYPE:
 		ovd.Kind = ORIGINAL_VERSION_data_kind_ROLE
 		ovd.Value = &ROLE{}
-		return json.Unmarshal(data, ovd.Value)
 	case PERSON_TYPE:
 		ovd.Kind = ORIGINAL_VERSION_data_kind_PERSON
 		ovd.Value = &PERSON{}
-		return json.Unmarshal(data, ovd.Value)
 	case AGENT_TYPE:
 		ovd.Kind = ORIGINAL_VERSION_data_kind_AGENT
 		ovd.Value = &AGENT{}
-		return json.Unmarshal(data, ovd.Value)
 	case GROUP_TYPE:
 		ovd.Kind = ORIGINAL_VERSION_data_kind_GROUP
 		ovd.Value = &GROUP{}
-		return json.Unmarshal(data, ovd.Value)
 	case ORGANISATION_TYPE:
 		ovd.Kind = ORIGINAL_VERSION_data_kind_ORGANISATION
 		ovd.Value = &ORGANISATION{}
-		return json.Unmarshal(data, ovd.Value)
 	default:
 		ovd.Kind = ORIGINAL_VERSION_data_kind_unknown
 		return nil
 	}
+
+	return sonic.Unmarshal(data, ovd.Value)
 }
 
 func (o *OriginalVersionDataUnion) EHR_STATUS() *EHR_STATUS {

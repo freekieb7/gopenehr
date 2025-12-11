@@ -458,7 +458,7 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 		}
 
 		// Search in the model itself
-		query := fmt.Sprintf("SELECT * FROM JSON_TABLE(%s.data, 'strict $.*.** ? (%s)' COLUMNS(data JSONB PATH '$')) data", prevSource.V.Table, typeFilter)
+		query := fmt.Sprintf("SELECT e.id, ed.data FROM JSON_TABLE(%s.data, 'strict $.*.** ? (%s)' COLUMNS(data JSONB PATH '$')) data", prevSource.V.Table, typeFilter)
 		if whereExpression != "" {
 			query += " WHERE " + whereExpression
 		}
@@ -467,7 +467,7 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 
 	switch modelName {
 	case rm.EHR_TYPE:
-		expression := "SELECT id, data FROM openehr.tbl_ehr"
+		expression := "SELECT e.*, ed.data FROM openehr.tbl_ehr e JOIN openehr.tbl_ehr_data ed ON ed.id = e.id"
 		if whereExpression != "" {
 			expression += " WHERE " + whereExpression
 		}
@@ -479,7 +479,7 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 
 		return "", nil
 	case rm.CONTRIBUTION_TYPE:
-		expression := "SELECT c.id, c.ehr_id, cd.data FROM openehr.tbl_contribution c JOIN openehr.tbl_contribution_data cd ON c.id = cd.id"
+		expression := "SELECT c.*, cd.data FROM openehr.tbl_contribution c JOIN openehr.tbl_contribution_data cd ON cd.id = c.id"
 		if whereExpression != "" {
 			expression += " WHERE " + whereExpression
 		}
@@ -496,7 +496,7 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 			return "", nil
 		}
 	case rm.VERSIONED_EHR_STATUS_TYPE:
-		expression := fmt.Sprintf("SELECT vo.id, vo.ehr_id, vod.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id WHERE vo.type = '%s'", rm.VERSIONED_EHR_STATUS_TYPE)
+		expression := "SELECT vo.*, vesd.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_ehr_status_data vesd ON vesd.id = vo.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
 		}
@@ -515,7 +515,7 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 			return "", nil
 		}
 	case rm.VERSIONED_EHR_ACCESS_TYPE:
-		expression := fmt.Sprintf("SELECT vo.id, vo.ehr_id, vod.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id WHERE vo.type = '%s'", rm.VERSIONED_EHR_ACCESS_TYPE)
+		expression := "SELECT vo.*, vead.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_ehr_access_data vead ON vead.id = vo.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
 		}
@@ -534,7 +534,7 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 			return "", nil
 		}
 	case rm.VERSIONED_COMPOSITION_TYPE:
-		expression := fmt.Sprintf("SELECT vo.id, vo.ehr_id, vod.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id WHERE vo.type = '%s'", rm.VERSIONED_COMPOSITION_TYPE)
+		expression := "SELECT vo.*, vcd.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_composition_data vcd ON vcd.id = vo.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
 		}
@@ -547,13 +547,15 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 		switch prevSource.V.Model {
 		case rm.EHR_TYPE:
 			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.ehr_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+		case rm.VERSIONED_COMPOSITION_TYPE:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.CONTRIBUTION_TYPE:
 			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case rm.VERSIONED_FOLDER_TYPE:
-		expression := fmt.Sprintf("SELECT vo.id, vo.ehr_id, vod.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id WHERE vo.type = '%s'", rm.VERSIONED_FOLDER_TYPE)
+		expression := "SELECT f.*, fd.data FROM openehr.tbl_folder f JOIN openehr.tbl_folder_data fd ON fd.id = f.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
 		}
@@ -566,13 +568,15 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 		switch prevSource.V.Model {
 		case rm.EHR_TYPE:
 			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.ehr_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+		case rm.VERSIONED_FOLDER_TYPE:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.versioned_folder_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.CONTRIBUTION_TYPE:
 			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case rm.VERSIONED_PARTY_TYPE:
-		expression := fmt.Sprintf("SELECT vo.id, vo.ehr_id, vod.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_object_data vod ON vo.id = vod.id WHERE vo.type = '%s'", rm.VERSIONED_PARTY_TYPE)
+		expression := "SELECT vo.*, vpd.data FROM openehr.tbl_versioned_object vo JOIN openehr.tbl_versioned_party_data vpd ON vpd.id = vo.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
 		}
@@ -583,38 +587,24 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 		}
 
 		switch prevSource.V.Model {
-		case rm.CONTRIBUTION_TYPE:
-			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.EHR_TYPE:
 			return fmt.Sprintf(`
-				LEFT JOIN openehr.tbl_object_version tmp_es_%[2]s ON tmp_es_%[2]s.ehr_id = %[3]s.id AND tmp_es_%[2]s.type = '%[4]s'
-				LEFT JOIN openehr.tbl_object_version_data tmp_esd_%[2]s ON tmp_es_%[2]s.id = tmp_esd_%[2]s.id
-				LEFT JOIN %[1]s
-					ON %[2]s.id::text = tmp_esd_%[2]s.object_data->'subject'->'external_ref'->'id'->>'value'
-					AND tmp_esd_%[2]s.object_data->'subject'->'external_ref'->>'namespace' = 'local'
-					AND tmp_esd_%[2]s.object_data->'subject'->'external_ref'->>'type' = '%[5]s'
-			`, expression, source.Table, prevSource.V.Table, rm.EHR_STATUS_TYPE, rm.VERSIONED_PARTY_TYPE), nil
+				LEFT JOIN openehr.tbl_ehr_status tmp_%[2]s ON tmp_%[2]s.ehr_id = %[3]s.id
+				LEFT JOIN %[1]s ON %[2]s.id = tmp_%[2]s.local_ref_versioned_party_id
+			`, expression, source.Table, prevSource.V.Table), nil
 		case rm.EHR_STATUS_TYPE:
 			return fmt.Sprintf(`
-				LEFT JOIN %[1]s
-					ON %[2]s.id = %[3]s.data->'subject'->'external_ref'->'id'->>'value'
-					AND %[3]s.data->'subject'->'external_ref'->>'namespace' = 'local'
-					AND %[3]s.data->'subject'->'external_ref'->>'type' = '%[4]s'
-			`, expression, source.Table, prevSource.V.Table, rm.VERSIONED_PARTY_TYPE), nil
+				LEFT JOIN %[1]s ON %[2]s.id = %[3]s.local_ref_versioned_party_id
+			`, expression, source.Table, prevSource.V.Table), nil
+		case rm.CONTRIBUTION_TYPE:
+			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case rm.COMPOSITION_TYPE:
-		expression := "SELECT "
-		if !allVersions {
-			expression += "DISTINCT ON (vo.versioned_object_id) "
-		}
-		expression += "vo.id, vo.ehr_id, vo.versioned_object_id, ovd.object_data data FROM openehr.tbl_object_version vo JOIN openehr.tbl_object_version_data ovd ON vo.id = ovd.id WHERE vo.type = 'COMPOSITION'"
+		expression := "SELECT c.*, cd.data, cd.version_data FROM openehr.tbl_composition c JOIN openehr.tbl_composition_data cd ON cd.id = c.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
-		}
-		if !allVersions {
-			expression += " ORDER BY vo.versioned_object_id, vo.id DESC"
 		}
 		expression = "(" + expression + ") " + source.Table
 
@@ -626,7 +616,7 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 		case rm.EHR_TYPE:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.ehr_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.VERSIONED_COMPOSITION_TYPE:
-			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_composition_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.CONTRIBUTION_TYPE:
 			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.FOLDER_TYPE:
@@ -635,16 +625,9 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 			return "", nil
 		}
 	case rm.EHR_STATUS_TYPE:
-		expression := "SELECT "
-		if !allVersions {
-			expression += "DISTINCT ON (ov.versioned_object_id) "
-		}
-		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'EHR_STATUS'"
+		expression := "SELECT es.*, es.data, es.version_data FROM openehr.tbl_ehr_status es JOIN openehr.tbl_ehr_status_data esd ON es.id = esd.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
-		}
-		if !allVersions {
-			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
 		}
 		expression = "(" + expression + ") " + source.Table
 
@@ -656,23 +639,16 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 		case rm.EHR_TYPE:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.ehr_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.VERSIONED_EHR_STATUS_TYPE:
-			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_ehr_status_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.CONTRIBUTION_TYPE:
-			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
+			return fmt.Sprintf("LEFT JOIN %s ON %s.contribution_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case rm.EHR_ACCESS_TYPE:
-		expression := "SELECT "
-		if !allVersions {
-			expression += "DISTINCT ON (ov.versioned_object_id) "
-		}
-		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'EHR_ACCESS'"
+		expression := "SELECT ea.*, ead.data, ead.version_data FROM openehr.tbl_ehr_access ea JOIN openehr.tbl_ehr_access_data ead ON ea.id = ead.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
-		}
-		if !allVersions {
-			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
 		}
 		expression = "(" + expression + ") " + source.Table
 
@@ -691,22 +667,11 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 			return "", nil
 		}
 	case rm.FOLDER_TYPE:
-		expression := "SELECT "
-		if !allVersions {
-			expression += "DISTINCT ON (ov.versioned_object_id) "
-		}
-		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'FOLDER'"
+		expression := "SELECT f.*, fd.data data FROM openehr.tbl_folder f JOIN openehr.tbl_folder_data fd ON f.id = fd.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
 		}
-		if !allVersions {
-			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
-		}
 		expression = "(" + expression + ") " + source.Table
-
-		if !prevSource.E {
-			return expression, nil
-		}
 
 		if !prevSource.E {
 			return expression, nil
@@ -715,18 +680,14 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 		case rm.EHR_TYPE:
 			return fmt.Sprintf("LEFT JOIN %s ON %s.ehr_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.VERSIONED_FOLDER_TYPE:
-			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_folder_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.CONTRIBUTION_TYPE:
 			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case rm.ROLE_TYPE:
-		expression := "SELECT "
-		if !allVersions {
-			expression += "DISTINCT ON (ov.versioned_object_id) "
-		}
-		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'ROLE'"
+		expression := "SELECT r.*, rd.data, rd._version_data FROM openehr.tbl_role r JOIN openehr.tbl_role_data rd ON r.id = rd.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
 		}
@@ -741,23 +702,16 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 
 		switch prevSource.V.Model {
 		case rm.VERSIONED_PARTY_TYPE:
-			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_party_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.CONTRIBUTION_TYPE:
 			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case rm.PERSON_TYPE:
-		expression := "SELECT "
-		if !allVersions {
-			expression += "DISTINCT ON (ov.versioned_object_id) "
-		}
-		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'PERSON' "
+		expression := "SELECT p.*, pd.data, pd.version_data FROM openehr.tbl_person p JOIN openehr.tbl_person_data pd ON p.id = pd.id"
 		if whereExpression != "" {
 			expression += "AND " + whereExpression
-		}
-		if !allVersions {
-			expression += " ORDER BY ov.versioned_object_id, ov.created_at DESC"
 		}
 		expression = "(" + expression + ") " + source.Table
 
@@ -767,39 +721,23 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 
 		switch prevSource.V.Model {
 		case rm.VERSIONED_PARTY_TYPE:
-			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_party_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.CONTRIBUTION_TYPE:
 			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.EHR_TYPE:
 			return fmt.Sprintf(`
-				LEFT JOIN openehr.tbl_object_version tmp_es_%[2]s ON tmp_es_%[2]s.ehr_id = %[3]s.id AND tmp_es_%[2]s.type = '%[4]s'
-				LEFT JOIN openehr.tbl_object_version_data tmp_esd_%[2]s ON tmp_es_%[2]s.id = tmp_esd_%[2]s.id
-				LEFT JOIN %[1]s
-					ON %[2]s.id = tmp_esd_%[2]s.object_data->'subject'->'external_ref'->'id'->>'value'
-					AND tmp_esd_%[2]s.object_data->'subject'->'external_ref'->>'namespace' = 'local'
-					AND tmp_esd_%[2]s.object_data->'subject'->'external_ref'->>'type' = '%[5]s'
-			`, expression, source.Table, prevSource.V.Table, rm.EHR_STATUS_TYPE, rm.PERSON_TYPE), nil
+				LEFT JOIN openehr.tbl_ehr_status tmp_%[2]s ON tmp_%[2]s.ehr_id = %[3]s.id'
+				LEFT JOIN %[1]s %[2]s ON %[2]s.id = tmp_%[2]s.id
+			`, expression, source.Table, prevSource.V.Table), nil
 		case rm.EHR_STATUS_TYPE:
-			return fmt.Sprintf(`
-				LEFT JOIN %[1]s
-					ON %[2]s.id = %[3]s.data->'subject'->'external_ref'->'id'->>'value'
-					AND %[3]s.data->'subject'->'external_ref'->>'namespace' = 'local'
-					AND %[3]s.data->'subject'->'external_ref'->>'type' = '%[4]s'
-			`, expression, source.Table, prevSource.V.Table, rm.PERSON_TYPE), nil
+			return fmt.Sprintf(`LEFT JOIN %[1]s %[2]s ON %[2]s.id = %[3]s.id`, expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case rm.AGENT_TYPE:
-		expression := "SELECT "
-		if !allVersions {
-			expression += "DISTINCT ON (ov.versioned_object_id) "
-		}
-		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'AGENT'"
+		expression := "SELECT a.*, ad.data, ad.version_data FROM openehr.tbl_agent a JOIN openehr.tbl_agent_data ad ON a.id = ad.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
-		}
-		if !allVersions {
-			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
 		}
 		expression = "(" + expression + ") " + source.Table
 
@@ -809,23 +747,16 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 
 		switch prevSource.V.Model {
 		case rm.VERSIONED_PARTY_TYPE:
-			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_party_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.CONTRIBUTION_TYPE:
 			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case rm.ORGANISATION_TYPE:
-		expression := "SELECT "
-		if !allVersions {
-			expression += "DISTINCT ON (ov.versioned_object_id) "
-		}
-		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'ORGANISATION'"
+		expression := "SELECT o.*, od.data FROM openehr.tbl_organisation o JOIN openehr.tbl_organisation_data od ON o.id = od.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
-		}
-		if !allVersions {
-			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
 		}
 		expression = "(" + expression + ") " + source.Table
 
@@ -835,23 +766,16 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 
 		switch prevSource.V.Model {
 		case rm.VERSIONED_PARTY_TYPE:
-			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_party_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.CONTRIBUTION_TYPE:
 			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}
 	case rm.GROUP_TYPE:
-		expression := "SELECT "
-		if !allVersions {
-			expression += "DISTINCT ON (ov.versioned_object_id) "
-		}
-		expression += "ov.id, ov.versioned_object_id, ov.ehr_id, ov.contribution_id, ovd.object_data data FROM openehr.tbl_object_version ov JOIN openehr.tbl_object_version_data ovd ON ov.id = ovd.id WHERE ov.type = 'GROUP'"
+		expression := "SELECT g.*, gd.data, gd.version_data FROM openehr.tbl_group g JOIN openehr.tbl_group_data gd ON g.id = gd.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
-		}
-		if !allVersions {
-			expression += " ORDER BY ov.versioned_object_id, ov.id DESC"
 		}
 		expression = "(" + expression + ") " + source.Table
 
@@ -861,7 +785,7 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 
 		switch prevSource.V.Model {
 		case rm.VERSIONED_PARTY_TYPE:
-			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_object_id = %s.id", expression, source.Table, prevSource.V.Table), nil
+			return fmt.Sprintf("LEFT JOIN %s ON %s.versioned_party_id = %s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.CONTRIBUTION_TYPE:
 			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		default:
@@ -1736,24 +1660,23 @@ func BuildSlowValueExtractionExpr(ctx gen.IPathPartContext) string {
 	expression := "CASE "
 
 	expression += `
-		WHEN target.data @> \'{"_type": "DV_DURATION"}\' THEN to_jsonb(now() + (target.data ->> \'value\')::interval)
-		WHEN target.data @> \'{"_type": "DV_ELEMENT"}\' THEN target.data -> \'magnitude\' 
-		WHEN target.data @> \'{"_type": "DV_QUANTITY"}\' THEN target.data -> \'magnitude\' 
-		WHEN target.data @> \'{"_type": "DV_COUNT"}\' THEN target.data -> \'magnitude\' 
-		WHEN target.data @> \'{"_type": "DV_DATE_TIME"}\' THEN to_jsonb((target.data ->> \'value\')::timestamptz)
-		WHEN target.data @> \'{"_type": "DV_TIME"}\' THEN to_jsonb((target.data ->> \'value\')::timetz AT TIME ZONE \'UTC\')
-		WHEN target.data @> \'{"_type": "DV_DATE"}\' THEN to_jsonb((target.data ->> \'value\')::date)
-		WHEN target.data @> \'{"_type": "DV_ORDINAL"}\' THEN target.data -> \'value\' 
-		WHEN target.data @> \'{"_type": "DV_PROPORTION"}\' THEN to_jsonb((target.data ->> \'numerator\')::numeric / (target.data ->> \'denominator\')::numeric) 
+		WHEN target.data @> '{"_type": "DV_DURATION"}' THEN to_jsonb(now() + (target.data ->> 'value')::interval)
+		WHEN target.data @> '{"_type": "DV_ELEMENT"}' THEN target.data -> 'magnitude' 
+		WHEN target.data @> '{"_type": "DV_QUANTITY"}' THEN target.data -> 'magnitude' 
+		WHEN target.data @> '{"_type": "DV_COUNT"}' THEN target.data -> 'magnitude' 
+		WHEN target.data @> '{"_type": "DV_DATE_TIME"}' THEN to_jsonb((target.data ->> 'value')::timestamptz)
+		WHEN target.data @> '{"_type": "DV_TIME"}' THEN to_jsonb((target.data ->> 'value')::timetz AT TIME ZONE 'UTC')
+		WHEN target.data @> '{"_type": "DV_DATE"}' THEN to_jsonb((target.data ->> 'value')::date)
+		WHEN target.data @> '{"_type": "DV_ORDINAL"}' THEN target.data -> 'value' 
+		WHEN target.data @> '{"_type": "DV_PROPORTION"}' THEN to_jsonb((target.data ->> 'numerator')::numeric / (target.data ->> 'denominator')::numeric) 
 	`
-
 	identifier := ctx.IDENTIFIER().GetText()
 	if identifier == "value" {
 		expression += `
-			WHEN parent.data @> \'{"_type": "DV_DURATION"}\' THEN to_jsonb(now() + (target.data #>> \'{}\')::interval)
-			WHEN parent.data @> \'{"_type": "DV_DATE_TIME"}\' THEN to_jsonb((target.data #>> \'{}\')::timestamptz)
-			WHEN parent.data @> \'{"_type": "DV_TIME"}\' THEN to_jsonb((target.data #>> \'{}\')::timetz AT TIME ZONE \'UTC\')
-			WHEN parent.data @> \'{"_type": "DV_DATE"}\' THEN to_jsonb((target.data #>> \'{}\')::date)
+			WHEN parent.data @> '{"_type": "DV_DURATION"}' THEN to_jsonb(now() + (target.data #>> '{}')::interval)
+			WHEN parent.data @> '{"_type": "DV_DATE_TIME"}' THEN to_jsonb((target.data #>> '{}')::timestamptz)
+			WHEN parent.data @> '{"_type": "DV_TIME"}' THEN to_jsonb((target.data #>> '{}')::timetz AT TIME ZONE 'UTC')
+			WHEN parent.data @> '{"_type": "DV_DATE"}' THEN to_jsonb((target.data #>> '{}')::date)
 		`
 	}
 
@@ -1868,6 +1791,13 @@ func BuildFastValueExtractionExpr(ctx gen.IIdentifiedPathContext, params map[str
 			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s.value')::text::float", source.Table, path), nil
 		case "value":
 			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s')::text::float", source.Table, path), nil
+		}
+	case slices.Contains(relatedModels, "VERSIONED_OBJECT"):
+		switch plainPath {
+		case "uid/value":
+			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s')", source.Table, path), nil
+		case "time_created/value":
+			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s')::text::timestamptz", source.Table, path), nil
 		}
 	}
 

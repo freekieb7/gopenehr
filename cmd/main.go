@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bytedance/sonic"
 	"github.com/freekieb7/gopenehr/internal/audit"
 	"github.com/freekieb7/gopenehr/internal/cli"
 	"github.com/freekieb7/gopenehr/internal/config"
@@ -112,6 +113,9 @@ func runServer(ctx context.Context) error {
 
 		// Enable SO_REUSEPORT for better load balancing across CPU cores
 		EnableSplittingOnParsers: true,
+
+		JSONEncoder: sonic.Marshal,
+		JSONDecoder: sonic.Unmarshal,
 	})
 
 	// Compression middleware

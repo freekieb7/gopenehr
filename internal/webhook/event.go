@@ -1,8 +1,12 @@
 package webhook
 
 type Event struct {
-	Type EventType
-	Data map[string]any
+	Version string         `json:"version"`
+	Type    string         `json:"type"`
+	Source  string         `json:"source"`
+	ID      string         `json:"id"`
+	Time    string         `json:"time"`
+	Data    map[string]any `json:"data"`
 }
 
 type EventType string

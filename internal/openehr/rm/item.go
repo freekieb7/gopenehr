@@ -1,8 +1,7 @@
 package rm
 
 import (
-	"encoding/json"
-
+	"github.com/bytedance/sonic"
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
@@ -52,7 +51,7 @@ func (i *ItemUnion) Validate(path string) util.ValidateError {
 }
 
 func (i ItemUnion) MarshalJSON() ([]byte, error) {
-	return json.Marshal(i.Value)
+	return sonic.Marshal(i.Value)
 }
 
 func (i *ItemUnion) UnmarshalJSON(data []byte) error {
@@ -69,7 +68,7 @@ func (i *ItemUnion) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	return json.Unmarshal(data, i.Value)
+	return sonic.Unmarshal(data, i.Value)
 }
 
 func (i *ItemUnion) CLUSTER() *CLUSTER {

@@ -15,7 +15,7 @@ const NAMESPACE_LOCAL = "local"
 const API_KEY_HEADER = "X-API-Key"
 const TARGET_MIGRATION_VERSION uint64 = 20251113195000
 
-var SystemUserID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
+var SystemUserID = uuid.MustParse(SYSTEM_ID_GOPENEHR)
 
 var (
 	Version = "dev"

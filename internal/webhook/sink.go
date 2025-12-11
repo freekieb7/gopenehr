@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/database"
 	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/freekieb7/gopenehr/pkg/async"
@@ -71,8 +72,12 @@ func (s *InMemorySink) Start(ctx context.Context) {
 // Enqueue sends an event to the worker
 func (s *InMemorySink) Enqueue(eventType EventType, payload map[string]any) {
 	s.worker.Enqueue(Event{
-		Type: eventType,
-		Data: payload,
+		Version: "1.0",
+		Source:  "urn:uuid:" + config.SYSTEM_ID_GOPENEHR,
+		Type:    string(eventType),
+		ID:      uuid.NewString(),
+		Time:    time.Now().Format(time.RFC3339),
+		Data:    payload,
 	})
 }
 
@@ -87,11 +92,17 @@ func (s *InMemorySink) flush(ctx context.Context, batch []Event) error {
 	var eventID string
 
 	for _, event := range batch {
+		payload, err := json.Marshal(event)
+		if err != nil {
+			s.Logger.Error("failed marshaling cloud event", "error", err)
+			continue
+		}
+
 		if err := tx.QueryRow(ctx, `
 			INSERT INTO webhook.tbl_event (type, payload)
 			VALUES ($1, $2)
 			RETURNING id
-		`, event.Type, event.Data).Scan(&eventID); err != nil {
+		`, event.Type, payload).Scan(&eventID); err != nil {
 			s.Logger.Error("failed inserting webhook event", "error", err)
 			continue
 		}
@@ -239,7 +250,14 @@ func (s *KafkaSink) Start(ctx context.Context) {
 // Enqueue queues an event for production to Kafka. Non-blocking with drop-oldest policy.
 func (s *KafkaSink) Enqueue(eventType EventType, payload map[string]any) {
 	// serialize payload; check size
-	data, err := json.Marshal(payload)
+	data, err := json.Marshal(Event{
+		Version: "1.0",
+		Source:  "urn:uuid:" + config.SYSTEM_ID_GOPENEHR,
+		Type:    string(eventType),
+		ID:      uuid.NewString(),
+		Time:    time.Now().Format(time.RFC3339),
+		Data:    payload,
+	})
 	if err != nil {
 		s.Logger.Error("failed marshaling event data", "error", err)
 		return

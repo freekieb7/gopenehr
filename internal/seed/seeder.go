@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/freekieb7/gopenehr/internal/database"
 	"github.com/freekieb7/gopenehr/internal/openehr"
@@ -30,6 +31,8 @@ func NewSeeder(logger *telemetry.Logger, db *database.Database, fixtureDir strin
 }
 
 func (s *Seeder) Seed(count int) {
+	now := time.Now()
+
 	var wg sync.WaitGroup
 	workerCount := runtime.GOMAXPROCS(0)
 
@@ -40,6 +43,7 @@ func (s *Seeder) Seed(count int) {
 		})
 	}
 	wg.Wait()
+	s.Logger.Info("Seeding process completed", "duration", time.Since(now).String())
 }
 
 func (s *Seeder) seedEHRs(ctx context.Context, count int) {
@@ -80,13 +84,15 @@ func (s *Seeder) seedEHRs(ctx context.Context, count int) {
 				continue
 			}
 
+			currentID := newComposition.UID.V.OBJECT_VERSION_ID()
 			for range compositionsToUpdate {
 				s.RandomizeRapportage(&composition)
-				newComposition, err = openehrService.UpdateComposition(ctx, ehrID, newComposition.UID.V.OBJECT_VERSION_ID(), composition)
+				updatedComposition, err := openehrService.UpdateComposition(ctx, ehrID, currentID, composition)
 				if err != nil {
 					s.Logger.Error("Failed to create Composition", "error", err)
 					continue
 				}
+				currentID = updatedComposition.UID.V.OBJECT_VERSION_ID()
 			}
 		}
 

@@ -1,8 +1,7 @@
 package rm
 
 import (
-	"encoding/json"
-
+	"github.com/bytedance/sonic"
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 	"github.com/freekieb7/gopenehr/pkg/utils"
 )
@@ -57,7 +56,7 @@ func (p *PartyProxyUnion) Validate(path string) util.ValidateError {
 }
 
 func (p PartyProxyUnion) MarshalJSON() ([]byte, error) {
-	return json.Marshal(p.Value)
+	return sonic.Marshal(p.Value)
 }
 
 func (p *PartyProxyUnion) UnmarshalJSON(data []byte) error {
@@ -77,7 +76,7 @@ func (p *PartyProxyUnion) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	return json.Unmarshal(data, p.Value)
+	return sonic.Unmarshal(data, p.Value)
 }
 
 func (p *PartyProxyUnion) PARTY_SELF() *PARTY_SELF {

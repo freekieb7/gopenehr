@@ -38,56 +38,64 @@ CREATE TABLE openehr.tbl_versioned_object (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE openehr.tbl_versioned_ehr_status (
+CREATE TABLE openehr.tbl_versioned_ehr_status_data (
     id UUID PRIMARY KEY REFERENCES openehr.tbl_versioned_object(id) ON DELETE CASCADE,
     data JSONB NOT NULL
 );
 
-ALTER TABLE openehr.tbl_versioned_ehr_status ALTER COLUMN data SET COMPRESSION lz4;
+ALTER TABLE openehr.tbl_versioned_ehr_status_data ALTER COLUMN data SET COMPRESSION lz4;
 
 CREATE TABLE openehr.tbl_versioned_ehr_status_tag (
-    versioned_ehr_status_id UUID NOT NULL REFERENCES openehr.tbl_versioned_ehr_status(id) ON DELETE CASCADE,
+    versioned_ehr_status_id UUID NOT NULL REFERENCES openehr.tbl_versioned_object(id) ON DELETE CASCADE,
     key TEXT NOT NULL,
     data JSONB NOT NULL,
     ehr_id UUID NOT NULL REFERENCES openehr.tbl_ehr(id) ON DELETE CASCADE,
     PRIMARY KEY (versioned_ehr_status_id, key)
 );
 
-CREATE TABLE openehr.tbl_versioned_ehr_access (
+CREATE TABLE openehr.tbl_versioned_ehr_access_data (
     id UUID PRIMARY KEY REFERENCES openehr.tbl_versioned_object(id) ON DELETE CASCADE,
     data JSONB NOT NULL
 );
 
-ALTER TABLE openehr.tbl_versioned_ehr_access ALTER COLUMN data SET COMPRESSION lz4;
+ALTER TABLE openehr.tbl_versioned_ehr_access_data ALTER COLUMN data SET COMPRESSION lz4;
 
-CREATE TABLE openehr.tbl_versioned_composition (
+CREATE TABLE openehr.tbl_versioned_composition_data (
     id UUID PRIMARY KEY REFERENCES openehr.tbl_versioned_object(id) ON DELETE CASCADE,
     data JSONB NOT NULL
 );
 
-ALTER TABLE openehr.tbl_versioned_composition ALTER COLUMN data SET COMPRESSION lz4;
+ALTER TABLE openehr.tbl_versioned_composition_data ALTER COLUMN data SET COMPRESSION lz4;
 
 CREATE TABLE openehr.tbl_versioned_composition_tag (
-    versioned_composition_id UUID NOT NULL REFERENCES openehr.tbl_versioned_composition(id) ON DELETE CASCADE,
+    versioned_composition_id UUID NOT NULL REFERENCES openehr.tbl_versioned_object(id) ON DELETE CASCADE,
     key TEXT NOT NULL,
     data JSONB NOT NULL,
     ehr_id UUID NOT NULL REFERENCES openehr.tbl_ehr(id) ON DELETE CASCADE,
     PRIMARY KEY (versioned_composition_id, key)
 );
 
-CREATE TABLE openehr.tbl_versioned_folder (
+CREATE TABLE openehr.tbl_versioned_folder_data (
     id UUID PRIMARY KEY REFERENCES openehr.tbl_versioned_object(id) ON DELETE CASCADE,
     data JSONB NOT NULL
 );
 
-ALTER TABLE openehr.tbl_versioned_folder ALTER COLUMN data SET COMPRESSION lz4;
+ALTER TABLE openehr.tbl_versioned_folder_data ALTER COLUMN data SET COMPRESSION lz4;
 
-CREATE TABLE openehr.tbl_versioned_party (
+CREATE TABLE openehr.tbl_versioned_party_data (
     id UUID PRIMARY KEY REFERENCES openehr.tbl_versioned_object(id) ON DELETE CASCADE,
     data JSONB NOT NULL
 );
 
-ALTER TABLE openehr.tbl_versioned_party ALTER COLUMN data SET COMPRESSION lz4;
+ALTER TABLE openehr.tbl_versioned_party_data ALTER COLUMN data SET COMPRESSION lz4;
+
+CREATE TABLE openehr.tbl_versioned_party_tag (
+    versioned_party_id UUID NOT NULL REFERENCES openehr.tbl_versioned_object(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    data JSONB NOT NULL,
+    ehr_id UUID NOT NULL REFERENCES openehr.tbl_ehr(id) ON DELETE CASCADE,
+    PRIMARY KEY (versioned_party_id, key)
+);
 
 -- ========= Object Tables ==========
 
@@ -97,6 +105,7 @@ CREATE TABLE openehr.tbl_ehr_status (
     versioned_ehr_status_id UUID NOT NULL REFERENCES openehr.tbl_versioned_object(id) ON DELETE CASCADE,
     ehr_id UUID NOT NULL REFERENCES openehr.tbl_ehr(id) ON DELETE CASCADE,
     contribution_id UUID NOT NULL REFERENCES openehr.tbl_contribution(id) ON DELETE CASCADE,
+    local_ref_versioned_party_id UUID REFERENCES openehr.tbl_versioned_object(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -321,7 +330,7 @@ CREATE TABLE account.tbl_account (
 
 -- Insert initial SYSTEM account
 INSERT INTO account.tbl_account (id, type, created_at, updated_at) VALUES
-    ('00000000-0000-0000-0000-000000000001', 'SYSTEM', NOW(), NOW());
+    ('e6d14bbd-2a0c-474a-9964-11f0bfbe36bd', 'SYSTEM', NOW(), NOW());
 
 -- Unique index to ensure only one system account exists
 CREATE UNIQUE INDEX one_system_account ON account.tbl_account (type) WHERE type = 'SYSTEM';

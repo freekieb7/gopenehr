@@ -8,7 +8,8 @@
             "driver": "PostgreSQL",
             "name": "localhost",
             "database": "gopenehr",
-            "username": "gopenehr"
+            "username": "gopenehr",
+            "password": "gopenehrpass"
         }
     ]
 }

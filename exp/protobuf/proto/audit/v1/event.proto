@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package audit.v1;
+
+option go_package = "example.com/protobuf/gen/audit/v1";
+
+message AuditEvent {
+	string id = 1;
+	string type = 2;
+	string timestamp = 3;
+	User actor = 4;
+	string action = 5;
+	string outcome = 6;
+	string outcome_description = 7;
+	repeated Details details = 8;
+
+	message Details {
+		string type = 1;
+		string description = 2;
+	}
+
+	message User {
+
+	}
+}
+
+

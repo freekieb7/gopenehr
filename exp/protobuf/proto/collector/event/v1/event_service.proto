@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package collector.event.v1;
+package example.proto.collector.event.v1;
 
 import "event/v1/event.proto";
 
-option go_package = "github.com/freekieb7/gopenehr/internal/proto/gen/collector/event/v1";
+option go_package = "example.com/protobuf/collector/event/v1";
 
 service EventService {
     rpc ExportEvents (ExportEventsServiceRequest) returns (ExportEventsServiceResponse);
@@ -16,7 +16,7 @@ message ExportEventsServiceRequest {
   // element. Intermediary nodes (such as OpenTelemetry Collector) that receive
   // data from multiple origins typically batch the data before forwarding further and
   // in that case this array will contain multiple elements.
-  .event.v1.EventsData data = 1;
+  example.proto.event.v1.EventsData data = 1;
 }
 
 message ExportEventsServiceResponse {

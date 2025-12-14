@@ -2,25 +2,25 @@
 
 syntax = "proto3";
 
-package event.v1;
+package example.proto.event.v1;
 
 import "common/v1/common.proto";
 import "resource/v1/resource.proto";
 
-option go_package = "github.com/freekieb7/gopenehr/internal/proto/gen/event/v1";
+option go_package = "example.com/protobuf/gen/event/v1";
 
 message EventsData {
     repeated ResourceEvent resource_events = 1;
 }
 
 message ResourceEvent {
-    resource.v1.Resource resource = 1;
+    example.proto.resource.v1.Resource resource = 1;
     repeated ScopeEvent scope_events = 2;
     string schema_url = 3;
 }
 
 message ScopeEvent {
-    common.v1.ArchetypeScope scope = 1;
+    example.proto.common.v1.ArchetypeScope scope = 1;
     repeated Event events = 2;
     string schema_url = 3;
 }
@@ -34,25 +34,25 @@ message Event {
         Instruction instruction = 5;
         Action action = 6;
     }
-    repeated common.v1.KeyValue metadata = 7;
+    repeated example.proto.common.v1.KeyValue metadata = 7;
 }
 
 message Observation {
-    repeated common.v1.KeyValue attributes = 1;
+    repeated example.proto.common.v1.KeyValue attributes = 1;
     fixed64 timestamp_unix_nano = 2;
 }
 
 message Instruction {
-    repeated common.v1.KeyValue attributes = 1;
+    repeated example.proto.common.v1.KeyValue attributes = 1;
     fixed64 timestamp_unix_nano = 2;
 }
 
 message Evaluation {
-    repeated common.v1.KeyValue attributes = 1;
+    repeated example.proto.common.v1.KeyValue attributes = 1;
     fixed64 timestamp_unix_nano = 2;
 }
 
 message Action {
-    repeated common.v1.KeyValue attributes = 1;
+    repeated example.proto.common.v1.KeyValue attributes = 1;
     fixed64 timestamp_unix_nano = 2;
 }

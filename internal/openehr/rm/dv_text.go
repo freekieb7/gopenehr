@@ -16,6 +16,7 @@ const DV_TEXT_TYPE string = "DV_TEXT"
 type DV_TEXT struct {
 	Type_      utils.Optional[string]         `json:"_type,omitzero"`
 	Value      string                         `json:"value"`
+	Hyperlink  utils.Optional[DV_URI]         `json:"hyperlink,omitzero"`
 	Formatting utils.Optional[string]         `json:"formatting,omitzero"`
 	Mappings   utils.Optional[[]TERM_MAPPING] `json:"mappings,omitzero"`
 	Language   utils.Optional[CODE_PHRASE]    `json:"language,omitzero"`

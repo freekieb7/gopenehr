@@ -2,11 +2,11 @@
 
 syntax = "proto3";
 
-package resource.v1;
+package example.proto.resource.v1;
 
 import "common/v1/common.proto";
 
-option go_package = "github.com/freekieb7/gopenehr/internal/proto/gen/resource/v1";
+option go_package = "example.com/protobuf/gen/resource/v1";
 
 // Resource information.
 message Resource {
@@ -23,7 +23,7 @@ message Resource {
   // These restrictions can change in a minor release.
   // The restrictions take origin from the OpenTelemetry specification:
   // https://github.com/open-telemetry/opentelemetry-specification/blob/v1.47.0/specification/common/README.md#attribute.
-  repeated common.v1.KeyValue attributes = 1;
+  repeated example.proto.common.v1.KeyValue attributes = 1;
 
   // The number of dropped attributes. If the value is 0, then
   // no attributes were dropped.
@@ -34,5 +34,5 @@ message Resource {
   // Note: keys in the references MUST exist in attributes of this message.
   //
   // Status: [Development]
-  repeated common.v1.EntityRef entity_refs = 3;
+  repeated example.proto.common.v1.EntityRef entity_refs = 3;
 }

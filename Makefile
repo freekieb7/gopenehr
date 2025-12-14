@@ -38,15 +38,28 @@ serve:
 
 .PHONY: seed
 seed:
-ifeq ($(count),)
+ifeq ($(rounds),)
 	$(APP_VARIABLES) go run -mod=vendor ./... seed
 else 
-	$(APP_VARIABLES) go run -mod=vendor ./... seed $(count) 
+	$(APP_VARIABLES) go run -mod=vendor ./... seed $(rounds) 
 endif
 
 .PHONY: aql-gen
 aql-gen:
 	docker run --rm -u $(id -u ${USER}):$(id -g ${USER}) --volume `pwd`/internal/openehr/aql:/work antlr/antlr4 -Dlanguage=Go AQL.g4 -o gen -package gen
+
+.PHONY: proto-gen
+proto-gen:
+	rm -rf ./exp/protobuf/gen
+	mkdir -p ./exp/protobuf/gen
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	find exp/protobuf/proto -name "*.proto" -print0 | xargs -0 protoc \
+        -I exp/protobuf/proto \
+		--go_out=exp/protobuf/gen \
+        --go_opt=paths=source_relative \
+        --go-grpc_out=exp/protobuf/gen \
+        --go-grpc_opt=paths=source_relative
 
 .PHONY: pprof
 pprof:

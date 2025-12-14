@@ -1,4 +1,4 @@
-package grpc
+package main
 
 // import (
 // 	"context"
@@ -6,6 +6,10 @@ package grpc
 // 	"fmt"
 // 	"net/http"
 
+// 	collectorEvent "github.com/freekieb7/gopenehr/exp/protobuf/gen/collector/event/v1"
+// 	commonV1 "github.com/freekieb7/gopenehr/exp/protobuf/gen/common/v1"
+// 	eventV1 "github.com/freekieb7/gopenehr/exp/protobuf/gen/event/v1"
+// 	resourceV1 "github.com/freekieb7/gopenehr/exp/protobuf/gen/resource/v1"
 // 	"github.com/google/cel-go/cel"
 // 	"github.com/google/cel-go/common/types"
 // 	"google.golang.org/grpc"
@@ -69,7 +73,7 @@ package grpc
 // 	}, nil
 // }
 
-// func validateResource(r *event.ResourceEvent, rules []string) error {
+// func validateResource(r *eventV1.ResourceEvent, rules []string) error {
 // 	env, err := cel.NewEnv(
 // 		cel.Variable("resource", cel.DynType),
 // 		cel.Variable("schema_url", cel.StringType),
@@ -101,7 +105,7 @@ package grpc
 // 	return nil
 // }
 
-// func resourceToMap(r *resource.Resource) map[string]any {
+// func resourceToMap(r *resourceV1.Resource) map[string]any {
 // 	m := make(map[string]any)
 
 // 	for _, attr := range r.Attributes {
@@ -111,13 +115,13 @@ package grpc
 
 // 		k := attr.Key
 // 		switch v := attr.Value.Value.(type) {
-// 		case *common.AnyValue_StringValue:
+// 		case *commonV1.AnyValue_StringValue:
 // 			m[k] = v.StringValue
-// 		case *common.AnyValue_IntValue:
+// 		case *commonV1.AnyValue_IntValue:
 // 			m[k] = v.IntValue
-// 		case *common.AnyValue_BoolValue:
+// 		case *commonV1.AnyValue_BoolValue:
 // 			m[k] = v.BoolValue
-// 		case *common.AnyValue_DoubleValue:
+// 		case *commonV1.AnyValue_DoubleValue:
 // 			m[k] = v.DoubleValue
 // 			// add other cases if needed (array, kvlist, bytes)
 // 		}

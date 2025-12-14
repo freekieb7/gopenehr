@@ -11,5 +11,6 @@
             "username": "gopenehr",
             "password": "gopenehrpass"
         }
-    ]
+    ],
+    "protobuf.protoc.path": "/usr/bin/protoc"
 }

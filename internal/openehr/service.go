@@ -203,6 +203,14 @@ func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus rm.E
 		}
 	}()
 
+	// Increment user's registered EHR count
+	var ehrCount int
+	row := tx.QueryRow(ctx, `UPDATE subscription.tbl_organisation SET ehr_count = ehr_count + 1, updated_at = NOW() WHERE id = $1 AND ehr_count < ehr_limit RETURNING ehr_count;`)
+	err = row.Scan(&ehrCount)
+	if err != nil {
+		return rm.EHR{}, fmt.Errorf("failed to increment organisation's registered EHR count: %w", err)
+	}
+
 	batch := &pgx.Batch{}
 
 	// Insert EHR

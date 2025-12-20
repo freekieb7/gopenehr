@@ -44,7 +44,6 @@ ARG BUILD_TIME=unknown
 
 # Copy only what's needed
 COPY --from=builder /app/gopenehr .
-COPY --from=builder /app/migrations ./migrations
 
 # Security labels
 LABEL org.opencontainers.image.version="${VERSION}" \

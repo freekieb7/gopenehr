@@ -8,16 +8,14 @@ import (
 )
 
 type Checker struct {
-	Version                string
-	TargetMigrationVersion uint64
-	DB                     *database.Database
+	Version string
+	DB      *database.Database
 }
 
-func NewChecker(version string, targetMigrationVersion uint64, db *database.Database) *Checker {
+func NewChecker(version string, db *database.Database) *Checker {
 	return &Checker{
-		Version:                version,
-		TargetMigrationVersion: targetMigrationVersion,
-		DB:                     db,
+		Version: version,
+		DB:      db,
 	}
 }
 
@@ -64,7 +62,7 @@ func (c *Checker) CheckDatabaseHealth(ctx context.Context) ComponentStatus {
 	}
 
 	// Check if there is a migration migration is applied based on current time
-	err = c.DB.QueryRow(ctx, `SELECT 1 FROM public.tbl_migration WHERE version = $1 LIMIT 1`, c.TargetMigrationVersion).Scan(new(int))
+	err = c.DB.QueryRow(ctx, `SELECT 1 FROM public.tbl_migration WHERE version = $1 LIMIT 1`, c.DB.MigrationVersion).Scan(new(int))
 	if err != nil {
 		status = ServiceStatusUnhealthy
 		message = "required migration not applied"

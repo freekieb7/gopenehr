@@ -13,7 +13,6 @@ import (
 const SYSTEM_ID_GOPENEHR = "e6d14bbd-2a0c-474a-9964-11f0bfbe36bd"
 const NAMESPACE_LOCAL = "local"
 const API_KEY_HEADER = "X-API-Key"
-const TARGET_MIGRATION_VERSION uint64 = 20251113195000
 
 var SystemUserID = uuid.MustParse(SYSTEM_ID_GOPENEHR)
 
@@ -49,6 +48,7 @@ type Settings struct {
 	OtelEndpoint        string
 	OtelInsecure        bool
 	KafkaBrokers        []string
+	CapEHRs             int
 }
 
 func NewSettings() Settings {
@@ -126,6 +126,11 @@ func (s *Settings) Load() error {
 		s.KafkaBrokers = append(s.KafkaBrokers, broker)
 	}
 
+	capEHRs, err := getEnvUint64("CAP_EHRS", 0, false)
+	if err != nil {
+		return err
+	}
+	s.CapEHRs = int(capEHRs)
 	return nil
 }
 
@@ -151,6 +156,21 @@ func getEnvBool(key string, defaultValue bool, required bool) (bool, error) {
 	value, err := strconv.ParseBool(valueStr)
 	if err != nil {
 		return false, fmt.Errorf("environment variable %s has invalid value: %s", key, valueStr)
+	}
+	return value, nil
+}
+
+func getEnvUint64(key string, defaultValue uint64, required bool) (uint64, error) {
+	valueStr, exists := os.LookupEnv(key)
+	if !exists {
+		if required {
+			return 0, fmt.Errorf("environment variable %s is required", key)
+		}
+		return defaultValue, nil
+	}
+	value, err := strconv.ParseUint(valueStr, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("environment variable %s has invalid value: %s", key, valueStr)
 	}
 	return value, nil
 }

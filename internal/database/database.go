@@ -2,7 +2,9 @@ package database
 
 import (
 	"context"
+	"slices"
 
+	"github.com/freekieb7/gopenehr/internal/database/migration"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -14,10 +16,29 @@ var (
 
 type Database struct {
 	*pgxpool.Pool
+	Migrations       []migration.Migration
+	MigrationVersion uint64 // Latest migration version
 }
 
 func New() *Database {
-	return &Database{}
+	migrations := []migration.Migration{
+		&migration.SetupOpenEHR{},
+		&migration.SetupAudit{},
+		&migration.SetupWebhook{},
+	}
+	slices.SortFunc(migrations, func(migration1, migration2 migration.Migration) int {
+		if migration1.Version() < migration2.Version() {
+			return -1
+		} else if migration1.Version() > migration2.Version() {
+			return 1
+		}
+		panic("duplicate migration version detected")
+	})
+
+	return &Database{
+		Migrations:       migrations,
+		MigrationVersion: migrations[len(migrations)-1].Version(),
+	}
 }
 
 func (db *Database) Connect(ctx context.Context, url string) error {

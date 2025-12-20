@@ -136,7 +136,7 @@ func runServer(ctx context.Context) error {
 	})
 
 	// Services
-	healthChecker := health.NewChecker(settings.Version, config.TARGET_MIGRATION_VERSION, db)
+	healthChecker := health.NewChecker(settings.Version, db)
 	auditService := audit.NewService(tel.Logger, db)
 	webhookService := webhook.NewService(tel.Logger, db)
 	oauthService := oauth.NewService(tel.Logger, settings.OAuthTrustedIssuers, settings.OAuthAudience)
@@ -227,7 +227,7 @@ func runMigrate(ctx context.Context, args []string) error {
 	defer db.Close()
 
 	// Create migrator
-	migrate := cli.NewMigrator(db, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})), "./migrations")
+	migrate := cli.NewMigrator(db, slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
 	return migrate.Run(ctx, args)
 }

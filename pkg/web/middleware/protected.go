@@ -1,20 +1,15 @@
-package oauth
+package middleware
 
 import (
+	"context"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-func JWTProtectedMiddleware(oauthService *Service, scopes []Scope) func(c *fiber.Ctx) error {
-	enabled := len(oauthService.TrustedIssuers) > 0
+type ValidateTokenFunc func(ctx context.Context, token string) (map[string]any, error)
 
-	if !enabled {
-		return func(c *fiber.Ctx) error {
-			return c.Next()
-		}
-	}
-
+func JWTProtected(scopes []string, validate ValidateTokenFunc) func(c *fiber.Ctx) error {
 	return func(c *fiber.Ctx) error {
 		tokenString := c.Get("Authorization")
 		if tokenString == "" {
@@ -28,7 +23,7 @@ func JWTProtectedMiddleware(oauthService *Service, scopes []Scope) func(c *fiber
 			return nil
 		}
 
-		claims, err := oauthService.ValidateToken(c.Context(), tokenString)
+		claims, err := validate(c.Context(), tokenString)
 		if err != nil {
 			c.Status(fiber.StatusUnauthorized)
 			return nil

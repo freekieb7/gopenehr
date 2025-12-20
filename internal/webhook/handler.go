@@ -1,10 +1,11 @@
 package webhook
 
 import (
-	"github.com/freekieb7/gopenehr/internal/audit"
+	intAudit "github.com/freekieb7/gopenehr/internal/audit"
 	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/oauth"
 	"github.com/freekieb7/gopenehr/internal/telemetry"
+	"github.com/freekieb7/gopenehr/pkg/audit"
 	"github.com/freekieb7/gopenehr/pkg/utils"
 	"github.com/freekieb7/gopenehr/pkg/web/middleware"
 	"github.com/gofiber/fiber/v2"
@@ -14,12 +15,12 @@ import (
 type Handler struct {
 	Settings       *config.Settings
 	Logger         *telemetry.Logger
-	AuditSink      *audit.Sink
+	AuditSink      *intAudit.Sink
 	OAuthService   *oauth.Service
 	WebhookService *Service
 }
 
-func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditSink *audit.Sink, oauthService *oauth.Service, webhookService *Service) Handler {
+func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditSink *intAudit.Sink, oauthService *oauth.Service, webhookService *Service) Handler {
 	return Handler{
 		Settings:       settings,
 		Logger:         logger,
@@ -32,12 +33,12 @@ func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditSink *
 func (h *Handler) RegisterRoutes(a *fiber.App) {
 	v1 := a.Group("/webhooks/v1")
 	v1.Use(middleware.APIKeyProtected(h.Settings.APIKey))
-	v1.Use(oauth.JWTProtectedMiddleware(h.OAuthService, []oauth.Scope{oauth.ScopeWebhookManage}))
+	v1.Use(middleware.JWTProtected([]string{oauth.ScopeWebhookManage.String()}, h.OAuthService.ValidateToken))
 
-	v1.Get("", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceWebhook, audit.ActionRead), h.HandleListSubscriptions)
-	v1.Post("", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceWebhook, audit.ActionCreate), h.HandleSubscribe)
-	v1.Patch("/:subscription_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceWebhook, audit.ActionUpdate), h.HandleUpdateSubscription)
-	v1.Delete("/:subscription_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceWebhook, audit.ActionDelete), h.HandleUnsubscribe)
+	v1.Get("", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceWebhook, audit.ActionRead), h.HandleListSubscriptions)
+	v1.Post("", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceWebhook, audit.ActionCreate), h.HandleSubscribe)
+	v1.Patch("/:subscription_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceWebhook, audit.ActionUpdate), h.HandleUpdateSubscription)
+	v1.Delete("/:subscription_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceWebhook, audit.ActionDelete), h.HandleUnsubscribe)
 }
 
 type SubscribeRequest struct {

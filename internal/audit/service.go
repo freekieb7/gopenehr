@@ -10,6 +10,7 @@ import (
 
 	"github.com/freekieb7/gopenehr/internal/database"
 	"github.com/freekieb7/gopenehr/internal/telemetry"
+	"github.com/freekieb7/gopenehr/pkg/audit"
 	"github.com/freekieb7/gopenehr/pkg/utils"
 	"github.com/google/uuid"
 )
@@ -33,7 +34,7 @@ type ListEventsRequest struct {
 }
 
 type ListEventsResponse struct {
-	Events    []Event
+	Events    []audit.Event
 	NextToken utils.Optional[string]
 	PrevToken utils.Optional[string]
 }
@@ -92,9 +93,9 @@ func (s *Service) ListEventsPaginated(ctx context.Context, req ListEventsRequest
 	}
 	defer rows.Close()
 
-	events := []Event{}
+	events := []audit.Event{}
 	for rows.Next() {
-		var event Event
+		var event audit.Event
 		if err := rows.Scan(&event.ID, &event.ActorID, &event.ActorType, &event.Resource, &event.Action, &event.Success, &event.IPAddress, &event.UserAgent, &event.Details, &event.CreatedAt); err != nil {
 			s.Logger.Warn("Failed to scan event", "error", err)
 			return ListEventsResponse{}, err

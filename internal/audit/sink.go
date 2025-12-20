@@ -7,6 +7,7 @@ import (
 	"github.com/freekieb7/gopenehr/internal/database"
 	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/freekieb7/gopenehr/pkg/async"
+	"github.com/freekieb7/gopenehr/pkg/audit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
@@ -15,7 +16,7 @@ type Sink struct {
 	Logger *telemetry.Logger
 	DB     *database.Database
 
-	worker *async.Worker[Event]
+	worker *async.Worker[audit.Event]
 }
 
 // NewSink creates a Sink backed by async.Worker
@@ -48,7 +49,7 @@ func NewSink(tel *telemetry.Telemetry, db *database.Database) *Sink {
 	}
 
 	// Worker flush function calls Sink.flush
-	sink.worker = async.NewWorker(cfg, func(ctx context.Context, batch []Event) error {
+	sink.worker = async.NewWorker(cfg, func(ctx context.Context, batch []audit.Event) error {
 		return sink.flush(ctx, batch)
 	})
 
@@ -61,12 +62,12 @@ func (s *Sink) Start(ctx context.Context) {
 }
 
 // Enqueue sends an event to the worker
-func (s *Sink) Enqueue(event Event) {
+func (s *Sink) Enqueue(event audit.Event) {
 	s.worker.Enqueue(event)
 }
 
 // flush persists a batch of events (called by async.Worker)
-func (s *Sink) flush(ctx context.Context, batch []Event) error {
+func (s *Sink) flush(ctx context.Context, batch []audit.Event) error {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err

@@ -6,6 +6,7 @@ import (
 	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/oauth"
 	"github.com/freekieb7/gopenehr/internal/telemetry"
+	"github.com/freekieb7/gopenehr/pkg/audit"
 	"github.com/freekieb7/gopenehr/pkg/web/middleware"
 	"github.com/gofiber/fiber/v2"
 )
@@ -33,15 +34,15 @@ func (h *Handler) RegisterRoutes(c *fiber.App) {
 	v1.Use(middleware.APIKeyProtected(h.Settings.APIKey))
 
 	v1.Get("/logs",
-		oauth.JWTProtectedMiddleware(h.OAuthService, []oauth.Scope{oauth.ScopeAuditRead}), // Example use
-		AuditLoggedMiddleware(h.AuditSink, ResourceEHR, ActionCreate),
+		middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionCreate),
+		middleware.JWTProtected([]string{oauth.ScopeAuditRead.String()}, h.OAuthService.ValidateToken),
 		h.ListLogEntries,
 	)
 }
 
 func (h *Handler) ListLogEntries(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := From(c)
+	auditCtx := audit.From(c)
 
 	h.Logger.InfoContext(ctx, "Listing log entries")
 

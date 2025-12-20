@@ -5,12 +5,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/freekieb7/gopenehr/internal/audit"
+	intAudit "github.com/freekieb7/gopenehr/internal/audit"
 	"github.com/freekieb7/gopenehr/internal/config"
 	"github.com/freekieb7/gopenehr/internal/openehr/rm"
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 	"github.com/freekieb7/gopenehr/internal/telemetry"
 	"github.com/freekieb7/gopenehr/internal/webhook"
+	"github.com/freekieb7/gopenehr/pkg/audit"
 	"github.com/freekieb7/gopenehr/pkg/utils"
 	"github.com/freekieb7/gopenehr/pkg/web/middleware"
 	"github.com/gofiber/fiber/v2"
@@ -21,13 +22,13 @@ type Handler struct {
 	Settings       *config.Settings
 	Telemetry      *telemetry.Telemetry
 	OpenEHRService *Service
-	AuditService   *audit.Service
+	AuditService   *intAudit.Service
 	WebhookService *webhook.Service
-	AuditSink      *audit.Sink
+	AuditSink      *intAudit.Sink
 	WebhookSink    webhook.Sink
 }
 
-func NewHandler(settings *config.Settings, telemetry *telemetry.Telemetry, openEHRService *Service, auditService *audit.Service, webhookService *webhook.Service, auditSink *audit.Sink, webhookSink webhook.Sink) Handler {
+func NewHandler(settings *config.Settings, telemetry *telemetry.Telemetry, openEHRService *Service, auditService *intAudit.Service, webhookService *webhook.Service, auditSink *intAudit.Sink, webhookSink webhook.Sink) Handler {
 	return Handler{
 		Settings:       settings,
 		Telemetry:      telemetry,
@@ -50,80 +51,80 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 
 	v1.Options("", h.SystemInfo)
 
-	v1.Get("/ehr", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceEHR, audit.ActionRead), h.GetEHRBySubject)
-	v1.Post("/ehr", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceEHR, audit.ActionCreate), h.CreateEHR)
-	v1.Get("/ehr/:ehr_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceEHR, audit.ActionRead), h.GetEHR)
-	v1.Put("/ehr/:ehr_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceEHR, audit.ActionCreate), h.CreateEHRWithID)
+	v1.Get("/ehr", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionRead), h.GetEHRBySubject)
+	v1.Post("/ehr", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionCreate), h.CreateEHR)
+	v1.Get("/ehr/:ehr_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionRead), h.GetEHR)
+	v1.Put("/ehr/:ehr_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionCreate), h.CreateEHRWithID)
 
-	v1.Get("/ehr/:ehr_id/ehr_status", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceEHRStatus, audit.ActionRead), h.GetEHRStatus)
-	v1.Put("/ehr/:ehr_id/ehr_status", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceEHRStatus, audit.ActionUpdate), h.UpdateEhrStatus)
-	v1.Get("/ehr/:ehr_id/ehr_status/:version_uid", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceEHRStatus, audit.ActionRead), h.GetEHRStatusByVersionID)
+	v1.Get("/ehr/:ehr_id/ehr_status", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHRStatus, audit.ActionRead), h.GetEHRStatus)
+	v1.Put("/ehr/:ehr_id/ehr_status", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHRStatus, audit.ActionUpdate), h.UpdateEhrStatus)
+	v1.Get("/ehr/:ehr_id/ehr_status/:version_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHRStatus, audit.ActionRead), h.GetEHRStatusByVersionID)
 
-	v1.Get("/ehr/:ehr_id/versioned_ehr_status", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedEHRStatus, audit.ActionRead), h.GetVersionedEHRStatus)
-	v1.Get("/ehr/:ehr_id/versioned_ehr_status/revision_history", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedEHRStatus, audit.ActionRead), h.GetVersionedEHRStatusRevisionHistory)
-	v1.Get("/ehr/:ehr_id/versioned_ehr_status/version", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedEHRStatusVersion, audit.ActionRead), h.GetVersionedEHRStatusVersion)
-	v1.Get("/ehr/:ehr_id/versioned_ehr_status/version/:version_uid", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedEHRStatusVersion, audit.ActionRead), h.GetVersionedEHRStatusVersionByID)
+	v1.Get("/ehr/:ehr_id/versioned_ehr_status", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedEHRStatus, audit.ActionRead), h.GetVersionedEHRStatus)
+	v1.Get("/ehr/:ehr_id/versioned_ehr_status/revision_history", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedEHRStatus, audit.ActionRead), h.GetVersionedEHRStatusRevisionHistory)
+	v1.Get("/ehr/:ehr_id/versioned_ehr_status/version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedEHRStatusVersion, audit.ActionRead), h.GetVersionedEHRStatusVersion)
+	v1.Get("/ehr/:ehr_id/versioned_ehr_status/version/:version_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedEHRStatusVersion, audit.ActionRead), h.GetVersionedEHRStatusVersionByID)
 
-	v1.Post("/ehr/:ehr_id/composition", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceComposition, audit.ActionCreate), h.CreateComposition)
-	v1.Get("/ehr/:ehr_id/composition/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceComposition, audit.ActionRead), h.GetComposition)
-	v1.Put("/ehr/:ehr_id/composition/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceComposition, audit.ActionUpdate), h.UpdateComposition)
-	v1.Delete("/ehr/:ehr_id/composition/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceComposition, audit.ActionDelete), h.DeleteComposition)
+	v1.Post("/ehr/:ehr_id/composition", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceComposition, audit.ActionCreate), h.CreateComposition)
+	v1.Get("/ehr/:ehr_id/composition/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceComposition, audit.ActionRead), h.GetComposition)
+	v1.Put("/ehr/:ehr_id/composition/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceComposition, audit.ActionUpdate), h.UpdateComposition)
+	v1.Delete("/ehr/:ehr_id/composition/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceComposition, audit.ActionDelete), h.DeleteComposition)
 
-	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedComposition, audit.ActionRead), h.GetVersionedCompositionByID)
-	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/revision_history", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedComposition, audit.ActionRead), h.GetVersionedCompositionRevisionHistory)
-	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/version", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedCompositionVersion, audit.ActionRead), h.GetVersionedCompositionVersionAtTime)
-	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/version/:version_uid", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedCompositionVersion, audit.ActionRead), h.GetVersionedCompositionVersionByID)
+	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedComposition, audit.ActionRead), h.GetVersionedCompositionByID)
+	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/revision_history", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedComposition, audit.ActionRead), h.GetVersionedCompositionRevisionHistory)
+	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedCompositionVersion, audit.ActionRead), h.GetVersionedCompositionVersionAtTime)
+	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/version/:version_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedCompositionVersion, audit.ActionRead), h.GetVersionedCompositionVersionByID)
 
-	v1.Post("/ehr/:ehr_id/directory", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceDirectory, audit.ActionCreate), h.CreateDirectory)
-	v1.Put("/ehr/:ehr_id/directory", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceDirectory, audit.ActionUpdate), h.UpdateDirectory)
-	v1.Delete("/ehr/:ehr_id/directory", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceDirectory, audit.ActionDelete), h.DeleteDirectory)
-	v1.Get("/ehr/:ehr_id/directory", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceDirectory, audit.ActionRead), h.GetFolderInDirectoryVersionAtTime)
-	v1.Get("/ehr/:ehr_id/directory/:version_uid", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceDirectory, audit.ActionRead), h.GetFolderInDirectoryVersion)
+	v1.Post("/ehr/:ehr_id/directory", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionCreate), h.CreateDirectory)
+	v1.Put("/ehr/:ehr_id/directory", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionUpdate), h.UpdateDirectory)
+	v1.Delete("/ehr/:ehr_id/directory", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionDelete), h.DeleteDirectory)
+	v1.Get("/ehr/:ehr_id/directory", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionRead), h.GetFolderInDirectoryVersionAtTime)
+	v1.Get("/ehr/:ehr_id/directory/:version_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionRead), h.GetFolderInDirectoryVersion)
 
-	v1.Post("/ehr/:ehr_id/contribution", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceContribution, audit.ActionCreate), h.CreateContribution)
-	v1.Get("/ehr/:ehr_id/contribution/:contribution_uid", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceContribution, audit.ActionRead), h.GetContribution)
+	v1.Post("/ehr/:ehr_id/contribution", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceContribution, audit.ActionCreate), h.CreateContribution)
+	v1.Get("/ehr/:ehr_id/contribution/:contribution_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceContribution, audit.ActionRead), h.GetContribution)
 
-	v1.Get("/ehr/:ehr_id/tags", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceItemTag, audit.ActionRead), h.GetEHRTags)
-	v1.Get("/ehr/:ehr_id/composition/:uid_based_id/tags", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceItemTag, audit.ActionRead), h.GetCompositionTags)
-	v1.Put("/ehr/:ehr_id/composition/:uid_based_id/tags", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceItemTag, audit.ActionUpdate), h.UpdateCompositionTags)
+	v1.Get("/ehr/:ehr_id/tags", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceItemTag, audit.ActionRead), h.GetEHRTags)
+	v1.Get("/ehr/:ehr_id/composition/:uid_based_id/tags", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceItemTag, audit.ActionRead), h.GetCompositionTags)
+	v1.Put("/ehr/:ehr_id/composition/:uid_based_id/tags", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceItemTag, audit.ActionUpdate), h.UpdateCompositionTags)
 	// v1.Delete("/ehr/:ehr_id/composition/:uid_based_id/tags", h.DeleteCompositionTagByKey)
 	// v1.Get("/ehr/:ehr_id/ehr_status/tags", h.GetEHRStatusTags)
 	// v1.Get("/ehr/:ehr_id/ehr_status/:version_uid/tags", h.GetEHRStatusVersionTags)
 	// v1.Put("/ehr/:ehr_id/ehr_status/:version_uid/tags", h.UpdateEHRStatusVersionTags)
 	// v1.Delete("/ehr/:ehr_id/ehr_status/:version_uid/tags/:key", h.DeleteEHRStatusVersionTagByKey)
 
-	v1.Post("/demographic/agent", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceAgent, audit.ActionCreate), h.CreateAgent)
-	v1.Get("/demographic/agent/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceAgent, audit.ActionRead), h.GetAgent)
-	v1.Put("/demographic/agent/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceAgent, audit.ActionUpdate), h.UpdateAgent)
-	v1.Delete("/demographic/agent/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceAgent, audit.ActionDelete), h.DeleteAgent)
+	v1.Post("/demographic/agent", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAgent, audit.ActionCreate), h.CreateAgent)
+	v1.Get("/demographic/agent/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAgent, audit.ActionRead), h.GetAgent)
+	v1.Put("/demographic/agent/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAgent, audit.ActionUpdate), h.UpdateAgent)
+	v1.Delete("/demographic/agent/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAgent, audit.ActionDelete), h.DeleteAgent)
 
-	v1.Post("/demographic/group", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceGroup, audit.ActionCreate), h.CreateGroup)
-	v1.Get("/demographic/group/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceGroup, audit.ActionRead), h.GetGroup)
-	v1.Put("/demographic/group/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceGroup, audit.ActionUpdate), h.UpdateGroup)
-	v1.Delete("/demographic/group/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceGroup, audit.ActionDelete), h.DeleteGroup)
+	v1.Post("/demographic/group", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceGroup, audit.ActionCreate), h.CreateGroup)
+	v1.Get("/demographic/group/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceGroup, audit.ActionRead), h.GetGroup)
+	v1.Put("/demographic/group/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceGroup, audit.ActionUpdate), h.UpdateGroup)
+	v1.Delete("/demographic/group/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceGroup, audit.ActionDelete), h.DeleteGroup)
 
-	v1.Post("/demographic/person", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourcePerson, audit.ActionCreate), h.CreatePerson)
-	v1.Get("/demographic/person/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourcePerson, audit.ActionRead), h.GetPerson)
-	v1.Put("/demographic/person/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourcePerson, audit.ActionUpdate), h.UpdatePerson)
-	v1.Delete("/demographic/person/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourcePerson, audit.ActionDelete), h.DeletePerson)
+	v1.Post("/demographic/person", middleware.Audit(h.AuditSink.Enqueue, audit.ResourcePerson, audit.ActionCreate), h.CreatePerson)
+	v1.Get("/demographic/person/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourcePerson, audit.ActionRead), h.GetPerson)
+	v1.Put("/demographic/person/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourcePerson, audit.ActionUpdate), h.UpdatePerson)
+	v1.Delete("/demographic/person/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourcePerson, audit.ActionDelete), h.DeletePerson)
 
-	v1.Post("/demographic/organisation", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceOrganisation, audit.ActionCreate), h.CreateOrganisation)
-	v1.Get("/demographic/organisation/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceOrganisation, audit.ActionRead), h.GetOrganisation)
-	v1.Put("/demographic/organisation/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceOrganisation, audit.ActionUpdate), h.UpdateOrganisation)
-	v1.Delete("/demographic/organisation/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceOrganisation, audit.ActionDelete), h.DeleteOrganisation)
+	v1.Post("/demographic/organisation", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceOrganisation, audit.ActionCreate), h.CreateOrganisation)
+	v1.Get("/demographic/organisation/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceOrganisation, audit.ActionRead), h.GetOrganisation)
+	v1.Put("/demographic/organisation/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceOrganisation, audit.ActionUpdate), h.UpdateOrganisation)
+	v1.Delete("/demographic/organisation/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceOrganisation, audit.ActionDelete), h.DeleteOrganisation)
 
-	// v1.Post("/demographic/role", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceRole, audit.ActionCreate), h.CreateRole)
-	// v1.Get("/demographic/role/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceRole, audit.ActionRead), h.GetRole)
-	// v1.Put("/demographic/role/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceRole, audit.ActionUpdate), h.UpdateRole)
-	// v1.Delete("/demographic/role/:uid_based_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceRole, audit.ActionDelete), h.DeleteRole)
+	// v1.Post("/demographic/role", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceRole, audit.ActionCreate), h.CreateRole)
+	// v1.Get("/demographic/role/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceRole, audit.ActionRead), h.GetRole)
+	// v1.Put("/demographic/role/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceRole, audit.ActionUpdate), h.UpdateRole)
+	// v1.Delete("/demographic/role/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceRole, audit.ActionDelete), h.DeleteRole)
 
-	// v1.Get("/demographic/versioned_party/:versioned_object_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedParty, audit.ActionRead), h.GetVersionedParty)
-	// v1.Get("/demographic/versioned_party/:versioned_object_id/revision_history", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedParty, audit.ActionRead), h.GetVersionedPartyRevisionHistory)
-	// v1.Get("/demographic/versioned_party/:versioned_object_id/version", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedPartyVersion, audit.ActionRead), h.GetVersionedPartyVersionAtTime)
-	// v1.Get("/demographic/versioned_party/:versioned_object_id/version/:version_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceVersionedPartyVersion, audit.ActionRead), h.GetVersionedPartyVersion)
+	// v1.Get("/demographic/versioned_party/:versioned_object_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedParty, audit.ActionRead), h.GetVersionedParty)
+	// v1.Get("/demographic/versioned_party/:versioned_object_id/revision_history", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedParty, audit.ActionRead), h.GetVersionedPartyRevisionHistory)
+	// v1.Get("/demographic/versioned_party/:versioned_object_id/version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedPartyVersion, audit.ActionRead), h.GetVersionedPartyVersionAtTime)
+	// v1.Get("/demographic/versioned_party/:versioned_object_id/version/:version_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedPartyVersion, audit.ActionRead), h.GetVersionedPartyVersion)
 
-	v1.Post("/demographic/contribution", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceContribution, audit.ActionCreate), h.CreateDemographicContribution)
-	v1.Get("/demographic/contribution/:contribution_uid", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceContribution, audit.ActionRead), h.GetDemographicContribution)
+	v1.Post("/demographic/contribution", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceContribution, audit.ActionCreate), h.CreateDemographicContribution)
+	v1.Get("/demographic/contribution/:contribution_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceContribution, audit.ActionRead), h.GetDemographicContribution)
 
 	// v1.Get("/demographic/tags", h.GetDemographicTags)
 	// v1.Get("/demographic/agent/:uid_based_id/tags", h.GetAgentTags)
@@ -142,29 +143,29 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	// v1.Put("/demographic/role/:uid_based_id/tags", h.UpdateRoleTags)
 	// v1.Delete("/demographic/role/:uid_based_id/tags/:key", h.DeleteRoleTagByKey)
 
-	v1.Get("/query/aql", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceQuery, audit.ActionExecute), h.ExecuteAdHocAQL)
-	v1.Post("/query/aql", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceQuery, audit.ActionExecute), h.ExecuteAdHocAQLPost)
-	v1.Get("/query/:qualified_query_name", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceQuery, audit.ActionExecute), h.ExecuteStoredAQL)
-	v1.Post("/query/:qualified_query_name", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceQuery, audit.ActionExecute), h.ExecuteStoredAQLPost)
-	v1.Get("/query/:qualified_query_name/:version", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceQuery, audit.ActionExecute), h.ExecuteStoredAQLVersion)
-	v1.Post("/query/:qualified_query_name/:version", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceQuery, audit.ActionExecute), h.ExecuteStoredAQLVersionPost)
+	v1.Get("/query/aql", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), h.ExecuteAdHocAQL)
+	v1.Post("/query/aql", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), h.ExecuteAdHocAQLPost)
+	v1.Get("/query/:qualified_query_name", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), h.ExecuteStoredAQL)
+	v1.Post("/query/:qualified_query_name", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), h.ExecuteStoredAQLPost)
+	v1.Get("/query/:qualified_query_name/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), h.ExecuteStoredAQLVersion)
+	v1.Post("/query/:qualified_query_name/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), h.ExecuteStoredAQLVersionPost)
 
-	v1.Get("/definition/template/adl1.4", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceTemplate, audit.ActionRead), h.GetTemplatesADL14)
-	v1.Post("/definition/template/adl1.4", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceTemplate, audit.ActionCreate), h.UploadTemplateADL14)
-	v1.Get("/definition/template/adl1.4/:template_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceTemplate, audit.ActionRead), h.GetTemplateADL14ByID)
+	v1.Get("/definition/template/adl1.4", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), h.GetTemplatesADL14)
+	v1.Post("/definition/template/adl1.4", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionCreate), h.UploadTemplateADL14)
+	v1.Get("/definition/template/adl1.4/:template_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), h.GetTemplateADL14ByID)
 
-	v1.Get("/definition/template/adl2", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceTemplate, audit.ActionRead), h.GetTemplatesADL2)
-	v1.Post("/definition/template/adl2", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceTemplate, audit.ActionCreate), h.UploadTemplateADL2)
-	v1.Get("/definition/template/adl2/:template_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceTemplate, audit.ActionRead), h.GetTemplateADL2ByID)
-	v1.Get("/definition/template/adl2/:template_id/:version", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceTemplate, audit.ActionRead), h.GetTemplateADL2AtVersion)
+	v1.Get("/definition/template/adl2", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), h.GetTemplatesADL2)
+	v1.Post("/definition/template/adl2", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionCreate), h.UploadTemplateADL2)
+	v1.Get("/definition/template/adl2/:template_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), h.GetTemplateADL2ByID)
+	v1.Get("/definition/template/adl2/:template_id/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), h.GetTemplateADL2AtVersion)
 
-	v1.Get("/definition/query/:qualified_query_name", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceQuery, audit.ActionRead), h.ListStoredQueries)
-	v1.Put("/definition/query/:qualified_query_name", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceQuery, audit.ActionCreate), h.StoreQuery)
-	v1.Put("/definition/query/:qualified_query_name/:version", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceQuery, audit.ActionCreate), h.StoreQueryVersion)
-	v1.Get("/definition/query/:qualified_query_name/:version", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceQuery, audit.ActionRead), h.GetStoredQueryAtVersion)
+	v1.Get("/definition/query/:qualified_query_name", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionRead), h.ListStoredQueries)
+	v1.Put("/definition/query/:qualified_query_name", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionCreate), h.StoreQuery)
+	v1.Put("/definition/query/:qualified_query_name/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionCreate), h.StoreQueryVersion)
+	v1.Get("/definition/query/:qualified_query_name/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionRead), h.GetStoredQueryAtVersion)
 
-	v1.Delete("/admin/ehr/all", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceEHR, audit.ActionDelete), h.DeleteMultipleEHRs)
-	v1.Delete("/admin/ehr/:ehr_id", audit.AuditLoggedMiddleware(h.AuditSink, audit.ResourceEHR, audit.ActionDelete), h.DeleteEHRByID)
+	v1.Delete("/admin/ehr/all", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionDelete), h.DeleteMultipleEHRs)
+	v1.Delete("/admin/ehr/:ehr_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionDelete), h.DeleteEHRByID)
 }
 
 func (h *Handler) SystemInfo(c *fiber.Ctx) error {

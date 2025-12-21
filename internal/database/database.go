@@ -25,6 +25,7 @@ func New() *Database {
 		&migration.SetupOpenEHR{},
 		&migration.SetupAudit{},
 		&migration.SetupWebhook{},
+		&migration.SetupTenant{},
 	}
 	slices.SortFunc(migrations, func(migration1, migration2 migration.Migration) int {
 		if migration1.Version() < migration2.Version() {

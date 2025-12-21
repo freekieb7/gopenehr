@@ -69,8 +69,9 @@ func (s *Seeder) seedEHRs(ctx context.Context, count int) {
 		compositionsToCreate := rand.Intn(10)
 		compositionsToUpdate := rand.Intn(10)
 
+		tenantID := uuid.Nil // Replace with actual tenant ID if needed
 		ehrID := uuid.New()
-		_, err := openehrService.CreateEHR(ctx, ehrID, openehr.NewEHRStatus(uuid.New()))
+		_, err := openehrService.CreateEHR(ctx, tenantID, ehrID, openehr.NewEHRStatus(uuid.New()))
 		if err != nil {
 			s.Logger.Error("Failed to create EHR", "error", err)
 			continue

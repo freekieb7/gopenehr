@@ -20,6 +20,7 @@ import (
 	"github.com/freekieb7/gopenehr/internal/openehr"
 	"github.com/freekieb7/gopenehr/internal/seed"
 	"github.com/freekieb7/gopenehr/internal/telemetry"
+	"github.com/freekieb7/gopenehr/internal/tenant"
 	"github.com/freekieb7/gopenehr/internal/webhook"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
@@ -141,19 +142,23 @@ func runServer(ctx context.Context) error {
 	webhookService := webhook.NewService(tel.Logger, db)
 	oauthService := oauth.NewService(tel.Logger, settings.OAuthTrustedIssuers, settings.OAuthAudience)
 	openEHRService := openehr.NewService(tel.Logger, db)
+	tenantService := tenant.NewService(db)
 
 	// Routes
 	healthHandler := health.NewHandler(tel.Logger, healthChecker)
 	healthHandler.RegisterRoutes(srv)
 
-	auditHandler := audit.NewHandler(&settings, tel.Logger, auditService, oauthService, auditSink)
+	auditHandler := audit.NewHandler(settings, tel, auditService, oauthService, auditSink)
 	auditHandler.RegisterRoutes(srv)
 
-	webhookHandler := webhook.NewHandler(&settings, tel.Logger, auditSink, oauthService, webhookService)
+	webhookHandler := webhook.NewHandler(settings, tel, auditSink, oauthService, webhookService)
 	webhookHandler.RegisterRoutes(srv)
 
-	openEHRHandler := openehr.NewHandler(&settings, tel, openEHRService, auditService, webhookService, auditSink, webhookSink)
+	openEHRHandler := openehr.NewHandler(settings, tel, openEHRService, auditService, webhookService, auditSink, webhookSink, oauthService)
 	openEHRHandler.RegisterRoutes(srv)
+
+	tenantsHandler := tenant.NewHandler(settings, tel, tenantService, oauthService, auditSink)
+	tenantsHandler.RegisterRoutes(srv)
 
 	// Set up signal handling for graceful shutdown
 	stopChan := make(chan os.Signal, 1)

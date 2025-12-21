@@ -13,16 +13,16 @@ import (
 
 type Handler struct {
 	Settings     *config.Settings
-	Logger       *telemetry.Logger
+	Telemetry    *telemetry.Telemetry
 	AuditService *Service
 	OAuthService *oauth.Service
 	AuditSink    *Sink
 }
 
-func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditService *Service, oauthService *oauth.Service, auditSink *Sink) Handler {
+func NewHandler(settings *config.Settings, telemetry *telemetry.Telemetry, auditService *Service, oauthService *oauth.Service, auditSink *Sink) Handler {
 	return Handler{
 		Settings:     settings,
-		Logger:       logger,
+		Telemetry:    telemetry,
 		AuditService: auditService,
 		OAuthService: oauthService,
 		AuditSink:    auditSink,
@@ -31,20 +31,30 @@ func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditServic
 
 func (h *Handler) RegisterRoutes(c *fiber.App) {
 	v1 := c.Group("/audit/v1")
+
 	v1.Use(middleware.APIKeyProtected(h.Settings.APIKey))
 
+	v1.Use(middleware.RequestID())
+	v1.Use(middleware.Recover(h.Telemetry))
+	v1.Use(middleware.Telemetry(h.Telemetry))
+
+	var validateToken middleware.ValidateTokenFunc = nil
+	if h.OAuthService.Enabled() {
+		validateToken = h.OAuthService.ValidateToken
+	}
+
 	v1.Get("/logs",
-		middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionCreate),
-		middleware.JWTProtected([]string{oauth.ScopeAuditRead.String()}, h.OAuthService.ValidateToken),
+		middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAudit, audit.ActionRead),
+		middleware.JWTProtected([]string{oauth.ScopeAuditRead.String()}, validateToken),
 		h.ListLogEntries,
 	)
 }
 
 func (h *Handler) ListLogEntries(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
-	h.Logger.InfoContext(ctx, "Listing log entries")
+	h.Telemetry.Logger.InfoContext(ctx, "Listing log entries")
 
 	// Parse pagination parameters
 	pageSize := 25 // default
@@ -64,10 +74,11 @@ func (h *Handler) ListLogEntries(c *fiber.Ctx) error {
 
 	result, err := h.AuditService.ListEventsPaginated(ctx, listReq)
 	if err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to list log entries", "error", err)
-		auditCtx.Fail("internal_error", "Failed to list log entries")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to list log entries",
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to list log entries", "error", err)
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
+			Code:    fiber.StatusInternalServerError,
+			Status:  "internal_error",
+			Message: "Failed to list log entries",
 		})
 	}
 
@@ -76,5 +87,19 @@ func (h *Handler) ListLogEntries(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"events": result.Events,
 		"token":  result.NextToken,
+	})
+}
+
+type ErrorResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"error"`
+	Status  string `json:"status"`
+	Details any    `json:"details,omitempty"`
+}
+
+func SendErrorResponse(c *fiber.Ctx, auditCtx *audit.Context, errorRes ErrorResponse) error {
+	auditCtx.Fail(errorRes.Status, errorRes.Message)
+	return c.Status(errorRes.Code).JSON(map[string]ErrorResponse{
+		"error": errorRes,
 	})
 }

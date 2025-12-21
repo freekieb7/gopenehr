@@ -86,6 +86,10 @@ func NewService(logger *telemetry.Logger, trustedIssuers []string, audience stri
 	}
 }
 
+func (s *Service) Enabled() bool {
+	return len(s.TrustedIssuers) > 0 && s.Audience != ""
+}
+
 func (s *Service) WarmupCache(ctx context.Context) error {
 	for _, issuer := range s.TrustedIssuers {
 		iss := strings.TrimRight(issuer, "/")

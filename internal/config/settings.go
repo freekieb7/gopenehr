@@ -51,8 +51,8 @@ type Settings struct {
 	CapEHRs             int
 }
 
-func NewSettings() Settings {
-	return Settings{
+func NewSettings() *Settings {
+	return &Settings{
 		Name:    SYSTEM_ID_GOPENEHR,
 		Version: Version,
 	}
@@ -132,6 +132,10 @@ func (s *Settings) Load() error {
 	}
 	s.CapEHRs = int(capEHRs)
 	return nil
+}
+
+func (s *Settings) OAuthEnabled() bool {
+	return len(s.OAuthTrustedIssuers) > 0 && s.OAuthAudience != ""
 }
 
 func getEnvString(key string, defaultValue string, required bool) (string, error) {

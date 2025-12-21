@@ -71,6 +71,8 @@ var (
 
 	ErrQueryNotFound      = fmt.Errorf("AQL query not found")
 	ErrQueryAlreadyExists = fmt.Errorf("AQL query with the given name already exists")
+
+	ErrEHRLimitReached = fmt.Errorf("EHR limit reached for tenant")
 )
 
 type StoredQuery struct {
@@ -93,7 +95,7 @@ func NewService(logger *telemetry.Logger, db *database.Database) *Service {
 	}
 }
 
-func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus rm.EHR_STATUS) (rm.EHR, error) {
+func (s *Service) CreateEHR(ctx context.Context, tenantID, ehrID uuid.UUID, ehrStatus rm.EHR_STATUS) (rm.EHR, error) {
 	err := s.ValidateEHRStatus(ctx, ehrStatus)
 	if err != nil {
 		return rm.EHR{}, err
@@ -204,11 +206,16 @@ func (s *Service) CreateEHR(ctx context.Context, ehrID uuid.UUID, ehrStatus rm.E
 	}()
 
 	// Increment user's registered EHR count
-	var ehrCount int
-	row := tx.QueryRow(ctx, `UPDATE subscription.tbl_organisation SET ehr_count = ehr_count + 1, updated_at = NOW() WHERE id = $1 AND ehr_count < ehr_limit RETURNING ehr_count;`)
-	err = row.Scan(&ehrCount)
-	if err != nil {
-		return rm.EHR{}, fmt.Errorf("failed to increment organisation's registered EHR count: %w", err)
+	if tenantID != uuid.Nil {
+		var ehrCount int
+		row := tx.QueryRow(ctx, `UPDATE tenant.tbl_subscription SET ehr_count = ehr_count + 1, updated_at = NOW() WHERE tenant_id = $1 AND ehr_count < ehr_limit RETURNING ehr_count;`, tenantID)
+		err = row.Scan(&ehrCount)
+		if err != nil {
+			return rm.EHR{}, fmt.Errorf("failed to increment tenant's registered EHR count: %w", err)
+		}
+		if ehrCount == 0 {
+			return rm.EHR{}, ErrEHRLimitReached
+		}
 	}
 
 	batch := &pgx.Batch{}
@@ -3881,10 +3888,10 @@ func NewVersionedEHRStatus(id, ehrID uuid.UUID) rm.VERSIONED_EHR_STATUS {
 
 func NewEHRStatus(id uuid.UUID) rm.EHR_STATUS {
 	return rm.EHR_STATUS{
-		// UID: utils.Some(rm.UID_BASED_ID_from_OBJECT_VERSION_ID(&rm.OBJECT_VERSION_ID{
-		// 	Type_: utils.Some(rm.OBJECT_VERSION_ID_TYPE),
-		// 	Value: fmt.Sprintf("%s::%s::1", id.String(), config.SYSTEM_ID_GOPENEHR),
-		// })),
+		UID: utils.Some(rm.UID_BASED_ID_from_OBJECT_VERSION_ID(&rm.OBJECT_VERSION_ID{
+			Type_: utils.Some(rm.OBJECT_VERSION_ID_TYPE),
+			Value: fmt.Sprintf("%s::%s::1", id.String(), config.SYSTEM_ID_GOPENEHR),
+		})),
 		Name: rm.DV_TEXT_from_DV_TEXT(rm.DV_TEXT{
 			Value: "EHR Status",
 		}),

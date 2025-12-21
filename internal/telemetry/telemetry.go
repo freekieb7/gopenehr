@@ -27,7 +27,7 @@ type Telemetry struct {
 	Shutdown func(context.Context) error
 }
 
-func Init(ctx context.Context, settings config.Settings) (*Telemetry, error) {
+func Init(ctx context.Context, settings *config.Settings) (*Telemetry, error) {
 	res := NewResource(settings.Name, settings.Version)
 
 	if settings.OtelEndpoint == "" {
@@ -55,7 +55,7 @@ func setupNoop() *Telemetry {
 	}
 }
 
-func setupEnabled(ctx context.Context, res *sdkResource.Resource, settings config.Settings) (*Telemetry, error) {
+func setupEnabled(ctx context.Context, res *sdkResource.Resource, settings *config.Settings) (*Telemetry, error) {
 	tExporterOpts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(settings.OtelEndpoint)}
 	if settings.OtelInsecure {
 		tExporterOpts = append(tExporterOpts, otlptracegrpc.WithInsecure())

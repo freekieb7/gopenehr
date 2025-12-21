@@ -7,6 +7,7 @@ import (
 
 	intAudit "github.com/freekieb7/gopenehr/internal/audit"
 	"github.com/freekieb7/gopenehr/internal/config"
+	"github.com/freekieb7/gopenehr/internal/oauth"
 	"github.com/freekieb7/gopenehr/internal/openehr/rm"
 	"github.com/freekieb7/gopenehr/internal/openehr/util"
 	"github.com/freekieb7/gopenehr/internal/telemetry"
@@ -26,9 +27,10 @@ type Handler struct {
 	WebhookService *webhook.Service
 	AuditSink      *intAudit.Sink
 	WebhookSink    webhook.Sink
+	OAuthService   *oauth.Service
 }
 
-func NewHandler(settings *config.Settings, telemetry *telemetry.Telemetry, openEHRService *Service, auditService *intAudit.Service, webhookService *webhook.Service, auditSink *intAudit.Sink, webhookSink webhook.Sink) Handler {
+func NewHandler(settings *config.Settings, telemetry *telemetry.Telemetry, openEHRService *Service, auditService *intAudit.Service, webhookService *webhook.Service, auditSink *intAudit.Sink, webhookSink webhook.Sink, oauthService *oauth.Service) Handler {
 	return Handler{
 		Settings:       settings,
 		Telemetry:      telemetry,
@@ -37,6 +39,7 @@ func NewHandler(settings *config.Settings, telemetry *telemetry.Telemetry, openE
 		WebhookService: webhookService,
 		AuditSink:      auditSink,
 		WebhookSink:    webhookSink,
+		OAuthService:   oauthService,
 	}
 }
 
@@ -45,73 +48,79 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 
 	v1.Use(middleware.APIKeyProtected(h.Settings.APIKey))
 
+	v1.Use(middleware.TenantID())
+
 	v1.Use(middleware.RequestID())
 	v1.Use(middleware.Recover(h.Telemetry))
 	v1.Use(middleware.Telemetry(h.Telemetry))
 
+	var validateToken middleware.ValidateTokenFunc = nil
+	if h.OAuthService.Enabled() {
+		validateToken = h.OAuthService.ValidateToken
+	}
+
 	v1.Options("", h.SystemInfo)
 
-	v1.Get("/ehr", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionRead), h.GetEHRBySubject)
-	v1.Post("/ehr", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionCreate), h.CreateEHR)
-	v1.Get("/ehr/:ehr_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionRead), h.GetEHR)
-	v1.Put("/ehr/:ehr_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionCreate), h.CreateEHRWithID)
+	v1.Get("/ehr", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetEHRBySubject)
+	v1.Post("/ehr", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeEHRWrite.String()}, validateToken), h.CreateEHR)
+	v1.Get("/ehr/:ehr_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetEHR)
+	v1.Put("/ehr/:ehr_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeEHRWrite.String()}, validateToken), h.CreateEHRWithID)
 
-	v1.Get("/ehr/:ehr_id/ehr_status", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHRStatus, audit.ActionRead), h.GetEHRStatus)
-	v1.Put("/ehr/:ehr_id/ehr_status", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHRStatus, audit.ActionUpdate), h.UpdateEhrStatus)
-	v1.Get("/ehr/:ehr_id/ehr_status/:version_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHRStatus, audit.ActionRead), h.GetEHRStatusByVersionID)
+	v1.Get("/ehr/:ehr_id/ehr_status", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHRStatus, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetEHRStatus)
+	v1.Put("/ehr/:ehr_id/ehr_status", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHRStatus, audit.ActionUpdate), middleware.JWTProtected([]string{oauth.ScopeEHRWrite.String()}, validateToken), h.UpdateEhrStatus)
+	v1.Get("/ehr/:ehr_id/ehr_status/:version_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHRStatus, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetEHRStatusByVersionID)
 
-	v1.Get("/ehr/:ehr_id/versioned_ehr_status", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedEHRStatus, audit.ActionRead), h.GetVersionedEHRStatus)
-	v1.Get("/ehr/:ehr_id/versioned_ehr_status/revision_history", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedEHRStatus, audit.ActionRead), h.GetVersionedEHRStatusRevisionHistory)
-	v1.Get("/ehr/:ehr_id/versioned_ehr_status/version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedEHRStatusVersion, audit.ActionRead), h.GetVersionedEHRStatusVersion)
-	v1.Get("/ehr/:ehr_id/versioned_ehr_status/version/:version_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedEHRStatusVersion, audit.ActionRead), h.GetVersionedEHRStatusVersionByID)
+	v1.Get("/ehr/:ehr_id/versioned_ehr_status", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedEHRStatus, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetVersionedEHRStatus)
+	v1.Get("/ehr/:ehr_id/versioned_ehr_status/revision_history", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedEHRStatus, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetVersionedEHRStatusRevisionHistory)
+	v1.Get("/ehr/:ehr_id/versioned_ehr_status/version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedEHRStatusVersion, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetVersionedEHRStatusVersion)
+	v1.Get("/ehr/:ehr_id/versioned_ehr_status/version/:version_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedEHRStatusVersion, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetVersionedEHRStatusVersionByID)
 
-	v1.Post("/ehr/:ehr_id/composition", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceComposition, audit.ActionCreate), h.CreateComposition)
-	v1.Get("/ehr/:ehr_id/composition/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceComposition, audit.ActionRead), h.GetComposition)
-	v1.Put("/ehr/:ehr_id/composition/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceComposition, audit.ActionUpdate), h.UpdateComposition)
-	v1.Delete("/ehr/:ehr_id/composition/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceComposition, audit.ActionDelete), h.DeleteComposition)
+	v1.Post("/ehr/:ehr_id/composition", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceComposition, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeEHRWrite.String()}, validateToken), h.CreateComposition)
+	v1.Get("/ehr/:ehr_id/composition/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceComposition, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetComposition)
+	v1.Put("/ehr/:ehr_id/composition/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceComposition, audit.ActionUpdate), middleware.JWTProtected([]string{oauth.ScopeEHRWrite.String()}, validateToken), h.UpdateComposition)
+	v1.Delete("/ehr/:ehr_id/composition/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceComposition, audit.ActionDelete), middleware.JWTProtected([]string{oauth.ScopeEHRWrite.String()}, validateToken), h.DeleteComposition)
 
-	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedComposition, audit.ActionRead), h.GetVersionedCompositionByID)
-	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/revision_history", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedComposition, audit.ActionRead), h.GetVersionedCompositionRevisionHistory)
-	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedCompositionVersion, audit.ActionRead), h.GetVersionedCompositionVersionAtTime)
-	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/version/:version_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedCompositionVersion, audit.ActionRead), h.GetVersionedCompositionVersionByID)
+	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedComposition, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetVersionedCompositionByID)
+	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/revision_history", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedComposition, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetVersionedCompositionRevisionHistory)
+	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedCompositionVersion, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetVersionedCompositionVersionAtTime)
+	v1.Get("/ehr/:ehr_id/versioned_composition/:versioned_object_id/version/:version_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedCompositionVersion, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetVersionedCompositionVersionByID)
 
-	v1.Post("/ehr/:ehr_id/directory", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionCreate), h.CreateDirectory)
-	v1.Put("/ehr/:ehr_id/directory", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionUpdate), h.UpdateDirectory)
-	v1.Delete("/ehr/:ehr_id/directory", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionDelete), h.DeleteDirectory)
-	v1.Get("/ehr/:ehr_id/directory", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionRead), h.GetFolderInDirectoryVersionAtTime)
-	v1.Get("/ehr/:ehr_id/directory/:version_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionRead), h.GetFolderInDirectoryVersion)
+	v1.Post("/ehr/:ehr_id/directory", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeEHRWrite.String()}, validateToken), h.CreateDirectory)
+	v1.Put("/ehr/:ehr_id/directory", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionUpdate), middleware.JWTProtected([]string{oauth.ScopeEHRWrite.String()}, validateToken), h.UpdateDirectory)
+	v1.Delete("/ehr/:ehr_id/directory", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionDelete), middleware.JWTProtected([]string{oauth.ScopeEHRWrite.String()}, validateToken), h.DeleteDirectory)
+	v1.Get("/ehr/:ehr_id/directory", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetFolderInDirectoryVersionAtTime)
+	v1.Get("/ehr/:ehr_id/directory/:version_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceDirectory, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetFolderInDirectoryVersion)
+	v1.Post("/ehr/:ehr_id/contribution", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceContribution, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeEHRWrite.String()}, validateToken), h.CreateContribution)
+	v1.Get("/ehr/:ehr_id/contribution/:contribution_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceContribution, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetContribution)
 
-	v1.Post("/ehr/:ehr_id/contribution", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceContribution, audit.ActionCreate), h.CreateContribution)
-	v1.Get("/ehr/:ehr_id/contribution/:contribution_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceContribution, audit.ActionRead), h.GetContribution)
-
-	v1.Get("/ehr/:ehr_id/tags", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceItemTag, audit.ActionRead), h.GetEHRTags)
-	v1.Get("/ehr/:ehr_id/composition/:uid_based_id/tags", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceItemTag, audit.ActionRead), h.GetCompositionTags)
-	v1.Put("/ehr/:ehr_id/composition/:uid_based_id/tags", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceItemTag, audit.ActionUpdate), h.UpdateCompositionTags)
+	v1.Get("/ehr/:ehr_id/tags", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceItemTag, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetEHRTags)
+	v1.Get("/ehr/:ehr_id/composition/:uid_based_id/tags", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceItemTag, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeEHRRead.String()}, validateToken), h.GetCompositionTags)
+	v1.Put("/ehr/:ehr_id/composition/:uid_based_id/tags", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceItemTag, audit.ActionUpdate), middleware.JWTProtected([]string{oauth.ScopeEHRWrite.String()}, validateToken), h.UpdateCompositionTags)
 	// v1.Delete("/ehr/:ehr_id/composition/:uid_based_id/tags", h.DeleteCompositionTagByKey)
 	// v1.Get("/ehr/:ehr_id/ehr_status/tags", h.GetEHRStatusTags)
 	// v1.Get("/ehr/:ehr_id/ehr_status/:version_uid/tags", h.GetEHRStatusVersionTags)
 	// v1.Put("/ehr/:ehr_id/ehr_status/:version_uid/tags", h.UpdateEHRStatusVersionTags)
 	// v1.Delete("/ehr/:ehr_id/ehr_status/:version_uid/tags/:key", h.DeleteEHRStatusVersionTagByKey)
 
-	v1.Post("/demographic/agent", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAgent, audit.ActionCreate), h.CreateAgent)
-	v1.Get("/demographic/agent/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAgent, audit.ActionRead), h.GetAgent)
-	v1.Put("/demographic/agent/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAgent, audit.ActionUpdate), h.UpdateAgent)
-	v1.Delete("/demographic/agent/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAgent, audit.ActionDelete), h.DeleteAgent)
+	v1.Post("/demographic/agent", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAgent, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.CreateAgent)
+	v1.Get("/demographic/agent/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAgent, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeDemographicsRead.String()}, validateToken), h.GetAgent)
+	v1.Put("/demographic/agent/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAgent, audit.ActionUpdate), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.UpdateAgent)
+	v1.Delete("/demographic/agent/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceAgent, audit.ActionDelete), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.DeleteAgent)
 
-	v1.Post("/demographic/group", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceGroup, audit.ActionCreate), h.CreateGroup)
-	v1.Get("/demographic/group/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceGroup, audit.ActionRead), h.GetGroup)
-	v1.Put("/demographic/group/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceGroup, audit.ActionUpdate), h.UpdateGroup)
-	v1.Delete("/demographic/group/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceGroup, audit.ActionDelete), h.DeleteGroup)
+	v1.Post("/demographic/group", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceGroup, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.CreateGroup)
+	v1.Get("/demographic/group/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceGroup, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeDemographicsRead.String()}, validateToken), h.GetGroup)
+	v1.Put("/demographic/group/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceGroup, audit.ActionUpdate), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.UpdateGroup)
+	v1.Delete("/demographic/group/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceGroup, audit.ActionDelete), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.DeleteGroup)
 
-	v1.Post("/demographic/person", middleware.Audit(h.AuditSink.Enqueue, audit.ResourcePerson, audit.ActionCreate), h.CreatePerson)
-	v1.Get("/demographic/person/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourcePerson, audit.ActionRead), h.GetPerson)
-	v1.Put("/demographic/person/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourcePerson, audit.ActionUpdate), h.UpdatePerson)
-	v1.Delete("/demographic/person/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourcePerson, audit.ActionDelete), h.DeletePerson)
+	v1.Post("/demographic/person", middleware.Audit(h.AuditSink.Enqueue, audit.ResourcePerson, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.CreatePerson)
+	v1.Get("/demographic/person/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourcePerson, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeDemographicsRead.String()}, validateToken), h.GetPerson)
+	v1.Put("/demographic/person/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourcePerson, audit.ActionUpdate), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.UpdatePerson)
+	v1.Delete("/demographic/person/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourcePerson, audit.ActionDelete), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.DeletePerson)
 
-	v1.Post("/demographic/organisation", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceOrganisation, audit.ActionCreate), h.CreateOrganisation)
-	v1.Get("/demographic/organisation/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceOrganisation, audit.ActionRead), h.GetOrganisation)
-	v1.Put("/demographic/organisation/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceOrganisation, audit.ActionUpdate), h.UpdateOrganisation)
-	v1.Delete("/demographic/organisation/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceOrganisation, audit.ActionDelete), h.DeleteOrganisation)
+	v1.Post("/demographic/organisation", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceOrganisation, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.CreateOrganisation)
+	v1.Get("/demographic/organisation/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceOrganisation, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeDemographicsRead.String()}, validateToken), h.GetOrganisation)
+	v1.Put("/demographic/organisation/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceOrganisation, audit.ActionUpdate), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.UpdateOrganisation)
+	v1.Delete("/demographic/organisation/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceOrganisation, audit.ActionDelete), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.DeleteOrganisation)
 
 	// v1.Post("/demographic/role", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceRole, audit.ActionCreate), h.CreateRole)
 	// v1.Get("/demographic/role/:uid_based_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceRole, audit.ActionRead), h.GetRole)
@@ -123,8 +132,8 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	// v1.Get("/demographic/versioned_party/:versioned_object_id/version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedPartyVersion, audit.ActionRead), h.GetVersionedPartyVersionAtTime)
 	// v1.Get("/demographic/versioned_party/:versioned_object_id/version/:version_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceVersionedPartyVersion, audit.ActionRead), h.GetVersionedPartyVersion)
 
-	v1.Post("/demographic/contribution", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceContribution, audit.ActionCreate), h.CreateDemographicContribution)
-	v1.Get("/demographic/contribution/:contribution_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceContribution, audit.ActionRead), h.GetDemographicContribution)
+	v1.Post("/demographic/contribution", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceContribution, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeDemographicsWrite.String()}, validateToken), h.CreateDemographicContribution)
+	v1.Get("/demographic/contribution/:contribution_uid", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceContribution, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeDemographicsRead.String()}, validateToken), h.GetDemographicContribution)
 
 	// v1.Get("/demographic/tags", h.GetDemographicTags)
 	// v1.Get("/demographic/agent/:uid_based_id/tags", h.GetAgentTags)
@@ -143,29 +152,29 @@ func (h *Handler) RegisterRoutes(app *fiber.App) {
 	// v1.Put("/demographic/role/:uid_based_id/tags", h.UpdateRoleTags)
 	// v1.Delete("/demographic/role/:uid_based_id/tags/:key", h.DeleteRoleTagByKey)
 
-	v1.Get("/query/aql", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), h.ExecuteAdHocAQL)
-	v1.Post("/query/aql", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), h.ExecuteAdHocAQLPost)
-	v1.Get("/query/:qualified_query_name", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), h.ExecuteStoredAQL)
-	v1.Post("/query/:qualified_query_name", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), h.ExecuteStoredAQLPost)
-	v1.Get("/query/:qualified_query_name/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), h.ExecuteStoredAQLVersion)
-	v1.Post("/query/:qualified_query_name/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), h.ExecuteStoredAQLVersionPost)
+	v1.Get("/query/aql", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), middleware.JWTProtected([]string{oauth.ScopeQueryExecute.String()}, validateToken), h.ExecuteAdHocAQL)
+	v1.Post("/query/aql", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), middleware.JWTProtected([]string{oauth.ScopeQueryExecute.String()}, validateToken), h.ExecuteAdHocAQLPost)
+	v1.Get("/query/:qualified_query_name", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), middleware.JWTProtected([]string{oauth.ScopeQueryExecute.String()}, validateToken), h.ExecuteStoredAQL)
+	v1.Post("/query/:qualified_query_name", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), middleware.JWTProtected([]string{oauth.ScopeQueryExecute.String()}, validateToken), h.ExecuteStoredAQLPost)
+	v1.Get("/query/:qualified_query_name/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), middleware.JWTProtected([]string{oauth.ScopeQueryExecute.String()}, validateToken), h.ExecuteStoredAQLVersion)
+	v1.Post("/query/:qualified_query_name/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionExecute), middleware.JWTProtected([]string{oauth.ScopeQueryExecute.String()}, validateToken), h.ExecuteStoredAQLVersionPost)
 
-	v1.Get("/definition/template/adl1.4", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), h.GetTemplatesADL14)
-	v1.Post("/definition/template/adl1.4", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionCreate), h.UploadTemplateADL14)
-	v1.Get("/definition/template/adl1.4/:template_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), h.GetTemplateADL14ByID)
+	v1.Get("/definition/template/adl1.4", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeTemplateRead.String()}, validateToken), h.GetTemplatesADL14)
+	v1.Post("/definition/template/adl1.4", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeTemplateWrite.String()}, validateToken), h.UploadTemplateADL14)
+	v1.Get("/definition/template/adl1.4/:template_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeTemplateRead.String()}, validateToken), h.GetTemplateADL14ByID)
 
-	v1.Get("/definition/template/adl2", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), h.GetTemplatesADL2)
-	v1.Post("/definition/template/adl2", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionCreate), h.UploadTemplateADL2)
-	v1.Get("/definition/template/adl2/:template_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), h.GetTemplateADL2ByID)
-	v1.Get("/definition/template/adl2/:template_id/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), h.GetTemplateADL2AtVersion)
+	v1.Get("/definition/template/adl2", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeTemplateRead.String()}, validateToken), h.GetTemplatesADL2)
+	v1.Post("/definition/template/adl2", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeTemplateWrite.String()}, validateToken), h.UploadTemplateADL2)
+	v1.Get("/definition/template/adl2/:template_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeTemplateRead.String()}, validateToken), h.GetTemplateADL2ByID)
+	v1.Get("/definition/template/adl2/:template_id/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceTemplate, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeTemplateRead.String()}, validateToken), h.GetTemplateADL2AtVersion)
 
-	v1.Get("/definition/query/:qualified_query_name", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionRead), h.ListStoredQueries)
-	v1.Put("/definition/query/:qualified_query_name", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionCreate), h.StoreQuery)
-	v1.Put("/definition/query/:qualified_query_name/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionCreate), h.StoreQueryVersion)
-	v1.Get("/definition/query/:qualified_query_name/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionRead), h.GetStoredQueryAtVersion)
+	v1.Get("/definition/query/:qualified_query_name", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeQueryRead.String()}, validateToken), h.ListStoredQueries)
+	v1.Put("/definition/query/:qualified_query_name", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeQueryWrite.String()}, validateToken), h.StoreQuery)
+	v1.Put("/definition/query/:qualified_query_name/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeQueryWrite.String()}, validateToken), h.StoreQueryVersion)
+	v1.Get("/definition/query/:qualified_query_name/:version", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceQuery, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeQueryRead.String()}, validateToken), h.GetStoredQueryAtVersion)
 
-	v1.Delete("/admin/ehr/all", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionDelete), h.DeleteMultipleEHRs)
-	v1.Delete("/admin/ehr/:ehr_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionDelete), h.DeleteEHRByID)
+	v1.Delete("/admin/ehr/all", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionDelete), middleware.JWTProtected([]string{oauth.ScopeEHRDelete.String()}, validateToken), h.DeleteMultipleEHRs)
+	v1.Delete("/admin/ehr/:ehr_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceEHR, audit.ActionDelete), middleware.JWTProtected([]string{oauth.ScopeEHRDelete.String()}, validateToken), h.DeleteEHRByID)
 }
 
 func (h *Handler) SystemInfo(c *fiber.Ctx) error {
@@ -189,7 +198,7 @@ func (h *Handler) SystemInfo(c *fiber.Ctx) error {
 
 func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	subjectID := c.Query("subject_id")
 	if subjectID == "" {
@@ -236,7 +245,8 @@ func (h *Handler) GetEHRBySubject(c *fiber.Ctx) error {
 
 func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
+	tenantID := middleware.TenantFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -257,8 +267,15 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 	ehrID := uuid.New()
 	auditCtx.Event.Details["ehr_id"] = ehrID
 
-	ehr, err := h.OpenEHRService.CreateEHR(ctx, ehrID, ehrStatus)
+	ehr, err := h.OpenEHRService.CreateEHR(ctx, tenantID, ehrID, ehrStatus)
 	if err != nil {
+		if err == ErrEHRLimitReached {
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
+				Code:    fiber.StatusForbidden,
+				Message: "EHR limit reached for tenant",
+				Status:  "forbidden",
+			})
+		}
 		if err == ErrEHRStatusAlreadyExists {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
@@ -304,7 +321,7 @@ func (h *Handler) CreateEHR(c *fiber.Ctx) error {
 
 func (h *Handler) GetEHR(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -338,7 +355,8 @@ func (h *Handler) GetEHR(c *fiber.Ctx) error {
 
 func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
+	tenantID := middleware.TenantFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -363,8 +381,15 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 		}
 	}
 
-	ehr, err := h.OpenEHRService.CreateEHR(ctx, ehrID, ehrStatus)
+	ehr, err := h.OpenEHRService.CreateEHR(ctx, tenantID, ehrID, ehrStatus)
 	if err != nil {
+		if err == ErrEHRLimitReached {
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
+				Code:    fiber.StatusForbidden,
+				Message: "EHR limit reached for tenant",
+				Status:  "forbidden",
+			})
+		}
 		if err == ErrEHRAlreadyExists {
 			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusConflict,
@@ -420,7 +445,7 @@ func (h *Handler) CreateEHRWithID(c *fiber.Ctx) error {
 
 func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -467,7 +492,7 @@ func (h *Handler) GetEHRStatus(c *fiber.Ctx) error {
 
 func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -596,7 +621,7 @@ func (h *Handler) UpdateEhrStatus(c *fiber.Ctx) error {
 
 func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -644,7 +669,7 @@ func (h *Handler) GetEHRStatusByVersionID(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -678,7 +703,7 @@ func (h *Handler) GetVersionedEHRStatus(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -712,7 +737,7 @@ func (h *Handler) GetVersionedEHRStatusRevisionHistory(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedEHRStatusVersion(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -760,7 +785,7 @@ func (h *Handler) GetVersionedEHRStatusVersion(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -804,7 +829,7 @@ func (h *Handler) GetVersionedEHRStatusVersionByID(c *fiber.Ctx) error {
 
 func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -904,7 +929,7 @@ func (h *Handler) CreateComposition(c *fiber.Ctx) error {
 
 func (h *Handler) GetComposition(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -955,7 +980,7 @@ func (h *Handler) GetComposition(c *fiber.Ctx) error {
 
 func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -1113,7 +1138,7 @@ func (h *Handler) UpdateComposition(c *fiber.Ctx) error {
 
 func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -1200,7 +1225,7 @@ func (h *Handler) DeleteComposition(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -1249,7 +1274,7 @@ func (h *Handler) GetVersionedCompositionByID(c *fiber.Ctx) error {
 func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -1297,7 +1322,7 @@ func (h *Handler) GetVersionedCompositionRevisionHistory(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -1355,7 +1380,7 @@ func (h *Handler) GetVersionedCompositionVersionAtTime(c *fiber.Ctx) error {
 
 func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -1408,7 +1433,7 @@ func (h *Handler) GetVersionedCompositionVersionByID(c *fiber.Ctx) error {
 
 func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -1492,7 +1517,7 @@ func (h *Handler) CreateDirectory(c *fiber.Ctx) error {
 func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -1623,7 +1648,7 @@ func (h *Handler) UpdateDirectory(c *fiber.Ctx) error {
 
 func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -1707,7 +1732,7 @@ func (h *Handler) DeleteDirectory(c *fiber.Ctx) error {
 func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -1768,7 +1793,7 @@ func (h *Handler) GetFolderInDirectoryVersionAtTime(c *fiber.Ctx) error {
 
 func (h *Handler) GetFolderInDirectoryVersion(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -1830,7 +1855,7 @@ func (h *Handler) CreateContribution(c *fiber.Ctx) error {
 
 func (h *Handler) GetContribution(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -1876,7 +1901,7 @@ func (h *Handler) GetContribution(c *fiber.Ctx) error {
 
 func (h *Handler) GetEHRTags(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -1908,7 +1933,7 @@ func (h *Handler) GetEHRTags(c *fiber.Ctx) error {
 
 func (h *Handler) GetCompositionTags(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -1951,7 +1976,7 @@ func (h *Handler) GetCompositionTags(c *fiber.Ctx) error {
 
 func (h *Handler) UpdateCompositionTags(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -2031,7 +2056,7 @@ func (h *Handler) DeleteEHRStatusVersionTagByKey(c *fiber.Ctx) error {
 
 func (h *Handler) CreateAgent(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -2101,7 +2126,7 @@ func (h *Handler) CreateAgent(c *fiber.Ctx) error {
 
 func (h *Handler) GetAgent(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
 	if err != nil {
@@ -2141,7 +2166,7 @@ func (h *Handler) GetAgent(c *fiber.Ctx) error {
 
 func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -2272,7 +2297,7 @@ func (h *Handler) UpdateAgent(c *fiber.Ctx) error {
 
 func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
 	if err != nil {
@@ -2353,7 +2378,7 @@ func (h *Handler) DeleteAgent(c *fiber.Ctx) error {
 
 func (h *Handler) CreateGroup(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -2418,7 +2443,7 @@ func (h *Handler) CreateGroup(c *fiber.Ctx) error {
 
 func (h *Handler) GetGroup(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
 	if err != nil {
@@ -2458,7 +2483,7 @@ func (h *Handler) GetGroup(c *fiber.Ctx) error {
 
 func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -2588,7 +2613,7 @@ func (h *Handler) UpdateGroup(c *fiber.Ctx) error {
 
 func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	versionUID, err := StringFromPath(c, auditCtx, "uid_based_id")
 	if err != nil {
@@ -2668,7 +2693,7 @@ func (h *Handler) DeleteGroup(c *fiber.Ctx) error {
 
 func (h *Handler) CreatePerson(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -2738,7 +2763,7 @@ func (h *Handler) CreatePerson(c *fiber.Ctx) error {
 
 func (h *Handler) GetPerson(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
 	if err != nil {
@@ -2777,7 +2802,7 @@ func (h *Handler) GetPerson(c *fiber.Ctx) error {
 
 func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -2907,7 +2932,7 @@ func (h *Handler) UpdatePerson(c *fiber.Ctx) error {
 
 func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	versionID, err := StringFromPath(c, auditCtx, "uid_based_id")
 	if err != nil {
@@ -2986,7 +3011,7 @@ func (h *Handler) DeletePerson(c *fiber.Ctx) error {
 
 func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -3056,7 +3081,7 @@ func (h *Handler) CreateOrganisation(c *fiber.Ctx) error {
 
 func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
 	if err != nil {
@@ -3093,7 +3118,7 @@ func (h *Handler) GetOrganisation(c *fiber.Ctx) error {
 
 func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -3223,7 +3248,7 @@ func (h *Handler) UpdateOrganisation(c *fiber.Ctx) error {
 
 func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 	ctx := c.Context()
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
 	if err != nil {
@@ -3303,7 +3328,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 
 // func (h *Handler) CreateRole(c *fiber.Ctx) error {
 // 	ctx := c.Context()
-// 	auditCtx := audit.From(c)
+// 	auditCtx := middleware.AuditFrom(c)
 
 // 	err := Accepts(c, auditCtx, "application/json")
 // 	if err != nil {
@@ -3368,7 +3393,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 
 // func (h *Handler) GetRole(c *fiber.Ctx) error {
 // 	ctx := c.Context()
-// 	auditCtx := audit.From(c)
+// 	auditCtx := middleware.AuditFrom(c)
 
 // 	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
 // 	if err != nil {
@@ -3433,7 +3458,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 
 // func (h *Handler) UpdateRole(c *fiber.Ctx) error {
 // 	ctx := c.Context()
-// 	auditCtx := audit.From(c)
+// 	auditCtx := middleware.AuditFrom(c)
 
 // 	err := Accepts(c, auditCtx, "application/json")
 // 	if err != nil {
@@ -3558,7 +3583,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 // func (h *Handler) DeleteRole(c *fiber.Ctx) error {
 // 	ctx := c.Context()
 
-// 	auditCtx := audit.From(c)
+// 	auditCtx := middleware.AuditFrom(c)
 
 // 	uidBasedID, err := StringFromPath(c, auditCtx, "uid_based_id")
 // 	if err != nil {
@@ -3638,7 +3663,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 
 // func (h *Handler) GetVersionedParty(c *fiber.Ctx) error {
 // 	ctx := c.Context()
-// 	auditCtx := audit.From(c)
+// 	auditCtx := middleware.AuditFrom(c)
 
 // 	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
 // 	if err != nil {
@@ -3670,7 +3695,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 
 // func (h *Handler) GetVersionedPartyRevisionHistory(c *fiber.Ctx) error {
 // 	ctx := c.Context()
-// 	auditCtx := audit.From(c)
+// 	auditCtx := middleware.AuditFrom(c)
 
 // 	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
 // 	if err != nil {
@@ -3702,7 +3727,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 
 // func (h *Handler) GetVersionedPartyVersionAtTime(c *fiber.Ctx) error {
 // 	ctx := c.Context()
-// 	auditCtx := audit.From(c)
+// 	auditCtx := middleware.AuditFrom(c)
 
 // 	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
 // 	if err != nil {
@@ -3752,7 +3777,7 @@ func (h *Handler) DeleteOrganisation(c *fiber.Ctx) error {
 
 // func (h *Handler) GetVersionedPartyVersion(c *fiber.Ctx) error {
 // 	ctx := c.Context()
-// 	auditCtx := audit.From(c)
+// 	auditCtx := middleware.AuditFrom(c)
 
 // 	versionedObjectID, err := UUIDFromPath(c, auditCtx, "versioned_object_id")
 // 	if err != nil {
@@ -3869,7 +3894,7 @@ func (h *Handler) DeleteRoleTagByKey(c *fiber.Ctx) error {
 func (h *Handler) ExecuteAdHocAQL(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	query := c.Query("q")
 	if query == "" {
@@ -3959,7 +3984,7 @@ type AdHocAQLRequest struct {
 func (h *Handler) ExecuteAdHocAQLPost(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -4030,7 +4055,7 @@ func (h *Handler) ExecuteAdHocAQLPost(c *fiber.Ctx) error {
 func (h *Handler) ExecuteStoredAQL(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	name := c.Params("qualified_query_name")
 	if name == "" {
@@ -4138,7 +4163,7 @@ type StoredAQLRequest struct {
 func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -4230,7 +4255,7 @@ func (h *Handler) ExecuteStoredAQLPost(c *fiber.Ctx) error {
 func (h *Handler) ExecuteStoredAQLVersion(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	name := c.Params("qualified_query_name")
 	if name == "" {
@@ -4347,7 +4372,7 @@ type StoredAQLVersionRequest struct {
 func (h *Handler) ExecuteStoredAQLVersionPost(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	err := Accepts(c, auditCtx, "application/json")
 	if err != nil {
@@ -4477,7 +4502,7 @@ func (h *Handler) GetTemplateADL2AtVersion(c *fiber.Ctx) error {
 func (h *Handler) ListStoredQueries(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	name := c.Params("qualified_query_name")
 	if name == "" {
@@ -4506,7 +4531,7 @@ func (h *Handler) ListStoredQueries(c *fiber.Ctx) error {
 func (h *Handler) StoreQuery(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	if c.Accepts("text/plain") == "" {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -4590,7 +4615,7 @@ func (h *Handler) StoreQuery(c *fiber.Ctx) error {
 func (h *Handler) StoreQueryVersion(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	if c.Accepts("text/plain") == "" {
 		return SendErrorResponse(c, auditCtx, ErrorResponse{
@@ -4664,7 +4689,7 @@ func (h *Handler) StoreQueryVersion(c *fiber.Ctx) error {
 func (h *Handler) GetStoredQueryAtVersion(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	name := c.Params("qualified_query_name")
 	if name == "" {
@@ -4710,7 +4735,7 @@ func (h *Handler) GetStoredQueryAtVersion(c *fiber.Ctx) error {
 func (h *Handler) DeleteEHRByID(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	ehrID, err := UUIDFromPath(c, auditCtx, "ehr_id")
 	if err != nil {
@@ -4751,7 +4776,7 @@ func (h *Handler) DeleteEHRByID(c *fiber.Ctx) error {
 func (h *Handler) DeleteMultipleEHRs(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	// Parse multiple ehr_id query parameters
 	// Example: ?ehr_id=7d44b88c-4199-4bad-97dc-d78268e01398&ehr_id=297c3e91-7c17-4497-85dd-01e05aaae44e

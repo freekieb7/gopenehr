@@ -44,6 +44,8 @@ const (
 	ResourceQuery                       Resource = "query"
 	ResourceWebhook                     Resource = "webhook"
 	ResourceItemTag                     Resource = "item_tag"
+	ResourceAudit                       Resource = "audit"
+	ResourceTenant                      Resource = "tenant"
 )
 
 type Action string

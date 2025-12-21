@@ -64,7 +64,7 @@ func (s *Service) ListEventsPaginated(ctx context.Context, req ListEventsRequest
 		direction = cursor.V.Direction
 	}
 
-	query := `SELECT id, actor_id, actor_type, resource, action, success, ip_address, user_agent, details, created_at FROM audit.tbl_audit_log `
+	query := `SELECT data FROM audit.tbl_audit_log `
 	args := []any{}
 	argIdx := 1
 
@@ -96,7 +96,7 @@ func (s *Service) ListEventsPaginated(ctx context.Context, req ListEventsRequest
 	events := []audit.Event{}
 	for rows.Next() {
 		var event audit.Event
-		if err := rows.Scan(&event.ID, &event.ActorID, &event.ActorType, &event.Resource, &event.Action, &event.Success, &event.IPAddress, &event.UserAgent, &event.Details, &event.CreatedAt); err != nil {
+		if err := rows.Scan(&event); err != nil {
 			s.Logger.Warn("Failed to scan event", "error", err)
 			return ListEventsResponse{}, err
 		}

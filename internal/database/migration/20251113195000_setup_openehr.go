@@ -104,6 +104,16 @@ func (m *SetupOpenEHR) Up(ctx context.Context, tx pgx.Tx) error {
 	}
 
 	_, err = tx.Exec(ctx, `
+		CREATE TABLE openehr.tbl_versioned_ehr_status_data (
+			id UUID PRIMARY KEY REFERENCES openehr.tbl_versioned_object(id) ON DELETE CASCADE,
+			data JSONB NOT NULL
+		);
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to create tbl_versioned_ehr_status_data table: %w", err)
+	}
+
+	_, err = tx.Exec(ctx, `
 		CREATE TABLE openehr.tbl_versioned_ehr_status_tag (
 			versioned_ehr_status_id UUID NOT NULL REFERENCES openehr.tbl_versioned_object(id) ON DELETE CASCADE,
 			key TEXT NOT NULL,

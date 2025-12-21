@@ -9,9 +9,7 @@ import (
 	"github.com/google/uuid"
 )
 
-type KeyType string
-
-const ContextKey KeyType = "audit_context"
+const AuditContextKey string = "audit_context"
 
 type SendFunc func(event audit.Event)
 
@@ -29,15 +27,14 @@ func Audit(send SendFunc, resource audit.Resource, action audit.Action) fiber.Ha
 				Details:   make(map[string]any),
 				CreatedAt: time.Now().UTC(),
 			},
-			Failed: false,
 		}
 
 		// Attach to Fiber locals
-		c.Locals(string(ContextKey), auditCtx)
+		c.Locals(AuditContextKey, &auditCtx)
 
 		// Ensure event is always logged
 		defer func() {
-			if auditCtx.Failed {
+			if !auditCtx.Event.Success {
 				if _, ok := auditCtx.Event.Details["outcome"]; !ok {
 					auditCtx.Event.Details["outcome"] = "failure"
 				}
@@ -50,4 +47,16 @@ func Audit(send SendFunc, resource audit.Resource, action audit.Action) fiber.Ha
 		// Continue request
 		return c.Next()
 	}
+}
+
+func AuditFrom(c *fiber.Ctx) *audit.Context {
+	raw := c.Locals(AuditContextKey)
+	if raw == nil {
+		panic("audit context not found in fiber context")
+	}
+	_, ok := raw.(*audit.Context)
+	if !ok {
+		panic("audit context has wrong type")
+	}
+	return raw.(*audit.Context)
 }

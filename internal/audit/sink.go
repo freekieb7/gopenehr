@@ -76,29 +76,17 @@ func (s *Sink) flush(ctx context.Context, batch []audit.Event) error {
 
 	// var eventID string
 
-	rows := make([][]interface{}, len(batch))
+	rows := make([][]any, len(batch))
 	for i, event := range batch {
 		id := uuid.New() // replace with v7 generator if needed
-		rows[i] = []interface{}{
+		rows[i] = []any{
 			id,
-			event.ActorID,
-			event.ActorType,
-			event.Resource,
-			event.Action,
-			event.Success,
-			event.IPAddress,
-			event.UserAgent,
-			event.Details,
+			event,
 			event.CreatedAt,
 		}
 	}
 
-	_, err = tx.CopyFrom(
-		ctx,
-		pgx.Identifier{"audit", "tbl_audit_log"},
-		[]string{"id", "actor_id", "actor_type", "resource", "action", "success", "ip_address", "user_agent", "details", "created_at"},
-		pgx.CopyFromRows(rows),
-	)
+	_, err = tx.CopyFrom(ctx, pgx.Identifier{"audit", "tbl_audit_log"}, []string{"id", "data", "created_at"}, pgx.CopyFromRows(rows))
 	if err != nil {
 		return err
 	}

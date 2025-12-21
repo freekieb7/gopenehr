@@ -14,16 +14,16 @@ import (
 
 type Handler struct {
 	Settings       *config.Settings
-	Logger         *telemetry.Logger
+	Telemetry      *telemetry.Telemetry
 	AuditSink      *intAudit.Sink
 	OAuthService   *oauth.Service
 	WebhookService *Service
 }
 
-func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditSink *intAudit.Sink, oauthService *oauth.Service, webhookService *Service) Handler {
+func NewHandler(settings *config.Settings, telemetry *telemetry.Telemetry, auditSink *intAudit.Sink, oauthService *oauth.Service, webhookService *Service) Handler {
 	return Handler{
 		Settings:       settings,
-		Logger:         logger,
+		Telemetry:      telemetry,
 		AuditSink:      auditSink,
 		OAuthService:   oauthService,
 		WebhookService: webhookService,
@@ -32,13 +32,24 @@ func NewHandler(settings *config.Settings, logger *telemetry.Logger, auditSink *
 
 func (h *Handler) RegisterRoutes(a *fiber.App) {
 	v1 := a.Group("/webhooks/v1")
-	v1.Use(middleware.APIKeyProtected(h.Settings.APIKey))
-	v1.Use(middleware.JWTProtected([]string{oauth.ScopeWebhookManage.String()}, h.OAuthService.ValidateToken))
 
-	v1.Get("", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceWebhook, audit.ActionRead), h.HandleListSubscriptions)
-	v1.Post("", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceWebhook, audit.ActionCreate), h.HandleSubscribe)
-	v1.Patch("/:subscription_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceWebhook, audit.ActionUpdate), h.HandleUpdateSubscription)
-	v1.Delete("/:subscription_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceWebhook, audit.ActionDelete), h.HandleUnsubscribe)
+	v1.Use(middleware.APIKeyProtected(h.Settings.APIKey))
+
+	v1.Use(middleware.TenantID())
+
+	v1.Use(middleware.RequestID())
+	v1.Use(middleware.Recover(h.Telemetry))
+	v1.Use(middleware.Telemetry(h.Telemetry))
+
+	var validateToken middleware.ValidateTokenFunc = nil
+	if h.OAuthService.Enabled() {
+		validateToken = h.OAuthService.ValidateToken
+	}
+
+	v1.Get("", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceWebhook, audit.ActionRead), middleware.JWTProtected([]string{oauth.ScopeWebhookManage.String()}, validateToken), h.HandleListSubscriptions)
+	v1.Post("", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceWebhook, audit.ActionCreate), middleware.JWTProtected([]string{oauth.ScopeWebhookManage.String()}, validateToken), h.HandleSubscribe)
+	v1.Patch("/:subscription_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceWebhook, audit.ActionUpdate), middleware.JWTProtected([]string{oauth.ScopeWebhookManage.String()}, validateToken), h.HandleUpdateSubscription)
+	v1.Delete("/:subscription_id", middleware.Audit(h.AuditSink.Enqueue, audit.ResourceWebhook, audit.ActionDelete), middleware.JWTProtected([]string{oauth.ScopeWebhookManage.String()}, validateToken), h.HandleUnsubscribe)
 }
 
 type SubscribeRequest struct {
@@ -61,11 +72,12 @@ type SubscribeResponse struct {
 
 func (h *Handler) HandleListSubscriptions(c *fiber.Ctx) error {
 	ctx := c.Context()
+	auditCtx := middleware.AuditFrom(c)
 
 	subscriptions, err := h.WebhookService.ListSubscriptions(ctx)
 	if err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to list subscriptions", "error", err)
-		return SendErrorResponse(c, ErrorResponse{
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to list subscriptions", "error", err)
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to list subscriptions",
 			Status:  "error",
@@ -88,18 +100,18 @@ func (h *Handler) HandleListSubscriptions(c *fiber.Ctx) error {
 		}
 	}
 
+	auditCtx.Success()
 	return c.JSON(resp)
 }
 
 func (h *Handler) HandleSubscribe(c *fiber.Ctx) error {
 	ctx := c.Context()
-
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	var req SubscribeRequest
 	if c.BodyParser(&req) != nil {
 		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid request body",
 			Status:  "error",
@@ -108,7 +120,7 @@ func (h *Handler) HandleSubscribe(c *fiber.Ctx) error {
 
 	if req.URL == "" {
 		auditCtx.Fail("bad_request", "Subscription URL is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Subscription URL is required",
 			Status:  "error",
@@ -116,7 +128,7 @@ func (h *Handler) HandleSubscribe(c *fiber.Ctx) error {
 	}
 	if len(req.EventTypes) == 0 {
 		auditCtx.Fail("bad_request", "At least one event type is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "At least one event type is required",
 			Status:  "error",
@@ -125,10 +137,10 @@ func (h *Handler) HandleSubscribe(c *fiber.Ctx) error {
 
 	exists, err := h.WebhookService.ExistsSubscriptionWithURL(ctx, req.URL)
 	if err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to check existing subscription", "url", req.URL, "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to check existing subscription", "url", req.URL, "error", err)
 
 		auditCtx.Fail("error", "Failed to check existing subscription")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to create subscription",
 			Status:  "error",
@@ -136,7 +148,7 @@ func (h *Handler) HandleSubscribe(c *fiber.Ctx) error {
 	}
 	if exists {
 		auditCtx.Fail("already_exists", "Subscription with the given URL already exists")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusConflict,
 			Message: "Subscription with the given URL already exists",
 			Status:  "error",
@@ -148,17 +160,17 @@ func (h *Handler) HandleSubscribe(c *fiber.Ctx) error {
 	if err != nil {
 		if err == ErrInvalidEventType {
 			auditCtx.Fail("invalid_event_type", "Invalid event type")
-			return SendErrorResponse(c, ErrorResponse{
+			return SendErrorResponse(c, auditCtx, ErrorResponse{
 				Code:    fiber.StatusBadRequest,
 				Message: "Invalid event type",
 				Status:  "error",
 			})
 		}
 
-		h.Logger.ErrorContext(ctx, "Failed to create subscription", "url", req.URL, "event_types", req.EventTypes, "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to create subscription", "url", req.URL, "event_types", req.EventTypes, "error", err)
 
 		auditCtx.Fail("error", "Failed to create subscription")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to create subscription",
 			Status:  "error",
@@ -178,13 +190,12 @@ func (h *Handler) HandleSubscribe(c *fiber.Ctx) error {
 
 func (h *Handler) HandleUpdateSubscription(c *fiber.Ctx) error {
 	ctx := c.Context()
-
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	subscriptionIDStr := c.Params("subscription_id")
 	if subscriptionIDStr == "" {
 		auditCtx.Fail("bad_request", "subscription_id path parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "subscription_id path parameter is required",
 			Status:  "error",
@@ -193,7 +204,7 @@ func (h *Handler) HandleUpdateSubscription(c *fiber.Ctx) error {
 	subscriptionID, err := uuid.Parse(subscriptionIDStr)
 	if err != nil {
 		auditCtx.Fail("bad_request", "invalid subscription_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "invalid subscription_id format",
 			Status:  "error",
@@ -204,7 +215,7 @@ func (h *Handler) HandleUpdateSubscription(c *fiber.Ctx) error {
 	var req UpdateSubscriptionRequest
 	if c.BodyParser(&req) != nil {
 		auditCtx.Fail("bad_request", "Invalid request body")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "Invalid request body",
 			Status:  "error",
@@ -214,10 +225,10 @@ func (h *Handler) HandleUpdateSubscription(c *fiber.Ctx) error {
 	// Check if subscription exists
 	exists, err := h.WebhookService.ExistsSubscription(ctx, subscriptionID)
 	if err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to check subscription existence", "subscription_id", subscriptionID, "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to check subscription existence", "subscription_id", subscriptionID, "error", err)
 
 		auditCtx.Fail("error", "Failed to check subscription existence")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to update subscription",
 			Status:  "error",
@@ -225,7 +236,7 @@ func (h *Handler) HandleUpdateSubscription(c *fiber.Ctx) error {
 	}
 	if !exists {
 		auditCtx.Fail("not_found", "Subscription not found")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusNotFound,
 			Message: "Subscription not found",
 			Status:  "error",
@@ -235,10 +246,10 @@ func (h *Handler) HandleUpdateSubscription(c *fiber.Ctx) error {
 	// Call the webhook service to update the subscription
 	err = h.WebhookService.UpdateSubscription(ctx, subscriptionID, req.EventTypes)
 	if err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to update subscription", "subscription_id", subscriptionID, "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to update subscription", "subscription_id", subscriptionID, "error", err)
 
 		auditCtx.Fail("error", "Failed to update subscription")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to update subscription",
 			Status:  "error",
@@ -252,12 +263,12 @@ func (h *Handler) HandleUpdateSubscription(c *fiber.Ctx) error {
 func (h *Handler) HandleUnsubscribe(c *fiber.Ctx) error {
 	ctx := c.Context()
 
-	auditCtx := audit.From(c)
+	auditCtx := middleware.AuditFrom(c)
 
 	subscriptionIDStr := c.Params("subscription_id")
 	if subscriptionIDStr == "" {
 		auditCtx.Fail("bad_request", "subscription_id query parameter is required")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "subscription_id query parameter is required",
 			Status:  "error",
@@ -266,7 +277,7 @@ func (h *Handler) HandleUnsubscribe(c *fiber.Ctx) error {
 	subscriptionID, err := uuid.Parse(subscriptionIDStr)
 	if err != nil {
 		auditCtx.Fail("bad_request", "invalid subscription_id format")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusBadRequest,
 			Message: "invalid subscription_id format",
 			Status:  "error",
@@ -275,10 +286,10 @@ func (h *Handler) HandleUnsubscribe(c *fiber.Ctx) error {
 
 	err = h.WebhookService.Unsubscribe(ctx, subscriptionID)
 	if err != nil {
-		h.Logger.ErrorContext(ctx, "Failed to unsubscribe", "subscription_id", subscriptionID, "error", err)
+		h.Telemetry.Logger.ErrorContext(ctx, "Failed to unsubscribe", "subscription_id", subscriptionID, "error", err)
 
 		auditCtx.Fail("error", "Failed to unsubscribe")
-		return SendErrorResponse(c, ErrorResponse{
+		return SendErrorResponse(c, auditCtx, ErrorResponse{
 			Code:    fiber.StatusInternalServerError,
 			Message: "Failed to unsubscribe",
 			Status:  "error",
@@ -297,7 +308,8 @@ type ErrorResponse struct {
 	Details any    `json:"details,omitempty"`
 }
 
-func SendErrorResponse(c *fiber.Ctx, errorRes ErrorResponse) error {
+func SendErrorResponse(c *fiber.Ctx, auditCtx *audit.Context, errorRes ErrorResponse) error {
+	auditCtx.Fail(errorRes.Status, errorRes.Message)
 	return c.Status(errorRes.Code).JSON(map[string]ErrorResponse{
 		"error": errorRes,
 	})

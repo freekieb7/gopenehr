@@ -28,7 +28,7 @@ func (m *SetupAudit) Up(ctx context.Context, tx pgx.Tx) error {
 	_, err = tx.Exec(ctx, `
 		CREATE TABLE audit.tbl_audit_log (
 			id UUID PRIMARY KEY,
-			data bytea NOT NULL,
+			data JSONB NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 		);
 	`)

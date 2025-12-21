@@ -41,7 +41,7 @@ func ToSQL(aqlQuery string, params map[string]any) (string, []string, error) {
 	}
 
 	// Wrap the query to return a JSON array
-	query = fmt.Sprintf("SELECT jsonb_build_array(%s) FROM (%s) AS result", strings.Join(columnNames, ", "), query)
+	query = fmt.Sprintf("SELECT %s FROM (%s) AS result", strings.Join(columnNames, ", "), query)
 
 	return query, columnNames, nil
 }

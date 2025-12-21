@@ -1,7 +1,9 @@
 package openehr
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -3727,38 +3729,82 @@ func (s *Service) QueryWithStream(ctx context.Context, w io.Writer, aqlQuery str
 		return err
 	}
 
-	s.Logger.DebugContext(ctx, "query error", "error", err, "aql", aqlQuery, "sql", strings.ReplaceAll(strings.ReplaceAll(sqlQuery, "\n", " "), "\t", " "))
-
 	rows, err := s.DB.Query(ctx, sqlQuery)
 	if err != nil {
-		s.Logger.ErrorContext(ctx, "query error", "error", err, "aql", aqlQuery, "sql", strings.ReplaceAll(strings.ReplaceAll(sqlQuery, "\n", " "), "\t", " "))
+		s.Logger.ErrorContext(ctx, "query error", "error", err)
+		return err
+	}
+	defer rows.Close()
+
+	// Buffer writes aggressively
+	bufw := bufio.NewWriterSize(w, 64*1024)
+	flusher, _ := w.(http.Flusher)
+
+	// Start JSON
+	_, err = bufw.WriteString(`{"rows":[`)
+	if err != nil {
+		s.Logger.Error("write error", "error", err)
 		return err
 	}
 
-	// Stream results as JSON array
-	_, _ = w.Write([]byte(`{"rows":[`))
-
+	// Write rows
 	first := true
+	rowCount := 0
+
+	var jsonData json.RawMessage
 	for rows.Next() {
-		var jsonData []byte
 		if err := rows.Scan(&jsonData); err != nil {
 			s.Logger.Error("scan error", "error", err)
 			continue
 		}
 
 		if !first {
-			_, _ = w.Write([]byte(","))
+			err = bufw.WriteByte(',')
+			if err != nil {
+				s.Logger.Error("write error", "error", err)
+				continue
+			}
 		}
-		_, _ = w.Write(jsonData)
+		_, err = bufw.Write(jsonData)
+		if err != nil {
+			s.Logger.Error("write error", "error", err)
+			continue
+		}
 		first = false
+		rowCount++
 
-		// Flush each row so client receives data progressively
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
+		// Flush every N rows, not every row
+		if flusher != nil && rowCount%100 == 0 {
+			err = bufw.Flush()
+			if err != nil {
+				s.Logger.Error("flush error", "error", err)
+				continue
+			}
+			flusher.Flush()
 		}
 	}
 
-	_, _ = w.Write([]byte("]}"))
+	// End JSON
+	_, err = bufw.WriteString(`]}`)
+	if err != nil {
+		s.Logger.Error("write error", "error", err)
+		return err
+	}
+
+	// Final flush
+	err = bufw.Flush()
+	if err != nil {
+		s.Logger.Error("flush error", "error", err)
+		return err
+	}
+	if flusher != nil {
+		flusher.Flush()
+	}
+
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
 	return nil
 }
 

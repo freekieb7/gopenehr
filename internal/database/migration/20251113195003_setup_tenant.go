@@ -42,6 +42,8 @@ func (m *SetupTenant) Up(ctx context.Context, tx pgx.Tx) error {
 			tenant_id UUID PRIMARY KEY REFERENCES tenant.tbl_tenant(id) ON DELETE CASCADE,
 			ehr_count INT NOT NULL,
 			ehr_limit INT NOT NULL,
+			token_limit INT NOT NULL,
+			token_count INT NOT NULL,
 			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 		);

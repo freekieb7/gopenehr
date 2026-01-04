@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package example.proto.collector.event.v1;
 
-import "event/v1/event.proto";
+import "proto/event/v1/event.proto";
 
-option go_package = "example.com/protobuf/collector/event/v1";
+option go_package = "example.com/protobuf/gen/proto/collector/event/v1";
 
 service EventService {
     rpc ExportEvents (ExportEventsServiceRequest) returns (ExportEventsServiceResponse);
@@ -16,7 +16,7 @@ message ExportEventsServiceRequest {
   // element. Intermediary nodes (such as OpenTelemetry Collector) that receive
   // data from multiple origins typically batch the data before forwarding further and
   // in that case this array will contain multiple elements.
-  example.proto.event.v1.EventsData data = 1;
+  repeated example.proto.event.v1.ResourceEvents resource_events = 1;
 }
 
 message ExportEventsServiceResponse {
@@ -43,7 +43,7 @@ message ExportEventsPartialSuccess {
   //
   // A `rejected_<signal>` field holding a `0` value indicates that the
   // request was fully accepted.
-  int64 rejected_data_points = 1;
+  // int64 rejected_data_points = 1;
 
   // A developer-facing human-readable message in English. It should be used
   // either to explain why the server rejected parts of the data during a partial

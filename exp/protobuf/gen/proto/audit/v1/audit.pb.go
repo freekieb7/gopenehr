@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.21.12
-// source: audit/v1/event.proto
+// source: proto/audit/v1/audit.proto
 
 package v1
 
@@ -37,7 +37,7 @@ type AuditEvent struct {
 
 func (x *AuditEvent) Reset() {
 	*x = AuditEvent{}
-	mi := &file_audit_v1_event_proto_msgTypes[0]
+	mi := &file_proto_audit_v1_audit_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -49,7 +49,7 @@ func (x *AuditEvent) String() string {
 func (*AuditEvent) ProtoMessage() {}
 
 func (x *AuditEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_audit_v1_event_proto_msgTypes[0]
+	mi := &file_proto_audit_v1_audit_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -62,7 +62,7 @@ func (x *AuditEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuditEvent.ProtoReflect.Descriptor instead.
 func (*AuditEvent) Descriptor() ([]byte, []int) {
-	return file_audit_v1_event_proto_rawDescGZIP(), []int{0}
+	return file_proto_audit_v1_audit_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *AuditEvent) GetId() string {
@@ -131,7 +131,7 @@ type AuditEvent_Details struct {
 
 func (x *AuditEvent_Details) Reset() {
 	*x = AuditEvent_Details{}
-	mi := &file_audit_v1_event_proto_msgTypes[1]
+	mi := &file_proto_audit_v1_audit_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -143,7 +143,7 @@ func (x *AuditEvent_Details) String() string {
 func (*AuditEvent_Details) ProtoMessage() {}
 
 func (x *AuditEvent_Details) ProtoReflect() protoreflect.Message {
-	mi := &file_audit_v1_event_proto_msgTypes[1]
+	mi := &file_proto_audit_v1_audit_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -156,7 +156,7 @@ func (x *AuditEvent_Details) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuditEvent_Details.ProtoReflect.Descriptor instead.
 func (*AuditEvent_Details) Descriptor() ([]byte, []int) {
-	return file_audit_v1_event_proto_rawDescGZIP(), []int{0, 0}
+	return file_proto_audit_v1_audit_proto_rawDescGZIP(), []int{0, 0}
 }
 
 func (x *AuditEvent_Details) GetType() string {
@@ -181,7 +181,7 @@ type AuditEvent_User struct {
 
 func (x *AuditEvent_User) Reset() {
 	*x = AuditEvent_User{}
-	mi := &file_audit_v1_event_proto_msgTypes[2]
+	mi := &file_proto_audit_v1_audit_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -193,7 +193,7 @@ func (x *AuditEvent_User) String() string {
 func (*AuditEvent_User) ProtoMessage() {}
 
 func (x *AuditEvent_User) ProtoReflect() protoreflect.Message {
-	mi := &file_audit_v1_event_proto_msgTypes[2]
+	mi := &file_proto_audit_v1_audit_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -206,50 +206,50 @@ func (x *AuditEvent_User) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuditEvent_User.ProtoReflect.Descriptor instead.
 func (*AuditEvent_User) Descriptor() ([]byte, []int) {
-	return file_audit_v1_event_proto_rawDescGZIP(), []int{0, 1}
+	return file_proto_audit_v1_audit_proto_rawDescGZIP(), []int{0, 1}
 }
 
-var File_audit_v1_event_proto protoreflect.FileDescriptor
+var File_proto_audit_v1_audit_proto protoreflect.FileDescriptor
 
-const file_audit_v1_event_proto_rawDesc = "" +
+const file_proto_audit_v1_audit_proto_rawDesc = "" +
 	"\n" +
-	"\x14audit/v1/event.proto\x12\baudit.v1\"\xe3\x02\n" +
+	"\x1aproto/audit/v1/audit.proto\x12\x16example.proto.audit.v1\"\xff\x02\n" +
 	"\n" +
 	"AuditEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1c\n" +
-	"\ttimestamp\x18\x03 \x01(\tR\ttimestamp\x12/\n" +
-	"\x05actor\x18\x04 \x01(\v2\x19.audit.v1.AuditEvent.UserR\x05actor\x12\x16\n" +
+	"\ttimestamp\x18\x03 \x01(\tR\ttimestamp\x12=\n" +
+	"\x05actor\x18\x04 \x01(\v2'.example.proto.audit.v1.AuditEvent.UserR\x05actor\x12\x16\n" +
 	"\x06action\x18\x05 \x01(\tR\x06action\x12\x18\n" +
 	"\aoutcome\x18\x06 \x01(\tR\aoutcome\x12/\n" +
-	"\x13outcome_description\x18\a \x01(\tR\x12outcomeDescription\x126\n" +
-	"\adetails\x18\b \x03(\v2\x1c.audit.v1.AuditEvent.DetailsR\adetails\x1a?\n" +
+	"\x13outcome_description\x18\a \x01(\tR\x12outcomeDescription\x12D\n" +
+	"\adetails\x18\b \x03(\v2*.example.proto.audit.v1.AuditEvent.DetailsR\adetails\x1a?\n" +
 	"\aDetails\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x1a\x06\n" +
-	"\x04UserB#Z!example.com/protobuf/gen/audit/v1b\x06proto3"
+	"\x04UserB)Z'example.com/protobuf/gen/proto/audit/v1b\x06proto3"
 
 var (
-	file_audit_v1_event_proto_rawDescOnce sync.Once
-	file_audit_v1_event_proto_rawDescData []byte
+	file_proto_audit_v1_audit_proto_rawDescOnce sync.Once
+	file_proto_audit_v1_audit_proto_rawDescData []byte
 )
 
-func file_audit_v1_event_proto_rawDescGZIP() []byte {
-	file_audit_v1_event_proto_rawDescOnce.Do(func() {
-		file_audit_v1_event_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_audit_v1_event_proto_rawDesc), len(file_audit_v1_event_proto_rawDesc)))
+func file_proto_audit_v1_audit_proto_rawDescGZIP() []byte {
+	file_proto_audit_v1_audit_proto_rawDescOnce.Do(func() {
+		file_proto_audit_v1_audit_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_audit_v1_audit_proto_rawDesc), len(file_proto_audit_v1_audit_proto_rawDesc)))
 	})
-	return file_audit_v1_event_proto_rawDescData
+	return file_proto_audit_v1_audit_proto_rawDescData
 }
 
-var file_audit_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
-var file_audit_v1_event_proto_goTypes = []any{
-	(*AuditEvent)(nil),         // 0: audit.v1.AuditEvent
-	(*AuditEvent_Details)(nil), // 1: audit.v1.AuditEvent.Details
-	(*AuditEvent_User)(nil),    // 2: audit.v1.AuditEvent.User
+var file_proto_audit_v1_audit_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_proto_audit_v1_audit_proto_goTypes = []any{
+	(*AuditEvent)(nil),         // 0: example.proto.audit.v1.AuditEvent
+	(*AuditEvent_Details)(nil), // 1: example.proto.audit.v1.AuditEvent.Details
+	(*AuditEvent_User)(nil),    // 2: example.proto.audit.v1.AuditEvent.User
 }
-var file_audit_v1_event_proto_depIdxs = []int32{
-	2, // 0: audit.v1.AuditEvent.actor:type_name -> audit.v1.AuditEvent.User
-	1, // 1: audit.v1.AuditEvent.details:type_name -> audit.v1.AuditEvent.Details
+var file_proto_audit_v1_audit_proto_depIdxs = []int32{
+	2, // 0: example.proto.audit.v1.AuditEvent.actor:type_name -> example.proto.audit.v1.AuditEvent.User
+	1, // 1: example.proto.audit.v1.AuditEvent.details:type_name -> example.proto.audit.v1.AuditEvent.Details
 	2, // [2:2] is the sub-list for method output_type
 	2, // [2:2] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
@@ -257,26 +257,26 @@ var file_audit_v1_event_proto_depIdxs = []int32{
 	0, // [0:2] is the sub-list for field type_name
 }
 
-func init() { file_audit_v1_event_proto_init() }
-func file_audit_v1_event_proto_init() {
-	if File_audit_v1_event_proto != nil {
+func init() { file_proto_audit_v1_audit_proto_init() }
+func file_proto_audit_v1_audit_proto_init() {
+	if File_proto_audit_v1_audit_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_audit_v1_event_proto_rawDesc), len(file_audit_v1_event_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_audit_v1_audit_proto_rawDesc), len(file_proto_audit_v1_audit_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_audit_v1_event_proto_goTypes,
-		DependencyIndexes: file_audit_v1_event_proto_depIdxs,
-		MessageInfos:      file_audit_v1_event_proto_msgTypes,
+		GoTypes:           file_proto_audit_v1_audit_proto_goTypes,
+		DependencyIndexes: file_proto_audit_v1_audit_proto_depIdxs,
+		MessageInfos:      file_proto_audit_v1_audit_proto_msgTypes,
 	}.Build()
-	File_audit_v1_event_proto = out.File
-	file_audit_v1_event_proto_goTypes = nil
-	file_audit_v1_event_proto_depIdxs = nil
+	File_proto_audit_v1_audit_proto = out.File
+	file_proto_audit_v1_audit_proto_goTypes = nil
+	file_proto_audit_v1_audit_proto_depIdxs = nil
 }

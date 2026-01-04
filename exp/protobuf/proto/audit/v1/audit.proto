@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package audit.v1;
+package example.proto.audit.v1;
 
-option go_package = "example.com/protobuf/gen/audit/v1";
+option go_package = "example.com/protobuf/gen/proto/audit/v1";
 
 message AuditEvent {
 	string id = 1;

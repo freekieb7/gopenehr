@@ -4,9 +4,9 @@ syntax = "proto3";
 
 package example.proto.resource.v1;
 
-import "common/v1/common.proto";
+import "proto/common/v1/common.proto";
 
-option go_package = "example.com/protobuf/gen/resource/v1";
+option go_package = "example.com/protobuf/gen/proto/resource/v1";
 
 // Resource information.
 message Resource {

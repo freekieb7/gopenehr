@@ -1,0 +1,73 @@
+// ------------------------------------------------------------
+// Category constraint (required)
+// ------------------------------------------------------------
+composition.category.defining_code.terminology_id.value == "openehr" &&
+composition.category.defining_code.code_string == "433" &&
+
+
+// ------------------------------------------------------------
+// Context - optional, but if present must be valid
+// ------------------------------------------------------------
+(
+  !has(composition.context) ||
+  !has(composition.context.other_context) ||
+  (
+    composition.context.other_context.archetype_node_id == "at0001" &&
+    composition.context.other_context.items.all(item,
+      item._type == "ELEMENT" &&
+      item.archetype_node_id == "at0001" &&
+      item.name._type == "DV_CODED_TEXT" &&
+      item.name.defining_code.terminology_id.value == "code24" &&
+      (
+        !has(item.value) ||
+        item.value._type == "DV_TEXT"
+      )
+    )
+  )
+) &&
+
+
+// ------------------------------------------------------------
+// Content - optional ADMIN_ENTRY elements with constrained items
+// ------------------------------------------------------------
+(
+  !has(composition.content) ||
+  composition.content.all(content,
+    content._type == "ADMIN_ENTRY" &&
+    content.data.archetype_node_id == "at0001" &&
+    content.data.items.all(elem,
+      elem._type == "ELEMENT" &&
+      (
+        // ----------------------------------------------------
+        // Multimedia document
+        // ----------------------------------------------------
+        (elem.archetype_node_id == "at0002" && (
+          !has(elem.value) ||
+          (
+            elem.value._type == "DV_MULTIMEDIA" &&
+            elem.value.media_type.terminology_id.value == "IANA_media-types"
+          )
+        )) ||
+
+        // ----------------------------------------------------
+        // Category
+        // ----------------------------------------------------
+        (elem.archetype_node_id == "at0020" && (
+          !has(elem.value) ||
+          (
+            elem.value._type == "DV_CODED_TEXT" &&
+            has(elem.value.defining_code)
+          )
+        )) ||
+
+        // ----------------------------------------------------
+        // Remark
+        // ----------------------------------------------------
+        (elem.archetype_node_id == "at0007" && (
+          !has(elem.value) ||
+          elem.value._type == "DV_TEXT"
+        ))
+      )
+    )
+  )
+)

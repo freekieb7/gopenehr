@@ -2,12 +2,12 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.21.12
-// source: collector/event/v1/event_service.proto
+// source: proto/collector/event/v1/event_service.proto
 
 package v1
 
 import (
-	v1 "example.com/protobuf/gen/event/v1"
+	v1 "example.com/protobuf/gen/proto/event/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -29,14 +29,14 @@ type ExportEventsServiceRequest struct {
 	// element. Intermediary nodes (such as OpenTelemetry Collector) that receive
 	// data from multiple origins typically batch the data before forwarding further and
 	// in that case this array will contain multiple elements.
-	Data          *v1.EventsData `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ResourceEvents []*v1.ResourceEvents `protobuf:"bytes,1,rep,name=resource_events,json=resourceEvents,proto3" json:"resource_events,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ExportEventsServiceRequest) Reset() {
 	*x = ExportEventsServiceRequest{}
-	mi := &file_collector_event_v1_event_service_proto_msgTypes[0]
+	mi := &file_proto_collector_event_v1_event_service_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -48,7 +48,7 @@ func (x *ExportEventsServiceRequest) String() string {
 func (*ExportEventsServiceRequest) ProtoMessage() {}
 
 func (x *ExportEventsServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_collector_event_v1_event_service_proto_msgTypes[0]
+	mi := &file_proto_collector_event_v1_event_service_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -61,12 +61,12 @@ func (x *ExportEventsServiceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportEventsServiceRequest.ProtoReflect.Descriptor instead.
 func (*ExportEventsServiceRequest) Descriptor() ([]byte, []int) {
-	return file_collector_event_v1_event_service_proto_rawDescGZIP(), []int{0}
+	return file_proto_collector_event_v1_event_service_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ExportEventsServiceRequest) GetData() *v1.EventsData {
+func (x *ExportEventsServiceRequest) GetResourceEvents() []*v1.ResourceEvents {
 	if x != nil {
-		return x.Data
+		return x.ResourceEvents
 	}
 	return nil
 }
@@ -95,7 +95,7 @@ type ExportEventsServiceResponse struct {
 
 func (x *ExportEventsServiceResponse) Reset() {
 	*x = ExportEventsServiceResponse{}
-	mi := &file_collector_event_v1_event_service_proto_msgTypes[1]
+	mi := &file_proto_collector_event_v1_event_service_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -107,7 +107,7 @@ func (x *ExportEventsServiceResponse) String() string {
 func (*ExportEventsServiceResponse) ProtoMessage() {}
 
 func (x *ExportEventsServiceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_collector_event_v1_event_service_proto_msgTypes[1]
+	mi := &file_proto_collector_event_v1_event_service_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -120,7 +120,7 @@ func (x *ExportEventsServiceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportEventsServiceResponse.ProtoReflect.Descriptor instead.
 func (*ExportEventsServiceResponse) Descriptor() ([]byte, []int) {
-	return file_collector_event_v1_event_service_proto_rawDescGZIP(), []int{1}
+	return file_proto_collector_event_v1_event_service_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ExportEventsServiceResponse) GetPartialSuccess() *ExportEventsPartialSuccess {
@@ -132,11 +132,6 @@ func (x *ExportEventsServiceResponse) GetPartialSuccess() *ExportEventsPartialSu
 
 type ExportEventsPartialSuccess struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The number of rejected data points.
-	//
-	// A `rejected_<signal>` field holding a `0` value indicates that the
-	// request was fully accepted.
-	RejectedDataPoints int64 `protobuf:"varint,1,opt,name=rejected_data_points,json=rejectedDataPoints,proto3" json:"rejected_data_points,omitempty"`
 	// A developer-facing human-readable message in English. It should be used
 	// either to explain why the server rejected parts of the data during a partial
 	// success or to convey warnings/suggestions during a full success. The message
@@ -151,7 +146,7 @@ type ExportEventsPartialSuccess struct {
 
 func (x *ExportEventsPartialSuccess) Reset() {
 	*x = ExportEventsPartialSuccess{}
-	mi := &file_collector_event_v1_event_service_proto_msgTypes[2]
+	mi := &file_proto_collector_event_v1_event_service_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -163,7 +158,7 @@ func (x *ExportEventsPartialSuccess) String() string {
 func (*ExportEventsPartialSuccess) ProtoMessage() {}
 
 func (x *ExportEventsPartialSuccess) ProtoReflect() protoreflect.Message {
-	mi := &file_collector_event_v1_event_service_proto_msgTypes[2]
+	mi := &file_proto_collector_event_v1_event_service_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -176,14 +171,7 @@ func (x *ExportEventsPartialSuccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportEventsPartialSuccess.ProtoReflect.Descriptor instead.
 func (*ExportEventsPartialSuccess) Descriptor() ([]byte, []int) {
-	return file_collector_event_v1_event_service_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ExportEventsPartialSuccess) GetRejectedDataPoints() int64 {
-	if x != nil {
-		return x.RejectedDataPoints
-	}
-	return 0
+	return file_proto_collector_event_v1_event_service_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ExportEventsPartialSuccess) GetErrorMessage() string {
@@ -193,42 +181,41 @@ func (x *ExportEventsPartialSuccess) GetErrorMessage() string {
 	return ""
 }
 
-var File_collector_event_v1_event_service_proto protoreflect.FileDescriptor
+var File_proto_collector_event_v1_event_service_proto protoreflect.FileDescriptor
 
-const file_collector_event_v1_event_service_proto_rawDesc = "" +
+const file_proto_collector_event_v1_event_service_proto_rawDesc = "" +
 	"\n" +
-	"&collector/event/v1/event_service.proto\x12 example.proto.collector.event.v1\x1a\x14event/v1/event.proto\"T\n" +
-	"\x1aExportEventsServiceRequest\x126\n" +
-	"\x04data\x18\x01 \x01(\v2\".example.proto.event.v1.EventsDataR\x04data\"\x84\x01\n" +
+	",proto/collector/event/v1/event_service.proto\x12 example.proto.collector.event.v1\x1a\x1aproto/event/v1/event.proto\"m\n" +
+	"\x1aExportEventsServiceRequest\x12O\n" +
+	"\x0fresource_events\x18\x01 \x03(\v2&.example.proto.event.v1.ResourceEventsR\x0eresourceEvents\"\x84\x01\n" +
 	"\x1bExportEventsServiceResponse\x12e\n" +
-	"\x0fpartial_success\x18\x01 \x01(\v2<.example.proto.collector.event.v1.ExportEventsPartialSuccessR\x0epartialSuccess\"s\n" +
-	"\x1aExportEventsPartialSuccess\x120\n" +
-	"\x14rejected_data_points\x18\x01 \x01(\x03R\x12rejectedDataPoints\x12#\n" +
+	"\x0fpartial_success\x18\x01 \x01(\v2<.example.proto.collector.event.v1.ExportEventsPartialSuccessR\x0epartialSuccess\"A\n" +
+	"\x1aExportEventsPartialSuccess\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage2\x9c\x01\n" +
 	"\fEventService\x12\x8b\x01\n" +
-	"\fExportEvents\x12<.example.proto.collector.event.v1.ExportEventsServiceRequest\x1a=.example.proto.collector.event.v1.ExportEventsServiceResponseB)Z'example.com/protobuf/collector/event/v1b\x06proto3"
+	"\fExportEvents\x12<.example.proto.collector.event.v1.ExportEventsServiceRequest\x1a=.example.proto.collector.event.v1.ExportEventsServiceResponseB3Z1example.com/protobuf/gen/proto/collector/event/v1b\x06proto3"
 
 var (
-	file_collector_event_v1_event_service_proto_rawDescOnce sync.Once
-	file_collector_event_v1_event_service_proto_rawDescData []byte
+	file_proto_collector_event_v1_event_service_proto_rawDescOnce sync.Once
+	file_proto_collector_event_v1_event_service_proto_rawDescData []byte
 )
 
-func file_collector_event_v1_event_service_proto_rawDescGZIP() []byte {
-	file_collector_event_v1_event_service_proto_rawDescOnce.Do(func() {
-		file_collector_event_v1_event_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_collector_event_v1_event_service_proto_rawDesc), len(file_collector_event_v1_event_service_proto_rawDesc)))
+func file_proto_collector_event_v1_event_service_proto_rawDescGZIP() []byte {
+	file_proto_collector_event_v1_event_service_proto_rawDescOnce.Do(func() {
+		file_proto_collector_event_v1_event_service_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_collector_event_v1_event_service_proto_rawDesc), len(file_proto_collector_event_v1_event_service_proto_rawDesc)))
 	})
-	return file_collector_event_v1_event_service_proto_rawDescData
+	return file_proto_collector_event_v1_event_service_proto_rawDescData
 }
 
-var file_collector_event_v1_event_service_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
-var file_collector_event_v1_event_service_proto_goTypes = []any{
+var file_proto_collector_event_v1_event_service_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_proto_collector_event_v1_event_service_proto_goTypes = []any{
 	(*ExportEventsServiceRequest)(nil),  // 0: example.proto.collector.event.v1.ExportEventsServiceRequest
 	(*ExportEventsServiceResponse)(nil), // 1: example.proto.collector.event.v1.ExportEventsServiceResponse
 	(*ExportEventsPartialSuccess)(nil),  // 2: example.proto.collector.event.v1.ExportEventsPartialSuccess
-	(*v1.EventsData)(nil),               // 3: example.proto.event.v1.EventsData
+	(*v1.ResourceEvents)(nil),           // 3: example.proto.event.v1.ResourceEvents
 }
-var file_collector_event_v1_event_service_proto_depIdxs = []int32{
-	3, // 0: example.proto.collector.event.v1.ExportEventsServiceRequest.data:type_name -> example.proto.event.v1.EventsData
+var file_proto_collector_event_v1_event_service_proto_depIdxs = []int32{
+	3, // 0: example.proto.collector.event.v1.ExportEventsServiceRequest.resource_events:type_name -> example.proto.event.v1.ResourceEvents
 	2, // 1: example.proto.collector.event.v1.ExportEventsServiceResponse.partial_success:type_name -> example.proto.collector.event.v1.ExportEventsPartialSuccess
 	0, // 2: example.proto.collector.event.v1.EventService.ExportEvents:input_type -> example.proto.collector.event.v1.ExportEventsServiceRequest
 	1, // 3: example.proto.collector.event.v1.EventService.ExportEvents:output_type -> example.proto.collector.event.v1.ExportEventsServiceResponse
@@ -239,26 +226,26 @@ var file_collector_event_v1_event_service_proto_depIdxs = []int32{
 	0, // [0:2] is the sub-list for field type_name
 }
 
-func init() { file_collector_event_v1_event_service_proto_init() }
-func file_collector_event_v1_event_service_proto_init() {
-	if File_collector_event_v1_event_service_proto != nil {
+func init() { file_proto_collector_event_v1_event_service_proto_init() }
+func file_proto_collector_event_v1_event_service_proto_init() {
+	if File_proto_collector_event_v1_event_service_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_collector_event_v1_event_service_proto_rawDesc), len(file_collector_event_v1_event_service_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_collector_event_v1_event_service_proto_rawDesc), len(file_proto_collector_event_v1_event_service_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_collector_event_v1_event_service_proto_goTypes,
-		DependencyIndexes: file_collector_event_v1_event_service_proto_depIdxs,
-		MessageInfos:      file_collector_event_v1_event_service_proto_msgTypes,
+		GoTypes:           file_proto_collector_event_v1_event_service_proto_goTypes,
+		DependencyIndexes: file_proto_collector_event_v1_event_service_proto_depIdxs,
+		MessageInfos:      file_proto_collector_event_v1_event_service_proto_msgTypes,
 	}.Build()
-	File_collector_event_v1_event_service_proto = out.File
-	file_collector_event_v1_event_service_proto_goTypes = nil
-	file_collector_event_v1_event_service_proto_depIdxs = nil
+	File_proto_collector_event_v1_event_service_proto = out.File
+	file_proto_collector_event_v1_event_service_proto_goTypes = nil
+	file_proto_collector_event_v1_event_service_proto_depIdxs = nil
 }

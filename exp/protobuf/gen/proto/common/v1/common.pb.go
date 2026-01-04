@@ -4,7 +4,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.21.12
-// source: common/v1/common.proto
+// source: proto/common/v1/common.proto
 
 package v1
 
@@ -47,7 +47,7 @@ type AnyValue struct {
 
 func (x *AnyValue) Reset() {
 	*x = AnyValue{}
-	mi := &file_common_v1_common_proto_msgTypes[0]
+	mi := &file_proto_common_v1_common_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -59,7 +59,7 @@ func (x *AnyValue) String() string {
 func (*AnyValue) ProtoMessage() {}
 
 func (x *AnyValue) ProtoReflect() protoreflect.Message {
-	mi := &file_common_v1_common_proto_msgTypes[0]
+	mi := &file_proto_common_v1_common_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -72,7 +72,7 @@ func (x *AnyValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnyValue.ProtoReflect.Descriptor instead.
 func (*AnyValue) Descriptor() ([]byte, []int) {
-	return file_common_v1_common_proto_rawDescGZIP(), []int{0}
+	return file_proto_common_v1_common_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *AnyValue) GetValue() isAnyValue_Value {
@@ -203,7 +203,7 @@ type ArrayValue struct {
 
 func (x *ArrayValue) Reset() {
 	*x = ArrayValue{}
-	mi := &file_common_v1_common_proto_msgTypes[1]
+	mi := &file_proto_common_v1_common_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -215,7 +215,7 @@ func (x *ArrayValue) String() string {
 func (*ArrayValue) ProtoMessage() {}
 
 func (x *ArrayValue) ProtoReflect() protoreflect.Message {
-	mi := &file_common_v1_common_proto_msgTypes[1]
+	mi := &file_proto_common_v1_common_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -228,7 +228,7 @@ func (x *ArrayValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArrayValue.ProtoReflect.Descriptor instead.
 func (*ArrayValue) Descriptor() ([]byte, []int) {
-	return file_common_v1_common_proto_rawDescGZIP(), []int{1}
+	return file_proto_common_v1_common_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *ArrayValue) GetValues() []*AnyValue {
@@ -256,7 +256,7 @@ type KeyValueList struct {
 
 func (x *KeyValueList) Reset() {
 	*x = KeyValueList{}
-	mi := &file_common_v1_common_proto_msgTypes[2]
+	mi := &file_proto_common_v1_common_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -268,7 +268,7 @@ func (x *KeyValueList) String() string {
 func (*KeyValueList) ProtoMessage() {}
 
 func (x *KeyValueList) ProtoReflect() protoreflect.Message {
-	mi := &file_common_v1_common_proto_msgTypes[2]
+	mi := &file_proto_common_v1_common_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -281,7 +281,7 @@ func (x *KeyValueList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyValueList.ProtoReflect.Descriptor instead.
 func (*KeyValueList) Descriptor() ([]byte, []int) {
-	return file_common_v1_common_proto_rawDescGZIP(), []int{2}
+	return file_proto_common_v1_common_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *KeyValueList) GetValues() []*KeyValue {
@@ -305,7 +305,7 @@ type KeyValue struct {
 
 func (x *KeyValue) Reset() {
 	*x = KeyValue{}
-	mi := &file_common_v1_common_proto_msgTypes[3]
+	mi := &file_proto_common_v1_common_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -317,7 +317,7 @@ func (x *KeyValue) String() string {
 func (*KeyValue) ProtoMessage() {}
 
 func (x *KeyValue) ProtoReflect() protoreflect.Message {
-	mi := &file_common_v1_common_proto_msgTypes[3]
+	mi := &file_proto_common_v1_common_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -330,7 +330,7 @@ func (x *KeyValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyValue.ProtoReflect.Descriptor instead.
 func (*KeyValue) Descriptor() ([]byte, []int) {
-	return file_common_v1_common_proto_rawDescGZIP(), []int{3}
+	return file_proto_common_v1_common_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *KeyValue) GetKey() string {
@@ -360,18 +360,14 @@ type ArchetypeScope struct {
 	// Additional attributes that describe the scope. [Optional].
 	// Attribute keys MUST be unique (it is not allowed to have more than one
 	// attribute with the same key).
-	Attributes []*KeyValue `protobuf:"bytes,3,rep,name=attributes,proto3" json:"attributes,omitempty"`
-	// The number of attributes that were discarded. Attributes
-	// can be discarded because their keys are too long or because there are too many
-	// attributes. If this value is 0, then no attributes were dropped.
-	DroppedAttributesCount uint32 `protobuf:"varint,4,opt,name=dropped_attributes_count,json=droppedAttributesCount,proto3" json:"dropped_attributes_count,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	Attributes    []*KeyValue `protobuf:"bytes,3,rep,name=attributes,proto3" json:"attributes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ArchetypeScope) Reset() {
 	*x = ArchetypeScope{}
-	mi := &file_common_v1_common_proto_msgTypes[4]
+	mi := &file_proto_common_v1_common_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -383,7 +379,7 @@ func (x *ArchetypeScope) String() string {
 func (*ArchetypeScope) ProtoMessage() {}
 
 func (x *ArchetypeScope) ProtoReflect() protoreflect.Message {
-	mi := &file_common_v1_common_proto_msgTypes[4]
+	mi := &file_proto_common_v1_common_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -396,7 +392,7 @@ func (x *ArchetypeScope) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchetypeScope.ProtoReflect.Descriptor instead.
 func (*ArchetypeScope) Descriptor() ([]byte, []int) {
-	return file_common_v1_common_proto_rawDescGZIP(), []int{4}
+	return file_proto_common_v1_common_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ArchetypeScope) GetName() string {
@@ -418,13 +414,6 @@ func (x *ArchetypeScope) GetAttributes() []*KeyValue {
 		return x.Attributes
 	}
 	return nil
-}
-
-func (x *ArchetypeScope) GetDroppedAttributesCount() uint32 {
-	if x != nil {
-		return x.DroppedAttributesCount
-	}
-	return 0
 }
 
 // A reference to an Entity.
@@ -463,7 +452,7 @@ type EntityRef struct {
 
 func (x *EntityRef) Reset() {
 	*x = EntityRef{}
-	mi := &file_common_v1_common_proto_msgTypes[5]
+	mi := &file_proto_common_v1_common_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -475,7 +464,7 @@ func (x *EntityRef) String() string {
 func (*EntityRef) ProtoMessage() {}
 
 func (x *EntityRef) ProtoReflect() protoreflect.Message {
-	mi := &file_common_v1_common_proto_msgTypes[5]
+	mi := &file_proto_common_v1_common_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -488,7 +477,7 @@ func (x *EntityRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntityRef.ProtoReflect.Descriptor instead.
 func (*EntityRef) Descriptor() ([]byte, []int) {
-	return file_common_v1_common_proto_rawDescGZIP(), []int{5}
+	return file_proto_common_v1_common_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *EntityRef) GetSchemaUrl() string {
@@ -519,11 +508,11 @@ func (x *EntityRef) GetDescriptionKeys() []string {
 	return nil
 }
 
-var File_common_v1_common_proto protoreflect.FileDescriptor
+var File_proto_common_v1_common_proto protoreflect.FileDescriptor
 
-const file_common_v1_common_proto_rawDesc = "" +
+const file_proto_common_v1_common_proto_rawDesc = "" +
 	"\n" +
-	"\x16common/v1/common.proto\x12\x17example.proto.common.v1\"\xd4\x02\n" +
+	"\x1cproto/common/v1/common.proto\x12\x17example.proto.common.v1\"\xd4\x02\n" +
 	"\bAnyValue\x12#\n" +
 	"\fstring_value\x18\x01 \x01(\tH\x00R\vstringValue\x12\x1f\n" +
 	"\n" +
@@ -543,35 +532,34 @@ const file_common_v1_common_proto_rawDesc = "" +
 	"\x06values\x18\x01 \x03(\v2!.example.proto.common.v1.KeyValueR\x06values\"U\n" +
 	"\bKeyValue\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x127\n" +
-	"\x05value\x18\x02 \x01(\v2!.example.proto.common.v1.AnyValueR\x05value\"\xbb\x01\n" +
+	"\x05value\x18\x02 \x01(\v2!.example.proto.common.v1.AnyValueR\x05value\"\x81\x01\n" +
 	"\x0eArchetypeScope\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12A\n" +
 	"\n" +
 	"attributes\x18\x03 \x03(\v2!.example.proto.common.v1.KeyValueR\n" +
-	"attributes\x128\n" +
-	"\x18dropped_attributes_count\x18\x04 \x01(\rR\x16droppedAttributesCount\"\x82\x01\n" +
+	"attributes\"\x82\x01\n" +
 	"\tEntityRef\x12\x1d\n" +
 	"\n" +
 	"schema_url\x18\x01 \x01(\tR\tschemaUrl\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x17\n" +
 	"\aid_keys\x18\x03 \x03(\tR\x06idKeys\x12)\n" +
-	"\x10description_keys\x18\x04 \x03(\tR\x0fdescriptionKeysB$Z\"example.com/protobuf/gen/common/v1b\x06proto3"
+	"\x10description_keys\x18\x04 \x03(\tR\x0fdescriptionKeysB*Z(example.com/protobuf/gen/proto/common/v1b\x06proto3"
 
 var (
-	file_common_v1_common_proto_rawDescOnce sync.Once
-	file_common_v1_common_proto_rawDescData []byte
+	file_proto_common_v1_common_proto_rawDescOnce sync.Once
+	file_proto_common_v1_common_proto_rawDescData []byte
 )
 
-func file_common_v1_common_proto_rawDescGZIP() []byte {
-	file_common_v1_common_proto_rawDescOnce.Do(func() {
-		file_common_v1_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_common_v1_common_proto_rawDesc), len(file_common_v1_common_proto_rawDesc)))
+func file_proto_common_v1_common_proto_rawDescGZIP() []byte {
+	file_proto_common_v1_common_proto_rawDescOnce.Do(func() {
+		file_proto_common_v1_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_common_v1_common_proto_rawDesc), len(file_proto_common_v1_common_proto_rawDesc)))
 	})
-	return file_common_v1_common_proto_rawDescData
+	return file_proto_common_v1_common_proto_rawDescData
 }
 
-var file_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
-var file_common_v1_common_proto_goTypes = []any{
+var file_proto_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_proto_common_v1_common_proto_goTypes = []any{
 	(*AnyValue)(nil),       // 0: example.proto.common.v1.AnyValue
 	(*ArrayValue)(nil),     // 1: example.proto.common.v1.ArrayValue
 	(*KeyValueList)(nil),   // 2: example.proto.common.v1.KeyValueList
@@ -579,7 +567,7 @@ var file_common_v1_common_proto_goTypes = []any{
 	(*ArchetypeScope)(nil), // 4: example.proto.common.v1.ArchetypeScope
 	(*EntityRef)(nil),      // 5: example.proto.common.v1.EntityRef
 }
-var file_common_v1_common_proto_depIdxs = []int32{
+var file_proto_common_v1_common_proto_depIdxs = []int32{
 	1, // 0: example.proto.common.v1.AnyValue.array_value:type_name -> example.proto.common.v1.ArrayValue
 	2, // 1: example.proto.common.v1.AnyValue.kvlist_value:type_name -> example.proto.common.v1.KeyValueList
 	0, // 2: example.proto.common.v1.ArrayValue.values:type_name -> example.proto.common.v1.AnyValue
@@ -593,12 +581,12 @@ var file_common_v1_common_proto_depIdxs = []int32{
 	0, // [0:6] is the sub-list for field type_name
 }
 
-func init() { file_common_v1_common_proto_init() }
-func file_common_v1_common_proto_init() {
-	if File_common_v1_common_proto != nil {
+func init() { file_proto_common_v1_common_proto_init() }
+func file_proto_common_v1_common_proto_init() {
+	if File_proto_common_v1_common_proto != nil {
 		return
 	}
-	file_common_v1_common_proto_msgTypes[0].OneofWrappers = []any{
+	file_proto_common_v1_common_proto_msgTypes[0].OneofWrappers = []any{
 		(*AnyValue_StringValue)(nil),
 		(*AnyValue_BoolValue)(nil),
 		(*AnyValue_IntValue)(nil),
@@ -611,17 +599,17 @@ func file_common_v1_common_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_v1_common_proto_rawDesc), len(file_common_v1_common_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_common_v1_common_proto_rawDesc), len(file_proto_common_v1_common_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_common_v1_common_proto_goTypes,
-		DependencyIndexes: file_common_v1_common_proto_depIdxs,
-		MessageInfos:      file_common_v1_common_proto_msgTypes,
+		GoTypes:           file_proto_common_v1_common_proto_goTypes,
+		DependencyIndexes: file_proto_common_v1_common_proto_depIdxs,
+		MessageInfos:      file_proto_common_v1_common_proto_msgTypes,
 	}.Build()
-	File_common_v1_common_proto = out.File
-	file_common_v1_common_proto_goTypes = nil
-	file_common_v1_common_proto_depIdxs = nil
+	File_proto_common_v1_common_proto = out.File
+	file_proto_common_v1_common_proto_goTypes = nil
+	file_proto_common_v1_common_proto_depIdxs = nil
 }

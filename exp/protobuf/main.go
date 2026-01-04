@@ -10,8 +10,9 @@ import (
 	"sync"
 	"time"
 
-	collectorEvent "example.com/protobuf/gen/collector/event/v1"
-	resourcepb "example.com/protobuf/gen/resource/v1"
+	collectorEvent "example.com/protobuf/gen/proto/collector/event/v1"
+	eventpb "example.com/protobuf/gen/proto/event/v1"
+	resourcepb "example.com/protobuf/gen/proto/resource/v1"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
@@ -32,11 +33,13 @@ func init() {
 	env, err := cel.NewEnv(
 		// Register protobuf types so CEL understands field structure
 		cel.Types(&resourcepb.Resource{}),
+		cel.Types(&eventpb.Event{}),
 
 		// IMPORTANT:
 		// Use DynType for variables when passing protobuf messages.
 		// This avoids ObjectType resolution failures.
 		cel.Variable("resource", cel.DynType),
+		cel.Variable("events", cel.DynType),
 	)
 	if err != nil {
 		panic(err)
@@ -136,7 +139,39 @@ func (s *server) ExportEvents(
 	req *collectorEvent.ExportEventsServiceRequest,
 ) (*collectorEvent.ExportEventsServiceResponse, error) {
 
-	for _, re := range req.Data.ResourceEvents {
+	for _, re := range req.ResourceEvents {
+		for _, se := range re.ScopeEvents {
+			if se.SchemaUrl == "" || se.Events == nil {
+				continue
+			}
+
+			prg, err := loadRule(se.SchemaUrl)
+			if err != nil {
+				log.Printf("❌ rule load failed (%s): %v", se.SchemaUrl, err)
+				continue
+			}
+
+			out, _, err := prg.Eval(map[string]any{
+				// Pass protobuf directly
+				"events": se.Events,
+			})
+			if err != nil {
+				log.Printf("❌ CEL eval failed: %v", err)
+				continue
+			}
+
+			if out == types.True {
+				log.Println("✅ Scope validation passed")
+			} else {
+				log.Println("❌ Scope validation failed")
+				return &collectorEvent.ExportEventsServiceResponse{
+					PartialSuccess: &collectorEvent.ExportEventsPartialSuccess{
+						ErrorMessage: "Invalid scope events",
+					},
+				}, nil
+			}
+		}
+
 		if re.SchemaUrl == "" || re.Resource == nil {
 			continue
 		}
@@ -160,6 +195,11 @@ func (s *server) ExportEvents(
 			log.Println("✅ Resource validation passed")
 		} else {
 			log.Println("❌ Resource validation failed")
+			return &collectorEvent.ExportEventsServiceResponse{
+				PartialSuccess: &collectorEvent.ExportEventsPartialSuccess{
+					ErrorMessage: "Invalid resource",
+				},
+			}, nil
 		}
 	}
 
@@ -191,8 +231,23 @@ func main() {
 	}()
 
 	// Rule endpoint
-	http.HandleFunc("/rules", func(w http.ResponseWriter, r *http.Request) {
-		rule := `resource.attributes.exists(a, a.key == "test123" && a.value.string_value == "something")`
+	http.HandleFunc("/resource/gopenehr/rules", func(w http.ResponseWriter, r *http.Request) {
+		rule := `
+			resource.attributes.exists(a, a.key == "service.name" && a.value.string_value == "gopenehr")
+		`
+		jsonData, err := json.Marshal(rule)
+		if err != nil {
+			http.Error(w, "Failed to marshal rule", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(jsonData)
+	})
+
+	http.HandleFunc("/scope/blood_pressure.v1/rules", func(w http.ResponseWriter, r *http.Request) {
+		rule := `
+			events.exists(event, event.name == "Blutdruck")
+		`
 		jsonData, err := json.Marshal(rule)
 		if err != nil {
 			http.Error(w, "Failed to marshal rule", http.StatusInternalServerError)

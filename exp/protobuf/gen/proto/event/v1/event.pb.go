@@ -4,13 +4,13 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.21.12
-// source: event/v1/event.proto
+// source: proto/event/v1/event.proto
 
 package v1
 
 import (
-	v11 "example.com/protobuf/gen/common/v1"
-	v1 "example.com/protobuf/gen/resource/v1"
+	v11 "example.com/protobuf/gen/proto/common/v1"
+	v1 "example.com/protobuf/gen/proto/resource/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -27,14 +27,14 @@ const (
 
 type EventsData struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	ResourceEvents []*ResourceEvent       `protobuf:"bytes,1,rep,name=resource_events,json=resourceEvents,proto3" json:"resource_events,omitempty"`
+	ResourceEvents []*ResourceEvents      `protobuf:"bytes,1,rep,name=resource_events,json=resourceEvents,proto3" json:"resource_events,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
 
 func (x *EventsData) Reset() {
 	*x = EventsData{}
-	mi := &file_event_v1_event_proto_msgTypes[0]
+	mi := &file_proto_event_v1_event_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +46,7 @@ func (x *EventsData) String() string {
 func (*EventsData) ProtoMessage() {}
 
 func (x *EventsData) ProtoReflect() protoreflect.Message {
-	mi := &file_event_v1_event_proto_msgTypes[0]
+	mi := &file_proto_event_v1_event_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,17 +59,17 @@ func (x *EventsData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EventsData.ProtoReflect.Descriptor instead.
 func (*EventsData) Descriptor() ([]byte, []int) {
-	return file_event_v1_event_proto_rawDescGZIP(), []int{0}
+	return file_proto_event_v1_event_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *EventsData) GetResourceEvents() []*ResourceEvent {
+func (x *EventsData) GetResourceEvents() []*ResourceEvents {
 	if x != nil {
 		return x.ResourceEvents
 	}
 	return nil
 }
 
-type ResourceEvent struct {
+type ResourceEvents struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Resource      *v1.Resource           `protobuf:"bytes,1,opt,name=resource,proto3" json:"resource,omitempty"`
 	ScopeEvents   []*ScopeEvent          `protobuf:"bytes,2,rep,name=scope_events,json=scopeEvents,proto3" json:"scope_events,omitempty"`
@@ -78,21 +78,21 @@ type ResourceEvent struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ResourceEvent) Reset() {
-	*x = ResourceEvent{}
-	mi := &file_event_v1_event_proto_msgTypes[1]
+func (x *ResourceEvents) Reset() {
+	*x = ResourceEvents{}
+	mi := &file_proto_event_v1_event_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ResourceEvent) String() string {
+func (x *ResourceEvents) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ResourceEvent) ProtoMessage() {}
+func (*ResourceEvents) ProtoMessage() {}
 
-func (x *ResourceEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_event_v1_event_proto_msgTypes[1]
+func (x *ResourceEvents) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_event_v1_event_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -103,26 +103,26 @@ func (x *ResourceEvent) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ResourceEvent.ProtoReflect.Descriptor instead.
-func (*ResourceEvent) Descriptor() ([]byte, []int) {
-	return file_event_v1_event_proto_rawDescGZIP(), []int{1}
+// Deprecated: Use ResourceEvents.ProtoReflect.Descriptor instead.
+func (*ResourceEvents) Descriptor() ([]byte, []int) {
+	return file_proto_event_v1_event_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *ResourceEvent) GetResource() *v1.Resource {
+func (x *ResourceEvents) GetResource() *v1.Resource {
 	if x != nil {
 		return x.Resource
 	}
 	return nil
 }
 
-func (x *ResourceEvent) GetScopeEvents() []*ScopeEvent {
+func (x *ResourceEvents) GetScopeEvents() []*ScopeEvent {
 	if x != nil {
 		return x.ScopeEvents
 	}
 	return nil
 }
 
-func (x *ResourceEvent) GetSchemaUrl() string {
+func (x *ResourceEvents) GetSchemaUrl() string {
 	if x != nil {
 		return x.SchemaUrl
 	}
@@ -130,17 +130,17 @@ func (x *ResourceEvent) GetSchemaUrl() string {
 }
 
 type ScopeEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scope         *v11.ArchetypeScope    `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`
-	Events        []*Event               `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
-	SchemaUrl     string                 `protobuf:"bytes,3,opt,name=schema_url,json=schemaUrl,proto3" json:"schema_url,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// example.proto.common.v1.ArchetypeScope scope = 1;
+	Events        []*Event `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
+	SchemaUrl     string   `protobuf:"bytes,3,opt,name=schema_url,json=schemaUrl,proto3" json:"schema_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ScopeEvent) Reset() {
 	*x = ScopeEvent{}
-	mi := &file_event_v1_event_proto_msgTypes[2]
+	mi := &file_proto_event_v1_event_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -152,7 +152,7 @@ func (x *ScopeEvent) String() string {
 func (*ScopeEvent) ProtoMessage() {}
 
 func (x *ScopeEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_event_v1_event_proto_msgTypes[2]
+	mi := &file_proto_event_v1_event_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -165,14 +165,7 @@ func (x *ScopeEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ScopeEvent.ProtoReflect.Descriptor instead.
 func (*ScopeEvent) Descriptor() ([]byte, []int) {
-	return file_event_v1_event_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ScopeEvent) GetScope() *v11.ArchetypeScope {
-	if x != nil {
-		return x.Scope
-	}
-	return nil
+	return file_proto_event_v1_event_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ScopeEvent) GetEvents() []*Event {
@@ -195,19 +188,20 @@ type Event struct {
 	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	// Types that are valid to be assigned to Data:
 	//
+	//	*Event_AdminEntry
 	//	*Event_Observation
 	//	*Event_Evaluation
 	//	*Event_Instruction
 	//	*Event_Action
 	Data          isEvent_Data    `protobuf_oneof:"data"`
-	Metadata      []*v11.KeyValue `protobuf:"bytes,7,rep,name=metadata,proto3" json:"metadata,omitempty"`
+	Metadata      []*v11.KeyValue `protobuf:"bytes,8,rep,name=metadata,proto3" json:"metadata,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Event) Reset() {
 	*x = Event{}
-	mi := &file_event_v1_event_proto_msgTypes[3]
+	mi := &file_proto_event_v1_event_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -219,7 +213,7 @@ func (x *Event) String() string {
 func (*Event) ProtoMessage() {}
 
 func (x *Event) ProtoReflect() protoreflect.Message {
-	mi := &file_event_v1_event_proto_msgTypes[3]
+	mi := &file_proto_event_v1_event_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -232,7 +226,7 @@ func (x *Event) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Event.ProtoReflect.Descriptor instead.
 func (*Event) Descriptor() ([]byte, []int) {
-	return file_event_v1_event_proto_rawDescGZIP(), []int{3}
+	return file_proto_event_v1_event_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Event) GetName() string {
@@ -252,6 +246,15 @@ func (x *Event) GetDescription() string {
 func (x *Event) GetData() isEvent_Data {
 	if x != nil {
 		return x.Data
+	}
+	return nil
+}
+
+func (x *Event) GetAdminEntry() *AdminEntry {
+	if x != nil {
+		if x, ok := x.Data.(*Event_AdminEntry); ok {
+			return x.AdminEntry
+		}
 	}
 	return nil
 }
@@ -303,21 +306,27 @@ type isEvent_Data interface {
 	isEvent_Data()
 }
 
+type Event_AdminEntry struct {
+	AdminEntry *AdminEntry `protobuf:"bytes,3,opt,name=admin_entry,json=adminEntry,proto3,oneof"`
+}
+
 type Event_Observation struct {
-	Observation *Observation `protobuf:"bytes,3,opt,name=observation,proto3,oneof"`
+	Observation *Observation `protobuf:"bytes,4,opt,name=observation,proto3,oneof"`
 }
 
 type Event_Evaluation struct {
-	Evaluation *Evaluation `protobuf:"bytes,4,opt,name=evaluation,proto3,oneof"`
+	Evaluation *Evaluation `protobuf:"bytes,5,opt,name=evaluation,proto3,oneof"`
 }
 
 type Event_Instruction struct {
-	Instruction *Instruction `protobuf:"bytes,5,opt,name=instruction,proto3,oneof"`
+	Instruction *Instruction `protobuf:"bytes,6,opt,name=instruction,proto3,oneof"`
 }
 
 type Event_Action struct {
-	Action *Action `protobuf:"bytes,6,opt,name=action,proto3,oneof"`
+	Action *Action `protobuf:"bytes,7,opt,name=action,proto3,oneof"`
 }
+
+func (*Event_AdminEntry) isEvent_Data() {}
 
 func (*Event_Observation) isEvent_Data() {}
 
@@ -326,6 +335,58 @@ func (*Event_Evaluation) isEvent_Data() {}
 func (*Event_Instruction) isEvent_Data() {}
 
 func (*Event_Action) isEvent_Data() {}
+
+type AdminEntry struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Attributes        []*v11.KeyValue        `protobuf:"bytes,1,rep,name=attributes,proto3" json:"attributes,omitempty"`
+	TimestampUnixNano uint64                 `protobuf:"fixed64,2,opt,name=timestamp_unix_nano,json=timestampUnixNano,proto3" json:"timestamp_unix_nano,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *AdminEntry) Reset() {
+	*x = AdminEntry{}
+	mi := &file_proto_event_v1_event_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminEntry) ProtoMessage() {}
+
+func (x *AdminEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_event_v1_event_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminEntry.ProtoReflect.Descriptor instead.
+func (*AdminEntry) Descriptor() ([]byte, []int) {
+	return file_proto_event_v1_event_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *AdminEntry) GetAttributes() []*v11.KeyValue {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
+func (x *AdminEntry) GetTimestampUnixNano() uint64 {
+	if x != nil {
+		return x.TimestampUnixNano
+	}
+	return 0
+}
 
 type Observation struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
@@ -337,7 +398,7 @@ type Observation struct {
 
 func (x *Observation) Reset() {
 	*x = Observation{}
-	mi := &file_event_v1_event_proto_msgTypes[4]
+	mi := &file_proto_event_v1_event_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -349,7 +410,7 @@ func (x *Observation) String() string {
 func (*Observation) ProtoMessage() {}
 
 func (x *Observation) ProtoReflect() protoreflect.Message {
-	mi := &file_event_v1_event_proto_msgTypes[4]
+	mi := &file_proto_event_v1_event_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -362,7 +423,7 @@ func (x *Observation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Observation.ProtoReflect.Descriptor instead.
 func (*Observation) Descriptor() ([]byte, []int) {
-	return file_event_v1_event_proto_rawDescGZIP(), []int{4}
+	return file_proto_event_v1_event_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Observation) GetAttributes() []*v11.KeyValue {
@@ -389,7 +450,7 @@ type Instruction struct {
 
 func (x *Instruction) Reset() {
 	*x = Instruction{}
-	mi := &file_event_v1_event_proto_msgTypes[5]
+	mi := &file_proto_event_v1_event_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -401,7 +462,7 @@ func (x *Instruction) String() string {
 func (*Instruction) ProtoMessage() {}
 
 func (x *Instruction) ProtoReflect() protoreflect.Message {
-	mi := &file_event_v1_event_proto_msgTypes[5]
+	mi := &file_proto_event_v1_event_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -414,7 +475,7 @@ func (x *Instruction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Instruction.ProtoReflect.Descriptor instead.
 func (*Instruction) Descriptor() ([]byte, []int) {
-	return file_event_v1_event_proto_rawDescGZIP(), []int{5}
+	return file_proto_event_v1_event_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Instruction) GetAttributes() []*v11.KeyValue {
@@ -441,7 +502,7 @@ type Evaluation struct {
 
 func (x *Evaluation) Reset() {
 	*x = Evaluation{}
-	mi := &file_event_v1_event_proto_msgTypes[6]
+	mi := &file_proto_event_v1_event_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -453,7 +514,7 @@ func (x *Evaluation) String() string {
 func (*Evaluation) ProtoMessage() {}
 
 func (x *Evaluation) ProtoReflect() protoreflect.Message {
-	mi := &file_event_v1_event_proto_msgTypes[6]
+	mi := &file_proto_event_v1_event_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -466,7 +527,7 @@ func (x *Evaluation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Evaluation.ProtoReflect.Descriptor instead.
 func (*Evaluation) Descriptor() ([]byte, []int) {
-	return file_event_v1_event_proto_rawDescGZIP(), []int{6}
+	return file_proto_event_v1_event_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Evaluation) GetAttributes() []*v11.KeyValue {
@@ -493,7 +554,7 @@ type Action struct {
 
 func (x *Action) Reset() {
 	*x = Action{}
-	mi := &file_event_v1_event_proto_msgTypes[7]
+	mi := &file_proto_event_v1_event_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -505,7 +566,7 @@ func (x *Action) String() string {
 func (*Action) ProtoMessage() {}
 
 func (x *Action) ProtoReflect() protoreflect.Message {
-	mi := &file_event_v1_event_proto_msgTypes[7]
+	mi := &file_proto_event_v1_event_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -518,7 +579,7 @@ func (x *Action) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Action.ProtoReflect.Descriptor instead.
 func (*Action) Descriptor() ([]byte, []int) {
-	return file_event_v1_event_proto_rawDescGZIP(), []int{7}
+	return file_proto_event_v1_event_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Action) GetAttributes() []*v11.KeyValue {
@@ -535,36 +596,43 @@ func (x *Action) GetTimestampUnixNano() uint64 {
 	return 0
 }
 
-var File_event_v1_event_proto protoreflect.FileDescriptor
+var File_proto_event_v1_event_proto protoreflect.FileDescriptor
 
-const file_event_v1_event_proto_rawDesc = "" +
+const file_proto_event_v1_event_proto_rawDesc = "" +
 	"\n" +
-	"\x14event/v1/event.proto\x12\x16example.proto.event.v1\x1a\x16common/v1/common.proto\x1a\x1aresource/v1/resource.proto\"\\\n" +
+	"\x1aproto/event/v1/event.proto\x12\x16example.proto.event.v1\x1a\x1cproto/common/v1/common.proto\x1a proto/resource/v1/resource.proto\"]\n" +
 	"\n" +
-	"EventsData\x12N\n" +
-	"\x0fresource_events\x18\x01 \x03(\v2%.example.proto.event.v1.ResourceEventR\x0eresourceEvents\"\xb6\x01\n" +
-	"\rResourceEvent\x12?\n" +
+	"EventsData\x12O\n" +
+	"\x0fresource_events\x18\x01 \x03(\v2&.example.proto.event.v1.ResourceEventsR\x0eresourceEvents\"\xb7\x01\n" +
+	"\x0eResourceEvents\x12?\n" +
 	"\bresource\x18\x01 \x01(\v2#.example.proto.resource.v1.ResourceR\bresource\x12E\n" +
 	"\fscope_events\x18\x02 \x03(\v2\".example.proto.event.v1.ScopeEventR\vscopeEvents\x12\x1d\n" +
 	"\n" +
-	"schema_url\x18\x03 \x01(\tR\tschemaUrl\"\xa1\x01\n" +
+	"schema_url\x18\x03 \x01(\tR\tschemaUrl\"b\n" +
 	"\n" +
-	"ScopeEvent\x12=\n" +
-	"\x05scope\x18\x01 \x01(\v2'.example.proto.common.v1.ArchetypeScopeR\x05scope\x125\n" +
+	"ScopeEvent\x125\n" +
 	"\x06events\x18\x02 \x03(\v2\x1d.example.proto.event.v1.EventR\x06events\x12\x1d\n" +
 	"\n" +
-	"schema_url\x18\x03 \x01(\tR\tschemaUrl\"\x96\x03\n" +
+	"schema_url\x18\x03 \x01(\tR\tschemaUrl\"\xdd\x03\n" +
 	"\x05Event\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\x12G\n" +
-	"\vobservation\x18\x03 \x01(\v2#.example.proto.event.v1.ObservationH\x00R\vobservation\x12D\n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12E\n" +
+	"\vadmin_entry\x18\x03 \x01(\v2\".example.proto.event.v1.AdminEntryH\x00R\n" +
+	"adminEntry\x12G\n" +
+	"\vobservation\x18\x04 \x01(\v2#.example.proto.event.v1.ObservationH\x00R\vobservation\x12D\n" +
 	"\n" +
-	"evaluation\x18\x04 \x01(\v2\".example.proto.event.v1.EvaluationH\x00R\n" +
+	"evaluation\x18\x05 \x01(\v2\".example.proto.event.v1.EvaluationH\x00R\n" +
 	"evaluation\x12G\n" +
-	"\vinstruction\x18\x05 \x01(\v2#.example.proto.event.v1.InstructionH\x00R\vinstruction\x128\n" +
-	"\x06action\x18\x06 \x01(\v2\x1e.example.proto.event.v1.ActionH\x00R\x06action\x12=\n" +
-	"\bmetadata\x18\a \x03(\v2!.example.proto.common.v1.KeyValueR\bmetadataB\x06\n" +
-	"\x04data\"\x80\x01\n" +
+	"\vinstruction\x18\x06 \x01(\v2#.example.proto.event.v1.InstructionH\x00R\vinstruction\x128\n" +
+	"\x06action\x18\a \x01(\v2\x1e.example.proto.event.v1.ActionH\x00R\x06action\x12=\n" +
+	"\bmetadata\x18\b \x03(\v2!.example.proto.common.v1.KeyValueR\bmetadataB\x06\n" +
+	"\x04data\"\x7f\n" +
+	"\n" +
+	"AdminEntry\x12A\n" +
+	"\n" +
+	"attributes\x18\x01 \x03(\v2!.example.proto.common.v1.KeyValueR\n" +
+	"attributes\x12.\n" +
+	"\x13timestamp_unix_nano\x18\x02 \x01(\x06R\x11timestampUnixNano\"\x80\x01\n" +
 	"\vObservation\x12A\n" +
 	"\n" +
 	"attributes\x18\x01 \x03(\v2!.example.proto.common.v1.KeyValueR\n" +
@@ -585,62 +653,64 @@ const file_event_v1_event_proto_rawDesc = "" +
 	"\n" +
 	"attributes\x18\x01 \x03(\v2!.example.proto.common.v1.KeyValueR\n" +
 	"attributes\x12.\n" +
-	"\x13timestamp_unix_nano\x18\x02 \x01(\x06R\x11timestampUnixNanoB#Z!example.com/protobuf/gen/event/v1b\x06proto3"
+	"\x13timestamp_unix_nano\x18\x02 \x01(\x06R\x11timestampUnixNanoB)Z'example.com/protobuf/gen/proto/event/v1b\x06proto3"
 
 var (
-	file_event_v1_event_proto_rawDescOnce sync.Once
-	file_event_v1_event_proto_rawDescData []byte
+	file_proto_event_v1_event_proto_rawDescOnce sync.Once
+	file_proto_event_v1_event_proto_rawDescData []byte
 )
 
-func file_event_v1_event_proto_rawDescGZIP() []byte {
-	file_event_v1_event_proto_rawDescOnce.Do(func() {
-		file_event_v1_event_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_event_v1_event_proto_rawDesc), len(file_event_v1_event_proto_rawDesc)))
+func file_proto_event_v1_event_proto_rawDescGZIP() []byte {
+	file_proto_event_v1_event_proto_rawDescOnce.Do(func() {
+		file_proto_event_v1_event_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_event_v1_event_proto_rawDesc), len(file_proto_event_v1_event_proto_rawDesc)))
 	})
-	return file_event_v1_event_proto_rawDescData
+	return file_proto_event_v1_event_proto_rawDescData
 }
 
-var file_event_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
-var file_event_v1_event_proto_goTypes = []any{
-	(*EventsData)(nil),         // 0: example.proto.event.v1.EventsData
-	(*ResourceEvent)(nil),      // 1: example.proto.event.v1.ResourceEvent
-	(*ScopeEvent)(nil),         // 2: example.proto.event.v1.ScopeEvent
-	(*Event)(nil),              // 3: example.proto.event.v1.Event
-	(*Observation)(nil),        // 4: example.proto.event.v1.Observation
-	(*Instruction)(nil),        // 5: example.proto.event.v1.Instruction
-	(*Evaluation)(nil),         // 6: example.proto.event.v1.Evaluation
-	(*Action)(nil),             // 7: example.proto.event.v1.Action
-	(*v1.Resource)(nil),        // 8: example.proto.resource.v1.Resource
-	(*v11.ArchetypeScope)(nil), // 9: example.proto.common.v1.ArchetypeScope
-	(*v11.KeyValue)(nil),       // 10: example.proto.common.v1.KeyValue
+var file_proto_event_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_proto_event_v1_event_proto_goTypes = []any{
+	(*EventsData)(nil),     // 0: example.proto.event.v1.EventsData
+	(*ResourceEvents)(nil), // 1: example.proto.event.v1.ResourceEvents
+	(*ScopeEvent)(nil),     // 2: example.proto.event.v1.ScopeEvent
+	(*Event)(nil),          // 3: example.proto.event.v1.Event
+	(*AdminEntry)(nil),     // 4: example.proto.event.v1.AdminEntry
+	(*Observation)(nil),    // 5: example.proto.event.v1.Observation
+	(*Instruction)(nil),    // 6: example.proto.event.v1.Instruction
+	(*Evaluation)(nil),     // 7: example.proto.event.v1.Evaluation
+	(*Action)(nil),         // 8: example.proto.event.v1.Action
+	(*v1.Resource)(nil),    // 9: example.proto.resource.v1.Resource
+	(*v11.KeyValue)(nil),   // 10: example.proto.common.v1.KeyValue
 }
-var file_event_v1_event_proto_depIdxs = []int32{
-	1,  // 0: example.proto.event.v1.EventsData.resource_events:type_name -> example.proto.event.v1.ResourceEvent
-	8,  // 1: example.proto.event.v1.ResourceEvent.resource:type_name -> example.proto.resource.v1.Resource
-	2,  // 2: example.proto.event.v1.ResourceEvent.scope_events:type_name -> example.proto.event.v1.ScopeEvent
-	9,  // 3: example.proto.event.v1.ScopeEvent.scope:type_name -> example.proto.common.v1.ArchetypeScope
-	3,  // 4: example.proto.event.v1.ScopeEvent.events:type_name -> example.proto.event.v1.Event
-	4,  // 5: example.proto.event.v1.Event.observation:type_name -> example.proto.event.v1.Observation
-	6,  // 6: example.proto.event.v1.Event.evaluation:type_name -> example.proto.event.v1.Evaluation
-	5,  // 7: example.proto.event.v1.Event.instruction:type_name -> example.proto.event.v1.Instruction
-	7,  // 8: example.proto.event.v1.Event.action:type_name -> example.proto.event.v1.Action
+var file_proto_event_v1_event_proto_depIdxs = []int32{
+	1,  // 0: example.proto.event.v1.EventsData.resource_events:type_name -> example.proto.event.v1.ResourceEvents
+	9,  // 1: example.proto.event.v1.ResourceEvents.resource:type_name -> example.proto.resource.v1.Resource
+	2,  // 2: example.proto.event.v1.ResourceEvents.scope_events:type_name -> example.proto.event.v1.ScopeEvent
+	3,  // 3: example.proto.event.v1.ScopeEvent.events:type_name -> example.proto.event.v1.Event
+	4,  // 4: example.proto.event.v1.Event.admin_entry:type_name -> example.proto.event.v1.AdminEntry
+	5,  // 5: example.proto.event.v1.Event.observation:type_name -> example.proto.event.v1.Observation
+	7,  // 6: example.proto.event.v1.Event.evaluation:type_name -> example.proto.event.v1.Evaluation
+	6,  // 7: example.proto.event.v1.Event.instruction:type_name -> example.proto.event.v1.Instruction
+	8,  // 8: example.proto.event.v1.Event.action:type_name -> example.proto.event.v1.Action
 	10, // 9: example.proto.event.v1.Event.metadata:type_name -> example.proto.common.v1.KeyValue
-	10, // 10: example.proto.event.v1.Observation.attributes:type_name -> example.proto.common.v1.KeyValue
-	10, // 11: example.proto.event.v1.Instruction.attributes:type_name -> example.proto.common.v1.KeyValue
-	10, // 12: example.proto.event.v1.Evaluation.attributes:type_name -> example.proto.common.v1.KeyValue
-	10, // 13: example.proto.event.v1.Action.attributes:type_name -> example.proto.common.v1.KeyValue
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	10, // 10: example.proto.event.v1.AdminEntry.attributes:type_name -> example.proto.common.v1.KeyValue
+	10, // 11: example.proto.event.v1.Observation.attributes:type_name -> example.proto.common.v1.KeyValue
+	10, // 12: example.proto.event.v1.Instruction.attributes:type_name -> example.proto.common.v1.KeyValue
+	10, // 13: example.proto.event.v1.Evaluation.attributes:type_name -> example.proto.common.v1.KeyValue
+	10, // 14: example.proto.event.v1.Action.attributes:type_name -> example.proto.common.v1.KeyValue
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
-func init() { file_event_v1_event_proto_init() }
-func file_event_v1_event_proto_init() {
-	if File_event_v1_event_proto != nil {
+func init() { file_proto_event_v1_event_proto_init() }
+func file_proto_event_v1_event_proto_init() {
+	if File_proto_event_v1_event_proto != nil {
 		return
 	}
-	file_event_v1_event_proto_msgTypes[3].OneofWrappers = []any{
+	file_proto_event_v1_event_proto_msgTypes[3].OneofWrappers = []any{
+		(*Event_AdminEntry)(nil),
 		(*Event_Observation)(nil),
 		(*Event_Evaluation)(nil),
 		(*Event_Instruction)(nil),
@@ -650,17 +720,17 @@ func file_event_v1_event_proto_init() {
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_event_v1_event_proto_rawDesc), len(file_event_v1_event_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_event_v1_event_proto_rawDesc), len(file_proto_event_v1_event_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_event_v1_event_proto_goTypes,
-		DependencyIndexes: file_event_v1_event_proto_depIdxs,
-		MessageInfos:      file_event_v1_event_proto_msgTypes,
+		GoTypes:           file_proto_event_v1_event_proto_goTypes,
+		DependencyIndexes: file_proto_event_v1_event_proto_depIdxs,
+		MessageInfos:      file_proto_event_v1_event_proto_msgTypes,
 	}.Build()
-	File_event_v1_event_proto = out.File
-	file_event_v1_event_proto_goTypes = nil
-	file_event_v1_event_proto_depIdxs = nil
+	File_proto_event_v1_event_proto = out.File
+	file_proto_event_v1_event_proto_goTypes = nil
+	file_proto_event_v1_event_proto_depIdxs = nil
 }

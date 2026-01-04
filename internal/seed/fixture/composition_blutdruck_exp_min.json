@@ -1,0 +1,66 @@
+{
+    "name": "Blutdruck",
+    "uid": "c9929b66-ef6b-4942-bc7c-8c32c528bc28::local.ehrbase.org::1",
+    "archetype_id": "openEHR-EHR-COMPOSITION.registereintrag.v1",
+    "template_id": "Blutdruck",
+    "rm_version": "1.0.4",
+    "category": "openehr:433",
+    "composer": "Max Mustermann",
+    "language": "de",
+    "territory": "DE",
+    "content": [
+        {
+            "archetype_node_id": "openEHR-EHR-OBSERVATION.blood_pressure.v2",
+            "name": "Blutdruck",
+            "guideline_id": "9aa54688-cfd4-3783-8cf4-f9467aafa263",
+            "workflow_id": "4f50f151-287b-3add-970f-739a56814a38",
+            "data": {
+                "name": "Historie",
+                "origin": "2022-02-03T04:05:06",
+                "events": {
+                    "at0006": {
+                        "name": "Beliebiges Ereignis",
+                        "math_function": "openehr::145",
+                        "time": "2022-02-03T04:05:06",
+                        "width": "PT42H",
+                        "data": {
+                            "name": "Blutdruck",
+                            "items": {
+                                "at0004": {
+                                    "name": "Systolisch",
+                                    "value": 500.0,
+                                    "units": "mm[Hg]"
+                                },
+                                "at0005": {
+                                    "name": "Diastolisch",
+                                    "value": 500.0,
+                                    "units": "mm[Hg]"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ],
+    "context": {
+        "end_time": "2022-02-03T04:05:06",
+        "health_care_facility": "DOE, John",
+        "setting": "openehr::225",
+        "start_time": "2022-02-03T04:05:06",
+        "other_context": {
+            "archetype_node_id": "at0001",
+            "name": "Baum",
+            "items": {
+                "at0004": {
+                    "name": "Status",
+                    "value": "registriert"
+                },
+                "at0005": {
+                    "name": "Kategorie",
+                    "value": "Lorem ipsum"
+                }
+            }
+        }
+    }
+}

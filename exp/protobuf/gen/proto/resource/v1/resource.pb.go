@@ -4,12 +4,12 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v3.21.12
-// source: resource/v1/resource.proto
+// source: proto/resource/v1/resource.proto
 
 package v1
 
 import (
-	v1 "example.com/protobuf/gen/common/v1"
+	v1 "example.com/protobuf/gen/proto/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -56,7 +56,7 @@ type Resource struct {
 
 func (x *Resource) Reset() {
 	*x = Resource{}
-	mi := &file_resource_v1_resource_proto_msgTypes[0]
+	mi := &file_proto_resource_v1_resource_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -68,7 +68,7 @@ func (x *Resource) String() string {
 func (*Resource) ProtoMessage() {}
 
 func (x *Resource) ProtoReflect() protoreflect.Message {
-	mi := &file_resource_v1_resource_proto_msgTypes[0]
+	mi := &file_proto_resource_v1_resource_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -81,7 +81,7 @@ func (x *Resource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Resource.ProtoReflect.Descriptor instead.
 func (*Resource) Descriptor() ([]byte, []int) {
-	return file_resource_v1_resource_proto_rawDescGZIP(), []int{0}
+	return file_proto_resource_v1_resource_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Resource) GetAttributes() []*v1.KeyValue {
@@ -105,38 +105,38 @@ func (x *Resource) GetEntityRefs() []*v1.EntityRef {
 	return nil
 }
 
-var File_resource_v1_resource_proto protoreflect.FileDescriptor
+var File_proto_resource_v1_resource_proto protoreflect.FileDescriptor
 
-const file_resource_v1_resource_proto_rawDesc = "" +
+const file_proto_resource_v1_resource_proto_rawDesc = "" +
 	"\n" +
-	"\x1aresource/v1/resource.proto\x12\x19example.proto.resource.v1\x1a\x16common/v1/common.proto\"\xcc\x01\n" +
+	" proto/resource/v1/resource.proto\x12\x19example.proto.resource.v1\x1a\x1cproto/common/v1/common.proto\"\xcc\x01\n" +
 	"\bResource\x12A\n" +
 	"\n" +
 	"attributes\x18\x01 \x03(\v2!.example.proto.common.v1.KeyValueR\n" +
 	"attributes\x128\n" +
 	"\x18dropped_attributes_count\x18\x02 \x01(\rR\x16droppedAttributesCount\x12C\n" +
 	"\ventity_refs\x18\x03 \x03(\v2\".example.proto.common.v1.EntityRefR\n" +
-	"entityRefsB&Z$example.com/protobuf/gen/resource/v1b\x06proto3"
+	"entityRefsB,Z*example.com/protobuf/gen/proto/resource/v1b\x06proto3"
 
 var (
-	file_resource_v1_resource_proto_rawDescOnce sync.Once
-	file_resource_v1_resource_proto_rawDescData []byte
+	file_proto_resource_v1_resource_proto_rawDescOnce sync.Once
+	file_proto_resource_v1_resource_proto_rawDescData []byte
 )
 
-func file_resource_v1_resource_proto_rawDescGZIP() []byte {
-	file_resource_v1_resource_proto_rawDescOnce.Do(func() {
-		file_resource_v1_resource_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_resource_v1_resource_proto_rawDesc), len(file_resource_v1_resource_proto_rawDesc)))
+func file_proto_resource_v1_resource_proto_rawDescGZIP() []byte {
+	file_proto_resource_v1_resource_proto_rawDescOnce.Do(func() {
+		file_proto_resource_v1_resource_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_resource_v1_resource_proto_rawDesc), len(file_proto_resource_v1_resource_proto_rawDesc)))
 	})
-	return file_resource_v1_resource_proto_rawDescData
+	return file_proto_resource_v1_resource_proto_rawDescData
 }
 
-var file_resource_v1_resource_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
-var file_resource_v1_resource_proto_goTypes = []any{
+var file_proto_resource_v1_resource_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_proto_resource_v1_resource_proto_goTypes = []any{
 	(*Resource)(nil),     // 0: example.proto.resource.v1.Resource
 	(*v1.KeyValue)(nil),  // 1: example.proto.common.v1.KeyValue
 	(*v1.EntityRef)(nil), // 2: example.proto.common.v1.EntityRef
 }
-var file_resource_v1_resource_proto_depIdxs = []int32{
+var file_proto_resource_v1_resource_proto_depIdxs = []int32{
 	1, // 0: example.proto.resource.v1.Resource.attributes:type_name -> example.proto.common.v1.KeyValue
 	2, // 1: example.proto.resource.v1.Resource.entity_refs:type_name -> example.proto.common.v1.EntityRef
 	2, // [2:2] is the sub-list for method output_type
@@ -146,26 +146,26 @@ var file_resource_v1_resource_proto_depIdxs = []int32{
 	0, // [0:2] is the sub-list for field type_name
 }
 
-func init() { file_resource_v1_resource_proto_init() }
-func file_resource_v1_resource_proto_init() {
-	if File_resource_v1_resource_proto != nil {
+func init() { file_proto_resource_v1_resource_proto_init() }
+func file_proto_resource_v1_resource_proto_init() {
+	if File_proto_resource_v1_resource_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_resource_v1_resource_proto_rawDesc), len(file_resource_v1_resource_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_resource_v1_resource_proto_rawDesc), len(file_proto_resource_v1_resource_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   1,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_resource_v1_resource_proto_goTypes,
-		DependencyIndexes: file_resource_v1_resource_proto_depIdxs,
-		MessageInfos:      file_resource_v1_resource_proto_msgTypes,
+		GoTypes:           file_proto_resource_v1_resource_proto_goTypes,
+		DependencyIndexes: file_proto_resource_v1_resource_proto_depIdxs,
+		MessageInfos:      file_proto_resource_v1_resource_proto_msgTypes,
 	}.Build()
-	File_resource_v1_resource_proto = out.File
-	file_resource_v1_resource_proto_goTypes = nil
-	file_resource_v1_resource_proto_depIdxs = nil
+	File_proto_resource_v1_resource_proto = out.File
+	file_proto_resource_v1_resource_proto_goTypes = nil
+	file_proto_resource_v1_resource_proto_depIdxs = nil
 }

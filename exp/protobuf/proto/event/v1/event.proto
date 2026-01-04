@@ -4,23 +4,23 @@ syntax = "proto3";
 
 package example.proto.event.v1;
 
-import "common/v1/common.proto";
-import "resource/v1/resource.proto";
+import "proto/common/v1/common.proto";
+import "proto/resource/v1/resource.proto";
 
-option go_package = "example.com/protobuf/gen/event/v1";
+option go_package = "example.com/protobuf/gen/proto/event/v1";
 
 message EventsData {
-    repeated ResourceEvent resource_events = 1;
+    repeated ResourceEvents resource_events = 1;
 }
 
-message ResourceEvent {
+message ResourceEvents {
     example.proto.resource.v1.Resource resource = 1;
     repeated ScopeEvent scope_events = 2;
     string schema_url = 3;
 }
 
 message ScopeEvent {
-    example.proto.common.v1.ArchetypeScope scope = 1;
+    // example.proto.common.v1.ArchetypeScope scope = 1;
     repeated Event events = 2;
     string schema_url = 3;
 }
@@ -29,12 +29,18 @@ message Event {
     string name = 1;
     string description = 2;
     oneof data {
-        Observation observation = 3;
-        Evaluation evaluation = 4;
-        Instruction instruction = 5;
-        Action action = 6;
+        AdminEntry admin_entry = 3;
+        Observation observation = 4;
+        Evaluation evaluation = 5;
+        Instruction instruction = 6;
+        Action action = 7;
     }
-    repeated example.proto.common.v1.KeyValue metadata = 7;
+    repeated example.proto.common.v1.KeyValue metadata = 8;
+}
+
+message AdminEntry {
+    repeated example.proto.common.v1.KeyValue attributes = 1;
+    fixed64 timestamp_unix_nano = 2;
 }
 
 message Observation {

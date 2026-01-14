@@ -1684,6 +1684,12 @@ func BuildSlowValueExtractionExpr(ctx gen.IPathPartContext) string {
 		WHEN target.data @> '{"_type": "DV_DATE"}' THEN to_jsonb((target.data ->> 'value')::date)
 		WHEN target.data @> '{"_type": "DV_ORDINAL"}' THEN target.data -> 'value' 
 		WHEN target.data @> '{"_type": "DV_PROPORTION"}' THEN to_jsonb((target.data ->> 'numerator')::numeric / (target.data ->> 'denominator')::numeric) 
+		WHEN target.data @> '{"_type": "DV_BOOLEAN"}' THEN to_jsonb((target.data ->> 'value')::boolean)
+		WHEN target.data @> '{"_type": "DV_TEXT"}' THEN to_jsonb(target.data ->> 'value')
+		WHEN target.data @> '{"_type": "DV_CODED_TEXT"}' THEN to_jsonb(target.data ->> 'value')
+		WHEN target.data @> '{"_type": "DV_IDENTIFIER"}' THEN to_jsonb(target.data ->> 'value')
+		WHEN target.data @> '{"_type": "DV_URI"}' THEN to_jsonb(target.data ->> 'value')
+		WHEN target.data @> '{"_type": "DV_EHR_URI"}' THEN to_jsonb(target.data ->> 'value')
 	`
 	identifier := ctx.IDENTIFIER().GetText()
 	if identifier == "value" {
@@ -1743,6 +1749,34 @@ func BuildFastValueExtractionExpr(ctx gen.IIdentifiedPathContext, params map[str
 			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s.value')", source.Table, path), nil
 		case "start_time/value", "end_time/value":
 			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s')", source.Table, path), nil
+		}
+	case slices.Contains(relatedModels, "LOCATABLE"):
+		switch plainPath {
+		case "uid", "name":
+			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s.value')", source.Table, path), nil
+		case "uid/value", "name/value":
+			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s')", source.Table, path), nil
+		}
+	case slices.Contains(relatedModels, rm.DV_TEXT_TYPE):
+		switch plainPath {
+		case "":
+			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s.value')::text", source.Table, path), nil
+		case "value":
+			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s')::text", source.Table, path), nil
+		}
+	case slices.Contains(relatedModels, rm.DV_CODED_TEXT_TYPE):
+		switch plainPath {
+		case "":
+			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s.value')::text", source.Table, path), nil
+		case "value":
+			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s')::text", source.Table, path), nil
+		}
+	case slices.Contains(relatedModels, rm.DV_BOOLEAN_TYPE):
+		switch plainPath {
+		case "":
+			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s.value')::text::boolean", source.Table, path), nil
+		case "value":
+			return fmt.Sprintf("jsonb_path_query_first(%s.data, '%s')::text::boolean", source.Table, path), nil
 		}
 	case slices.Contains(relatedModels, rm.DV_TIME_TYPE):
 		switch plainPath {

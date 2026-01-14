@@ -41,7 +41,7 @@ func ToSQL(aqlQuery string, params map[string]any) (string, []string, error) {
 	}
 
 	// Wrap the query to return a JSON array
-	query = fmt.Sprintf("SELECT %s FROM (%s) AS result", strings.Join(columnNames, ", "), query)
+	query = fmt.Sprintf("SELECT jsonb_build_array(%s) FROM (%s) AS result", strings.Join(columnNames, ", "), query)
 
 	return query, columnNames, nil
 }
@@ -449,16 +449,16 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 	if searchInModel {
 		// [Freek] Allow for generic searches where you want inheriting models to be included
 		relatedModels := ModelInheritanceTable(modelName)
-		typeFilter := ""
+		var typeFilter strings.Builder
 		for i, relatedModel := range relatedModels {
 			if i > 0 {
-				typeFilter += " || "
+				typeFilter.WriteString(" || ")
 			}
-			typeFilter += fmt.Sprintf(`@._type == "%s"`, relatedModel)
+			fmt.Fprintf(&typeFilter, `@._type == "%s"`, relatedModel)
 		}
 
 		// Search in the model itself
-		query := fmt.Sprintf("SELECT e.id, ed.data FROM JSON_TABLE(%s.data, 'strict $.*.** ? (%s)' COLUMNS(data JSONB PATH '$')) data", prevSource.V.Table, typeFilter)
+		query := fmt.Sprintf("SELECT tmp_%s.data FROM JSON_TABLE(%s.data, 'strict $.*.** ? (%s)' COLUMNS(data JSONB PATH '$')) tmp_%s", source.Table, prevSource.V.Table, typeFilter.String(), source.Table)
 		if whereExpression != "" {
 			query += " WHERE " + whereExpression
 		}
@@ -477,7 +477,22 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 			return expression, nil
 		}
 
-		return "", nil
+		switch prevSource.V.Model {
+		case rm.VERSIONED_PARTY_TYPE:
+			return fmt.Sprintf(`
+				LEFT JOIN openehr.tbl_ehr_status tmp_%[2]s ON tmp_%[2]s.local_ref_versioned_party_id = %[3]s.id
+				LEFT JOIN %[1]s ON %[2]s.id = tmp_%[2]s.ehr_id
+			`, expression, source.Table, prevSource.V.Table), nil
+		case rm.PERSON_TYPE:
+			return fmt.Sprintf(`
+				LEFT JOIN openehr.tbl_ehr_status tmp_%[2]s ON tmp_%[2]s.local_ref_versioned_party_id = %[3]s.versioned_party_id
+				LEFT JOIN %[1]s ON %[2]s.id = tmp_%[2]s.ehr_id
+			`, expression, source.Table, prevSource.V.Table), nil
+		case rm.EHR_STATUS_TYPE:
+			return fmt.Sprintf(`LEFT JOIN %[1]s %[2]s ON %[2]s.id = %[3]s.id`, expression, source.Table, prevSource.V.Table), nil
+		default:
+			return "", nil
+		}
 	case rm.CONTRIBUTION_TYPE:
 		expression := "SELECT c.*, cd.data FROM openehr.tbl_contribution c JOIN openehr.tbl_contribution_data cd ON cd.id = c.id"
 		if whereExpression != "" {
@@ -625,7 +640,7 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 			return "", nil
 		}
 	case rm.EHR_STATUS_TYPE:
-		expression := "SELECT es.*, es.data, es.version_data FROM openehr.tbl_ehr_status es JOIN openehr.tbl_ehr_status_data esd ON es.id = esd.id"
+		expression := "SELECT es.*, esd.data, esd.version_data FROM openehr.tbl_ehr_status es JOIN openehr.tbl_ehr_status_data esd ON es.id = esd.id"
 		if whereExpression != "" {
 			expression += " AND " + whereExpression
 		}
@@ -711,7 +726,7 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 	case rm.PERSON_TYPE:
 		expression := "SELECT p.*, pd.data, pd.version_data FROM openehr.tbl_person p JOIN openehr.tbl_person_data pd ON p.id = pd.id"
 		if whereExpression != "" {
-			expression += "AND " + whereExpression
+			expression += " AND " + whereExpression
 		}
 		expression = "(" + expression + ") " + source.Table
 
@@ -726,11 +741,11 @@ func BuildClassExprOperand(ctx gen.IClassExprOperandContext, params map[string]a
 			return fmt.Sprintf("LEFT JOIN %[1]s ON %[2]s.contribution_id = %[3]s.id", expression, source.Table, prevSource.V.Table), nil
 		case rm.EHR_TYPE:
 			return fmt.Sprintf(`
-				LEFT JOIN openehr.tbl_ehr_status tmp_%[2]s ON tmp_%[2]s.ehr_id = %[3]s.id'
-				LEFT JOIN %[1]s %[2]s ON %[2]s.id = tmp_%[2]s.id
+				LEFT JOIN openehr.tbl_ehr_status tmp_%[2]s ON tmp_%[2]s.ehr_id = %[3]s.id
+				LEFT JOIN %[1]s ON %[2]s.versioned_party_id = tmp_%[2]s.local_ref_versioned_party_id
 			`, expression, source.Table, prevSource.V.Table), nil
 		case rm.EHR_STATUS_TYPE:
-			return fmt.Sprintf(`LEFT JOIN %[1]s %[2]s ON %[2]s.id = %[3]s.id`, expression, source.Table, prevSource.V.Table), nil
+			return fmt.Sprintf(`LEFT JOIN %[1]s ON %[2]s.versioned_party_id = %[3]s.local_ref_versioned_party_id`, expression, source.Table, prevSource.V.Table), nil
 		default:
 			return "", nil
 		}

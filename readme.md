@@ -1,10 +1,7 @@
-# TODO
-- Improve validation at unmarshal step
-- Improve encoder
-- Add XML support (optional)
-- Template support
-- Docs
-- Add improved rest endpoints
+# Quick start
+```bash
+docker compose -f ./example/docker-compose.yml up --detach
+```
 
 # Configurable
 
@@ -18,3 +15,11 @@
 | OAUTH_AUDIENCE        | OPTIONAL: Restrict tokens based on `aud` claim. Not provided means no additional `aud` claim check will be performed.             |
 | OTEL_ENDPOINT         | OPTIONAL: Enabled OpenTelemetry with GRPC. Example `localhost:4317`.                                                              |
 | OTEL_INSECURE         | OPTIONAL: Allows insecure exporter connection. Default `false`.                                                                   | 
+
+# TODO
+- Improve validation at unmarshal step
+- Improve encoder
+- Add XML support (optional)
+- Template support
+- Docs
+- Add improved rest endpoints
